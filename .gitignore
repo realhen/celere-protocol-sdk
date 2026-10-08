@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+outputs/
+.surfpool/
+*.tgz
+.DS_Store
