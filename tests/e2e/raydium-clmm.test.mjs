@@ -191,6 +191,12 @@ test("public CLMM consumer rejects unqualified dynamic fees, token features, and
     (f) => {
       f.request.snapshot.accounts[f.tickArrays[1].address].data[44 + 30 * 168 + 124] = 1;
     },
+    (f) => {
+      f.request.snapshot.accounts[f.tickArrays[1].address].data[44 + 30 * 168 + 132] = 1;
+    },
+    (f) => {
+      f.request.snapshot.accounts[f.tickArrays[1].address].data[44 + 30 * 168 + 140] = 1;
+    },
   ]) {
     const fixture = await raydiumClmmFixture(owner);
     mutation(fixture);

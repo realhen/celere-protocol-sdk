@@ -52,7 +52,13 @@ async function pda(seed, ...seeds) {
 /** Synthetic accounts with official native layouts and PDAs; no captured user data. */
 export async function raydiumClmmFixture(
   owner,
-  { reverse = false, label = "default", tickOffset = 0, sqrtPrice = 1n << 64n } = {},
+  {
+    reverse = false,
+    label = "default",
+    tickOffset = 0,
+    sqrtPrice = 1n << 64n,
+    historicalOrders = false,
+  } = {},
 ) {
   const ordered = [
     deterministicAddress(`mint-a:${label}`),
@@ -167,6 +173,12 @@ export async function raydiumClmmFixture(
   }
   const tickArrays = [];
   for (const [start, data] of arrays) {
+    if (historicalOrders)
+      for (let index = 0; index < 60; index++) {
+        const offset = 44 + index * 168;
+        new DataView(data.buffer).setInt32(offset, start + index, true);
+        putU64(data, offset + 116, 1n);
+      }
     const seed = new Uint8Array(4);
     new DataView(seed.buffer).setInt32(0, start, false);
     const [address] = await pda("tick_array", encoder.encode(pool), seed);

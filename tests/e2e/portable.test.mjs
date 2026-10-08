@@ -1,3 +1,10 @@
+import { liquidAfAmmFixture } from "../fixtures/liquid-af-amm.mjs";
+import { riseRichFixture } from "../fixtures/rise-rich.mjs";
+import { liquidAfFixture } from "../fixtures/liquid-af.mjs";
+import { boopFixture } from "../fixtures/boop.mjs";
+import { heavenFixture } from "../fixtures/heaven.mjs";
+import { metadaoFixture } from "../fixtures/metadao.mjs";
+import { virtualCurveFixture } from "../fixtures/virtual-curve.mjs";
 import { meteoraDammV1Fixture } from "../fixtures/meteora-damm-v1.mjs";
 import { moonshotFixture } from "../fixtures/moonshot.mjs";
 import { vertigoFixture } from "../fixtures/vertigo.mjs";
@@ -79,6 +86,13 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
             : value,
     );
     const fixtures = [
+      ["liquid-af-amm", (await liquidAfAmmFixture(signer.address)).request],
+      ["rise-rich", (await riseRichFixture(signer.address)).request],
+      ["liquid-af", (await liquidAfFixture(signer.address)).request],
+      ["boop", (await boopFixture(signer.address)).request],
+      ["heaven", (await heavenFixture(signer.address)).request],
+      ["metadao", (await metadaoFixture(signer.address)).request],
+      ["virtual-curve", (await virtualCurveFixture(signer.address)).request],
       ["meteora-damm-v1", (await meteoraDammV1Fixture(signer.address)).request],
       ["moonshot", (await moonshotFixture(signer.address)).request],
       ["vertigo", (await vertigoFixture(signer.address)).request],

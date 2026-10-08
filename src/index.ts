@@ -1,4 +1,9 @@
 import { createProtocolSdk } from "./core/sdk.js";
+import { boopAdapter } from "./protocols/boop/adapter.js";
+import { heavenAdapter } from "./protocols/heaven/amm.js";
+import { liquidAfAmmAdapter } from "./protocols/liquid-af-amm/amm.js";
+import { liquidAfAdapter } from "./protocols/liquid-af/curve.js";
+import { metadaoAdapter } from "./protocols/metadao/amm.js";
 import { meteoraDammV1Adapter } from "./protocols/meteora/damm-v1.js";
 import { meteoraDammV2Adapter } from "./protocols/meteora/damm-v2.js";
 import { meteoraDlmmAdapter } from "./protocols/meteora/dlmm.js";
@@ -10,7 +15,9 @@ import { raydiumAmmV4Adapter } from "./protocols/raydium/amm-v4.js";
 import { raydiumClmmAdapter } from "./protocols/raydium/clmm.js";
 import { raydiumCpmmAdapter } from "./protocols/raydium/cpmm.js";
 import { raydiumLaunchlabAdapter } from "./protocols/raydium/launchlab.js";
+import { riseRichAdapter } from "./protocols/rise-rich/curve.js";
 import { vertigoAdapter } from "./protocols/vertigo/amm.js";
+import { virtualCurveAdapter } from "./protocols/virtual-curve/adapter.js";
 
 const sdk = createProtocolSdk([
   pumpAdapter,
@@ -21,10 +28,17 @@ const sdk = createProtocolSdk([
   meteoraDammV1Adapter,
   meteoraDammV2Adapter,
   meteoraDlmmAdapter,
+  boopAdapter,
   moonshotAdapter,
   orcaWhirlpoolAdapter,
   raydiumLaunchlabAdapter,
+  virtualCurveAdapter,
   vertigoAdapter,
+  heavenAdapter,
+  liquidAfAdapter,
+  liquidAfAmmAdapter,
+  riseRichAdapter,
+  metadaoAdapter,
 ]);
 
 /** Discover required account observations without performing network requests. */
@@ -33,4 +47,4 @@ export const getSwapRequirements = sdk.getSwapRequirements;
 export const buildSwapInstructions = sdk.buildSwapInstructions;
 export * from "./core/index.js";
 export * from "./transactions/index.js";
-export { PROTOCOL_COVERAGE } from "./protocols/coverage.js";
+export { PROTOCOL_COVERAGE, type ProtocolCoverage } from "./protocols/coverage.js";

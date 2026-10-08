@@ -178,9 +178,9 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       encoding: "utf8",
     });
     const nativeResult = JSON.parse(nativeOutput);
-    assert.equal(nativeResult.entrypoints, 12);
+    assert.equal(nativeResult.entrypoints, 21);
     assert.equal(nativeResult.cases, 4);
-    assert.ok(nativeResult.builderCount >= 23);
+    assert.ok(nativeResult.builderCount >= 43);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

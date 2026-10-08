@@ -1,6 +1,6 @@
 {
   "name": "celere-protocol-sdk",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "description": "Strictly offline Solana swap instruction and unsigned transaction builders",
   "type": "module",
   "license": "MIT",
@@ -33,25 +33,49 @@
       "types": "./dist/transactions/index.d.ts",
       "import": "./dist/transactions/index.js"
     },
-    "./protocols/pump": {
-      "types": "./dist/protocols/pump/bonding-curve.d.ts",
-      "import": "./dist/protocols/pump/bonding-curve.js"
+    "./protocols/boop": {
+      "types": "./dist/protocols/boop/adapter.d.ts",
+      "import": "./dist/protocols/boop/adapter.js"
     },
-    "./protocols/raydium-cpmm": {
-      "types": "./dist/protocols/raydium/cpmm.d.ts",
-      "import": "./dist/protocols/raydium/cpmm.js"
+    "./protocols/heaven": {
+      "types": "./dist/protocols/heaven/amm.d.ts",
+      "import": "./dist/protocols/heaven/amm.js"
+    },
+    "./protocols/liquid-af": {
+      "types": "./dist/protocols/liquid-af/curve.d.ts",
+      "import": "./dist/protocols/liquid-af/curve.js"
+    },
+    "./protocols/liquid-af-amm": {
+      "types": "./dist/protocols/liquid-af-amm/amm.d.ts",
+      "import": "./dist/protocols/liquid-af-amm/amm.js"
+    },
+    "./protocols/metadao": {
+      "types": "./dist/protocols/metadao/amm.d.ts",
+      "import": "./dist/protocols/metadao/amm.js"
+    },
+    "./protocols/meteora-damm-v1": {
+      "types": "./dist/protocols/meteora/damm-v1.d.ts",
+      "import": "./dist/protocols/meteora/damm-v1.js"
+    },
+    "./protocols/meteora-damm-v2": {
+      "types": "./dist/protocols/meteora/damm-v2.d.ts",
+      "import": "./dist/protocols/meteora/damm-v2.js"
+    },
+    "./protocols/meteora-dlmm": {
+      "types": "./dist/protocols/meteora/dlmm.d.ts",
+      "import": "./dist/protocols/meteora/dlmm.js"
+    },
+    "./protocols/moonshot": {
+      "types": "./dist/protocols/moonshot/curve.d.ts",
+      "import": "./dist/protocols/moonshot/curve.js"
     },
     "./protocols/orca": {
       "types": "./dist/protocols/orca/whirlpool.d.ts",
       "import": "./dist/protocols/orca/whirlpool.js"
     },
-    "./protocols/raydium-launchlab": {
-      "types": "./dist/protocols/raydium/launchlab.d.ts",
-      "import": "./dist/protocols/raydium/launchlab.js"
-    },
-    "./protocols/meteora-damm-v2": {
-      "types": "./dist/protocols/meteora/damm-v2.d.ts",
-      "import": "./dist/protocols/meteora/damm-v2.js"
+    "./protocols/pump": {
+      "types": "./dist/protocols/pump/bonding-curve.d.ts",
+      "import": "./dist/protocols/pump/bonding-curve.js"
     },
     "./protocols/pump-amm": {
       "types": "./dist/protocols/pump/amm.d.ts",
@@ -65,45 +89,49 @@
       "types": "./dist/protocols/raydium/clmm.d.ts",
       "import": "./dist/protocols/raydium/clmm.js"
     },
-    "./protocols/meteora-dlmm": {
-      "types": "./dist/protocols/meteora/dlmm.d.ts",
-      "import": "./dist/protocols/meteora/dlmm.js"
+    "./protocols/raydium-cpmm": {
+      "types": "./dist/protocols/raydium/cpmm.d.ts",
+      "import": "./dist/protocols/raydium/cpmm.js"
     },
-    "./protocols/meteora-damm-v1": {
-      "types": "./dist/protocols/meteora/damm-v1.d.ts",
-      "import": "./dist/protocols/meteora/damm-v1.js"
+    "./protocols/raydium-launchlab": {
+      "types": "./dist/protocols/raydium/launchlab.d.ts",
+      "import": "./dist/protocols/raydium/launchlab.js"
     },
-    "./protocols/moonshot": {
-      "types": "./dist/protocols/moonshot/curve.d.ts",
-      "import": "./dist/protocols/moonshot/curve.js"
+    "./protocols/rise-rich": {
+      "types": "./dist/protocols/rise-rich/curve.d.ts",
+      "import": "./dist/protocols/rise-rich/curve.js"
+    },
+    "./protocols/stable-swap": {
+      "types": "./dist/protocols/stable-swap/index.d.ts",
+      "import": "./dist/protocols/stable-swap/index.js"
     },
     "./protocols/vertigo": {
       "types": "./dist/protocols/vertigo/amm.d.ts",
       "import": "./dist/protocols/vertigo/amm.js"
     },
-    "./instructions/pump": {
-      "types": "./dist/protocols/pump/instructions/bonding-curve/index.d.ts",
-      "import": "./dist/protocols/pump/instructions/bonding-curve/index.js"
+    "./protocols/virtual-curve": {
+      "types": "./dist/protocols/virtual-curve/adapter.d.ts",
+      "import": "./dist/protocols/virtual-curve/adapter.js"
     },
-    "./instructions/pump-amm": {
-      "types": "./dist/protocols/pump/instructions/amm/index.d.ts",
-      "import": "./dist/protocols/pump/instructions/amm/index.js"
+    "./instructions/boop": {
+      "types": "./dist/protocols/boop/instructions/index.d.ts",
+      "import": "./dist/protocols/boop/instructions/index.js"
     },
-    "./instructions/raydium-amm-v4": {
-      "types": "./dist/protocols/raydium/instructions/amm-v4/index.d.ts",
-      "import": "./dist/protocols/raydium/instructions/amm-v4/index.js"
+    "./instructions/heaven": {
+      "types": "./dist/protocols/heaven/instructions/index.d.ts",
+      "import": "./dist/protocols/heaven/instructions/index.js"
     },
-    "./instructions/raydium-cpmm": {
-      "types": "./dist/protocols/raydium/instructions/cpmm/index.d.ts",
-      "import": "./dist/protocols/raydium/instructions/cpmm/index.js"
+    "./instructions/liquid-af": {
+      "types": "./dist/protocols/liquid-af/instructions/index.d.ts",
+      "import": "./dist/protocols/liquid-af/instructions/index.js"
     },
-    "./instructions/raydium-clmm": {
-      "types": "./dist/protocols/raydium/instructions/clmm/index.d.ts",
-      "import": "./dist/protocols/raydium/instructions/clmm/index.js"
+    "./instructions/liquid-af-amm": {
+      "types": "./dist/protocols/liquid-af-amm/instructions/index.d.ts",
+      "import": "./dist/protocols/liquid-af-amm/instructions/index.js"
     },
-    "./instructions/raydium-launchlab": {
-      "types": "./dist/protocols/raydium/instructions/launchlab/index.d.ts",
-      "import": "./dist/protocols/raydium/instructions/launchlab/index.js"
+    "./instructions/metadao": {
+      "types": "./dist/protocols/metadao/instructions/index.d.ts",
+      "import": "./dist/protocols/metadao/instructions/index.js"
     },
     "./instructions/meteora-damm-v1": {
       "types": "./dist/protocols/meteora/instructions/damm-v1/index.d.ts",
@@ -121,13 +149,53 @@
       "types": "./dist/protocols/moonshot/instructions/index.d.ts",
       "import": "./dist/protocols/moonshot/instructions/index.js"
     },
+    "./instructions/orca": {
+      "types": "./dist/protocols/orca/instructions/index.d.ts",
+      "import": "./dist/protocols/orca/instructions/index.js"
+    },
+    "./instructions/pump": {
+      "types": "./dist/protocols/pump/instructions/bonding-curve/index.d.ts",
+      "import": "./dist/protocols/pump/instructions/bonding-curve/index.js"
+    },
+    "./instructions/pump-amm": {
+      "types": "./dist/protocols/pump/instructions/amm/index.d.ts",
+      "import": "./dist/protocols/pump/instructions/amm/index.js"
+    },
+    "./instructions/raydium-amm-v4": {
+      "types": "./dist/protocols/raydium/instructions/amm-v4/index.d.ts",
+      "import": "./dist/protocols/raydium/instructions/amm-v4/index.js"
+    },
+    "./instructions/raydium-clmm": {
+      "types": "./dist/protocols/raydium/instructions/clmm/index.d.ts",
+      "import": "./dist/protocols/raydium/instructions/clmm/index.js"
+    },
+    "./instructions/raydium-cpmm": {
+      "types": "./dist/protocols/raydium/instructions/cpmm/index.d.ts",
+      "import": "./dist/protocols/raydium/instructions/cpmm/index.js"
+    },
+    "./instructions/raydium-launchlab": {
+      "types": "./dist/protocols/raydium/instructions/launchlab/index.d.ts",
+      "import": "./dist/protocols/raydium/instructions/launchlab/index.js"
+    },
+    "./instructions/rise-rich": {
+      "types": "./dist/protocols/rise-rich/instructions/index.d.ts",
+      "import": "./dist/protocols/rise-rich/instructions/index.js"
+    },
+    "./instructions/stable-swap": {
+      "types": "./dist/protocols/stable-swap/instructions/index.d.ts",
+      "import": "./dist/protocols/stable-swap/instructions/index.js"
+    },
+    "./instructions/sugar": {
+      "types": "./dist/protocols/sugar/instructions/index.d.ts",
+      "import": "./dist/protocols/sugar/instructions/index.js"
+    },
     "./instructions/vertigo": {
       "types": "./dist/protocols/vertigo/instructions/index.d.ts",
       "import": "./dist/protocols/vertigo/instructions/index.js"
     },
-    "./instructions/orca": {
-      "types": "./dist/protocols/orca/instructions/index.d.ts",
-      "import": "./dist/protocols/orca/instructions/index.js"
+    "./instructions/virtual-curve": {
+      "types": "./dist/protocols/virtual-curve/instructions/index.d.ts",
+      "import": "./dist/protocols/virtual-curve/instructions/index.js"
     }
   },
   "scripts": {
@@ -148,11 +216,11 @@
     "@solana-program/system": "0.10.0",
     "@solana-program/token": "0.9.0",
     "@solana-program/token-2022": "0.8.0",
-    "@solana/kit": "5.5.1"
+    "@solana/kit": "5.5.1",
+    "@solana/sysvars": "5.5.1"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@solana/sysvars": "5.5.1",
     "@types/node": "22.18.6",
     "esbuild": "0.28.2",
     "eslint": "10.12.0",

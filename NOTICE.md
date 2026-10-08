@@ -42,8 +42,36 @@ The Vertigo account and instruction interfaces in `src/protocols/vertigo/amm.ts`
 
 The package embeds the official `@orca-so/whirlpools-core` version `1.0.3` WebAssembly math implementation at build time. This version was published under Apache-2.0, before the later license change; source revision `fa6429d1e413893b34dc38cbbd009984b6bc5f28`. See `licenses/ORCA-LICENSE`. The build wrapper embeds the upstream bytes so consumers need no runtime file access or network initialization. The initial adapter qualifies static-fee pools and rejects newer unsupported features explicitly.
 
+## Meteora Virtual Curve / DBC
+
+The offline layouts, liquidity traversal, and integer fees in `src/protocols/virtual-curve/` reference the MIT [MeteoraAg/dynamic-bonding-curve-sdk](https://github.com/MeteoraAg/dynamic-bonding-curve-sdk/tree/a28b7239e71899eb52ff7aacac4dec90441885c4), revision `a28b7239e71899eb52ff7aacac4dec90441885c4`, SDK version `1.5.13`. See `licenses/METEORA-DBC-LICENSE`. Celere uses caller-owned state, native bigint operations, explicit unsupported-feature checks, and portable instruction output; the upstream SDK is not a runtime dependency.
+
+## Heaven
+
+The account and instruction interface facts in `src/protocols/heaven/` reference the MIT [sevenlabs-hq/carbon Heaven decoder](https://github.com/sevenlabs-hq/carbon/tree/a64db3cfb0bb2e500ba6d2a355cd4d7da96890cd/decoders/heaven-decoder), revision `a64db3cfb0bb2e500ba6d2a355cd4d7da96890cd`. See `licenses/CARBON-LICENSE`. The stateless TypeScript adapter, bounded constant-fee arithmetic, validation, and synthetic execution fixtures are independently authored and qualified against the deployed program.
+
+## Sugar
+
+The historical Sugar instruction layouts reference the official `sugar-money` Rust crate version `0.1.38`, source revision `7758a1d07424ea4dd675dee0707f9e6d693ce9db`, copyright SugarMoney Protocol, under MIT. See `licenses/SUGAR-LICENSE`. Only typed instruction builders are provided: the current program deployment rejects every instruction, so no high-level swap adapter is registered.
+
+## MetaDAO
+
+The independently authored MetaDAO spot adapter references public account/instruction schemas from [metaDAOproject/futarchy](https://github.com/metaDAOproject/futarchy/tree/a8ca9f1d34ee8b135bf8fffe5ba7e8aa4cb10c9f), revision `a8ca9f1d34ee8b135bf8fffe5ba7e8aa4cb10c9f`. That repository is BSL-1.1. No implementation code or full IDL is copied or redistributed. The constant-product arithmetic and fee rounding were independently derived and characterized through native execution; no upstream runtime dependency is used.
+
+## Boop
+
+The Boop adapter and builders are independently authored from the published Anchor interface returned by the [Solana IDL service](https://idl.solana.com/api/idl?programId=boop8hVGQGqehUK2iVEMEnMrL5RbjywRzHKBmBE7ry4), response SHA256 `04610936c926a889bfd5d58636bc0dd4ba50e68c32d4cf42fee4c0de473d2258`, and local native execution. No third-party implementation code or full IDL is redistributed. Native graduation clipping is retained explicitly in the public execution contract.
+
+## Rise Rich
+
+The independently authored Rise adapter and builders reference public native interface facts in [riserich/rise-docs](https://github.com/riserich/rise-docs/tree/f619dbd4b925f3f1a654adf096f428ea3130f97e), revision `f619dbd4b925f3f1a654adf096f428ea3130f97e`, and the MIT-declared official `@riserich/sdk` version `0.3.0`. No implementation code or full IDL is copied or redistributed. The offline floor-region arithmetic is independently derived with native bigint quantities and qualified against Rise and its Mayflower CPI program. Neither upstream SDK is a runtime dependency.
+
+## LiquidAF
+
+The independently authored LiquidAF curve/AMM builders, decoders, and bigint math reference the official `@liquid-af/sdk` version `1.0.6` interfaces and documented equations, plus native execution. The reviewed tarball SHA256 is `53d6bbefc7fb3d04c6500e48cef717480450511a5c7c9cd60ac17d5486737e35`; package metadata declares ISC but supplies no standalone license file, author, or repository field. No upstream implementation code or full IDL is copied or redistributed, and the SDK is not a runtime dependency.
+
 ## Solana
 
-Solana Kit, the official `@solana-program/system`, `token`, `token-2022`, `memo`, and `compute-budget` clients, and their transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives without exposing RPC, wallet, signing, or sending operations in its API.
+Solana Kit, `@solana/sysvars`, the official `@solana-program/system`, `token`, `token-2022`, `memo`, and `compute-budget` clients, and their transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives without exposing RPC, wallet, signing, or sending operations in its API.
 
 No extracted Axiom JavaScript is included in this repository or package.

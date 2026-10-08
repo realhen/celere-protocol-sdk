@@ -302,8 +302,9 @@ function decodeTicks(
     const gross = u128(account.data, offset + 20);
     const unsigned = u128(account.data, offset + 4);
     const net = BigInt.asIntN(128, unsigned);
-    if (account.data.subarray(offset + 116, offset + 168).some((byte) => byte !== 0))
-      unsupported("limit orders or unknown tick fields");
+    // A consumed order cohort retains its phase counter, but has no remaining liquidity.
+    if (account.data.subarray(offset + 124, offset + 168).some((byte) => byte !== 0))
+      unsupported("active limit orders or unknown tick fields");
     if (gross === 0n) {
       if (net !== 0n) invalid(account.address, "Uninitialized tick has net liquidity");
       continue;
@@ -549,7 +550,8 @@ async function build(
  * Offline legacy Raydium CLMM adapter for classic SPL tokens and static input fees.
  * @remarks Tick arrays are discovered incrementally from validated on-chain bitmap state.
  * Both modes encode a zero price limit, requiring native atomic full fills. Dynamic fees,
- * permissioned pools, Token-2022, fixed-token fees, and limit-order ticks are rejected.
+ * permissioned pools, Token-2022, fixed-token fees, and active limit-order ticks are rejected. Exhausted order-phase
+ * counters are accepted only when remaining amounts, ratio and reserved fields are zero.
  */
 export const raydiumClmmAdapter: ProtocolAdapter = {
   id: "raydium-clmm",

@@ -87,7 +87,7 @@ function put128(data, offset, amount) {
 }
 
 test(
-  "native CLMM executes both modes and directions, including initialized-tick crossings",
+  "native CLMM executes both modes and directions, including crossings through exhausted historical order cohorts",
   { skip: !endpoint, timeout: 180_000 },
   async () => {
     const signer = await generateKeyPairSigner();
@@ -98,6 +98,7 @@ test(
           const fixture = await raydiumClmmFixture(signer.address, {
             reverse,
             label: `${signer.address}:${reverse}:${crossing}:${kind}`,
+            historicalOrders: crossing,
           });
           await installFixture(fixture, signer);
           const build = value(
