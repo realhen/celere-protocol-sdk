@@ -1,3 +1,5 @@
+import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
@@ -13,8 +15,8 @@ const captured = JSON.parse(
 const encodeAddress = getAddressEncoder();
 const decodeAddress = getAddressDecoder();
 const PROGRAM = address("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
-const TOKEN_PROGRAM = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-const WSOL = address("So11111111111111111111111111111111111111112");
+const TOKEN_PROGRAM = TOKEN_PROGRAM_ADDRESS;
+const WSOL = WRAPPED_SOL_MINT;
 function deterministicAddress(label) {
   return decodeAddress.decode(
     createHash("sha256").update(`celere-orca-fixture:${label}`).digest(),

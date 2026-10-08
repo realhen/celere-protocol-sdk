@@ -1,5 +1,4 @@
 import {
-  address,
   getAddressDecoder,
   getAddressEncoder,
   getProgramDerivedAddress,
@@ -9,7 +8,8 @@ import type { TickArrayFacade, WhirlpoolFacade } from "@orca-so/whirlpools-core"
 import { fail } from "../../core/errors.js";
 import type { SnapshotAccount } from "../../core/types.js";
 
-export const WHIRLPOOL_PROGRAM = address("whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc");
+import { WHIRLPOOL_PROGRAM } from "./constants.js";
+export { WHIRLPOOL_PROGRAM } from "./constants.js";
 const POOL_DISCRIMINATOR = Uint8Array.of(63, 149, 209, 12, 225, 128, 99, 9);
 const FIXED_TICK_DISCRIMINATOR = Uint8Array.of(69, 97, 189, 190, 110, 7, 66, 187);
 const DYNAMIC_TICK_DISCRIMINATOR = Uint8Array.of(17, 216, 246, 142, 225, 199, 218, 56);
@@ -135,28 +135,4 @@ export function oracleAddress(pool: Address) {
     programAddress: WHIRLPOOL_PROGRAM,
     seeds: ["oracle", encodeAddress.encode(pool)],
   });
-}
-
-/** Encode swap-v2 with no transfer-hook accounts and an optional supplemental tick-array slice. */
-export function swapData(
-  amount: bigint,
-  threshold: bigint,
-  exactIn: boolean,
-  aToB: boolean,
-  supplementalCount: number,
-): Uint8Array {
-  const data = new Uint8Array(supplementalCount === 0 ? 43 : 49);
-  data.set([43, 4, 237, 11, 26, 201, 30, 98]);
-  const writer = view(data);
-  writer.setBigUint64(8, amount, true);
-  writer.setBigUint64(16, threshold, true);
-  data[40] = Number(exactIn);
-  data[41] = Number(aToB);
-  if (supplementalCount > 0) {
-    data[42] = 1;
-    writer.setUint32(43, 1, true);
-    data[47] = 6;
-    data[48] = supplementalCount;
-  }
-  return data;
 }

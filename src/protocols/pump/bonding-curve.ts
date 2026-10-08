@@ -1,6 +1,5 @@
 import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS as ASSOCIATED_TOKEN_PROGRAM } from "@solana-program/token";
 import {
-  AccountRole,
   getAddressEncoder,
   getProgramDerivedAddress,
   type Address,
@@ -17,6 +16,11 @@ import type {
   SwapRequest,
 } from "../../core/types.js";
 import { quotePump } from "./math.js";
+import {
+  getPumpBuyInstruction,
+  getPumpBuyExactSolInInstruction,
+  getPumpSellInstruction,
+} from "./instructions/bonding-curve/index.js";
 import {
   NATIVE_SOL_MINT,
   PUMP_FEE_PROGRAM,
@@ -104,27 +108,6 @@ async function requirements(
   return accounts;
 }
 
-function encodeSwap(
-  discriminator: readonly number[],
-  first: bigint,
-  second: bigint,
-  buy: boolean,
-): Uint8Array {
-  assertAmount(first, "instructionAmount");
-  assertAmount(second, "instructionLimit");
-  const data = new Uint8Array(buy ? 26 : 24);
-  data.set(discriminator);
-  const view = new DataView(data.buffer);
-  view.setBigUint64(8, first, true);
-  view.setBigUint64(16, second, true);
-  // OptionBool is a one-field tuple, not a Borsh Option. Tracking and partial fills are disabled.
-  if (buy) {
-    data[24] = 0;
-    data[25] = 0;
-  }
-  return data;
-}
-
 async function build(
   request: SwapRequest,
   accounts: ResolvedTokenAccounts,
@@ -174,48 +157,49 @@ async function build(
     pda(PUMP_PROGRAM, "global_volume_accumulator"),
     pda(PUMP_PROGRAM, "user_volume_accumulator", request.owner),
   ]);
-  const readonly = (value: Address) => ({ address: value, role: AccountRole.READONLY });
-  const writable = (value: Address) => ({ address: value, role: AccountRole.WRITABLE });
-  const metas = [
-    readonly(global),
-    writable(recipients.feeRecipient),
-    readonly(mint),
-    writable(request.pool),
-    writable(vault),
-    writable(userTokenAccount),
-    { address: request.owner, role: AccountRole.WRITABLE_SIGNER },
-    readonly(SYSTEM_PROGRAM),
-    ...(isBuy
-      ? [readonly(tokenProgram), writable(creatorVault)]
-      : [writable(creatorVault), readonly(tokenProgram)]),
-    readonly(eventAuthority),
-    readonly(PUMP_PROGRAM),
-    ...(isBuy ? [readonly(globalVolume), writable(userVolume)] : []),
-    readonly(feeConfig),
-    readonly(PUMP_FEE_PROGRAM),
-    readonly(curveV2),
-    writable(recipients.buybackRecipient),
-  ];
-  const instruction: Instruction = {
-    programAddress: PUMP_PROGRAM,
-    accounts: metas,
-    data:
-      quote.kind === "exactOut"
-        ? encodeSwap(
-            [102, 6, 61, 18, 1, 218, 235, 234],
-            quote.amountOut,
-            quote.maximumAmountIn,
-            true,
-          )
-        : encodeSwap(
-            isBuy
-              ? [56, 252, 116, 8, 158, 223, 205, 95]
-              : [51, 230, 133, 164, 1, 127, 131, 173],
-            quote.amountIn,
-            quote.minimumAmountOut,
-            isBuy,
-          ),
+  const instructionAccounts = {
+    global,
+    feeRecipient: recipients.feeRecipient,
+    mint,
+    bondingCurve: request.pool,
+    associatedBondingCurve: vault,
+    associatedUser: userTokenAccount,
+    user: request.owner,
+    systemProgram: SYSTEM_PROGRAM,
+    tokenProgram,
+    creatorVault,
+    eventAuthority,
+    program: PUMP_PROGRAM,
+    globalVolumeAccumulator: globalVolume,
+    userVolumeAccumulator: userVolume,
+    feeConfig,
+    feeProgram: PUMP_FEE_PROGRAM,
+    bondingCurveV2: curveV2,
+    buybackFeeRecipient: recipients.buybackRecipient,
   };
+  let instruction: Instruction;
+  if (quote.kind === "exactOut") {
+    assertAmount(quote.amountOut, "instructionAmount");
+    assertAmount(quote.maximumAmountIn, "instructionLimit");
+    instruction = getPumpBuyInstruction(instructionAccounts, {
+      amount: quote.amountOut,
+      maxSolCost: quote.maximumAmountIn,
+    });
+  } else if (isBuy) {
+    assertAmount(quote.amountIn, "instructionAmount");
+    assertAmount(quote.minimumAmountOut, "instructionLimit");
+    instruction = getPumpBuyExactSolInInstruction(instructionAccounts, {
+      spendableSolIn: quote.amountIn,
+      minTokensOut: quote.minimumAmountOut,
+    });
+  } else {
+    assertAmount(quote.amountIn, "instructionAmount");
+    assertAmount(quote.minimumAmountOut, "instructionLimit");
+    instruction = getPumpSellInstruction(instructionAccounts, {
+      amount: quote.amountIn,
+      minSolOutput: quote.minimumAmountOut,
+    });
+  }
   return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
 

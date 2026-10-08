@@ -5,8 +5,6 @@
  */
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import {
-  AccountRole,
-  address,
   getAddressDecoder,
   getAddressEncoder,
   getProgramDerivedAddress,
@@ -34,11 +32,9 @@ import {
   clmmSqrtPriceAtTick,
   clmmSwapStep,
 } from "./clmm-math.js";
-
-/** Raydium's native concentrated-liquidity program on Solana mainnet. */
-export const RAYDIUM_CLMM_PROGRAM = address(
-  "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
-);
+import { getRaydiumClmmSwapInstruction } from "./instructions/clmm/index.js";
+import { RAYDIUM_CLMM_PROGRAM } from "./constants.js";
+export { RAYDIUM_CLMM_PROGRAM } from "./constants.js";
 const addressDecoder = getAddressDecoder();
 const addressEncoder = getAddressEncoder();
 const textEncoder = new TextEncoder();
@@ -48,7 +44,6 @@ const CONFIG_DISCRIMINATOR = [218, 244, 33, 104, 203, 203, 43, 111];
 const TICK_ARRAY_DISCRIMINATOR = [192, 155, 85, 205, 49, 249, 129, 42];
 const BITMAP_DISCRIMINATOR = [60, 150, 36, 219, 97, 128, 139, 153];
 const OBSERVATION_DISCRIMINATOR = [122, 174, 197, 53, 129, 9, 165, 132];
-const SWAP_DISCRIMINATOR = [248, 198, 158, 145, 225, 117, 135, 200];
 
 interface Pool {
   readonly account: SnapshotAccount;
@@ -517,52 +512,36 @@ async function build(
           amountOut: request.amount.amountOut,
           maximumAmountIn: maximumInput(result.input, request.slippageBps),
         };
-  const data = new Uint8Array(41);
-  data.set(SWAP_DISCRIMINATOR);
-  const bytes = view(data);
-  bytes.setBigUint64(
-    8,
-    quote.kind === "exactIn" ? quote.amountIn : quote.amountOut,
-    true,
-  );
-  bytes.setBigUint64(
-    16,
-    quote.kind === "exactIn" ? quote.minimumAmountOut : quote.maximumAmountIn,
-    true,
-  );
-  // A zero price limit makes the native program assert the entire specified amount was filled.
-  data[40] = Number(quote.kind === "exactIn");
+  const instructionAccounts = {
+    owner: request.owner,
+    config: pool.config,
+    pool: request.pool,
+    userInput: accounts.input,
+    userOutput: accounts.output,
+    inputVault: pool.zeroForOne ? pool.vault0 : pool.vault1,
+    outputVault: pool.zeroForOne ? pool.vault1 : pool.vault0,
+    observation: pool.observation,
+    tickArrays: result.tickArrays,
+    tickArrayBitmap: bitmap,
+  };
+  const instructionArgs =
+    quote.kind === "exactIn"
+      ? {
+          amount: quote.amountIn,
+          otherAmountThreshold: quote.minimumAmountOut,
+          sqrtPriceLimitX64: 0n,
+          isBaseInput: true,
+        }
+      : {
+          amount: quote.amountOut,
+          otherAmountThreshold: quote.maximumAmountIn,
+          sqrtPriceLimitX64: 0n,
+          isBaseInput: false,
+        };
   return {
     quote,
     mayPartiallyFill: false,
-    instructions: [
-      {
-        programAddress: RAYDIUM_CLMM_PROGRAM,
-        accounts: [
-          { address: request.owner, role: AccountRole.READONLY_SIGNER },
-          { address: pool.config, role: AccountRole.READONLY },
-          { address: request.pool, role: AccountRole.WRITABLE },
-          { address: accounts.input, role: AccountRole.WRITABLE },
-          { address: accounts.output, role: AccountRole.WRITABLE },
-          {
-            address: pool.zeroForOne ? pool.vault0 : pool.vault1,
-            role: AccountRole.WRITABLE,
-          },
-          {
-            address: pool.zeroForOne ? pool.vault1 : pool.vault0,
-            role: AccountRole.WRITABLE,
-          },
-          { address: pool.observation, role: AccountRole.WRITABLE },
-          { address: TOKEN_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-          ...result.tickArrays.map((address) => ({
-            address,
-            role: AccountRole.WRITABLE,
-          })),
-          { address: bitmap, role: AccountRole.READONLY },
-        ],
-        data,
-      },
-    ],
+    instructions: [getRaydiumClmmSwapInstruction(instructionAccounts, instructionArgs)],
   };
 }
 

@@ -1,12 +1,9 @@
 /** Adapted from raydium-io/raydium-cp-swap (Apache-2.0); see NOTICE.md. */
 import {
-  AccountRole,
-  address,
   getAddressDecoder,
   getAddressEncoder,
   getProgramDerivedAddress,
   type Address,
-  type Instruction,
 } from "@solana/kit";
 import { readMint, readTokenAccount } from "../../accounts/tokens.js";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
@@ -22,18 +19,17 @@ import type {
   SwapQuote,
   SwapRequest,
 } from "../../core/types.js";
-
-/** Raydium's native constant-product program on Solana mainnet. */
-export const RAYDIUM_CPMM_PROGRAM = address(
-  "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
-);
+import {
+  getRaydiumCpmmSwapBaseInputInstruction,
+  getRaydiumCpmmSwapBaseOutputInstruction,
+} from "./instructions/cpmm/index.js";
+import { RAYDIUM_CPMM_PROGRAM } from "./constants.js";
+export { RAYDIUM_CPMM_PROGRAM } from "./constants.js";
 
 const FEE_DENOMINATOR = 1_000_000n;
 const POOL_DISCRIMINATOR = [247, 237, 227, 245, 215, 195, 222, 70];
 const CONFIG_DISCRIMINATOR = [218, 244, 33, 104, 203, 203, 43, 111];
 const OBSERVATION_DISCRIMINATOR = [122, 174, 197, 53, 129, 9, 165, 132];
-const INPUT_DISCRIMINATOR = [143, 190, 90, 218, 196, 30, 51, 222];
-const OUTPUT_DISCRIMINATOR = [55, 217, 98, 86, 163, 74, 180, 173];
 const addressDecoder = getAddressDecoder();
 const addressEncoder = getAddressEncoder();
 
@@ -365,44 +361,31 @@ async function build(
           expectedAmountOut: curve.output,
           fees,
         };
-  const data = new Uint8Array(24);
-  data.set(quote.kind === "exactIn" ? INPUT_DISCRIMINATOR : OUTPUT_DISCRIMINATOR);
-  const view = new DataView(data.buffer);
-  view.setBigUint64(
-    8,
-    quote.kind === "exactIn" ? quote.amountIn : quote.maximumAmountIn,
-    true,
-  );
-  view.setBigUint64(
-    16,
-    quote.kind === "exactIn" ? quote.minimumAmountOut : quote.amountOut,
-    true,
-  );
-  const instruction: Instruction = {
-    programAddress: RAYDIUM_CPMM_PROGRAM,
-    accounts: [
-      { address: request.owner, role: AccountRole.READONLY_SIGNER },
-      { address: authority, role: AccountRole.READONLY },
-      { address: pool.config, role: AccountRole.READONLY },
-      { address: request.pool, role: AccountRole.WRITABLE },
-      { address: tokenAccounts.input, role: AccountRole.WRITABLE },
-      { address: tokenAccounts.output, role: AccountRole.WRITABLE },
-      { address: zeroForOne ? pool.vault0 : pool.vault1, role: AccountRole.WRITABLE },
-      { address: zeroForOne ? pool.vault1 : pool.vault0, role: AccountRole.WRITABLE },
-      {
-        address: zeroForOne ? pool.tokenProgram0 : pool.tokenProgram1,
-        role: AccountRole.READONLY,
-      },
-      {
-        address: zeroForOne ? pool.tokenProgram1 : pool.tokenProgram0,
-        role: AccountRole.READONLY,
-      },
-      { address: request.inputMint, role: AccountRole.READONLY },
-      { address: request.outputMint, role: AccountRole.READONLY },
-      { address: pool.observation, role: AccountRole.WRITABLE },
-    ],
-    data,
+  const instructionAccounts = {
+    owner: request.owner,
+    authority,
+    ammConfig: pool.config,
+    pool: request.pool,
+    inputTokenAccount: tokenAccounts.input,
+    outputTokenAccount: tokenAccounts.output,
+    inputVault: zeroForOne ? pool.vault0 : pool.vault1,
+    outputVault: zeroForOne ? pool.vault1 : pool.vault0,
+    inputTokenProgram: zeroForOne ? pool.tokenProgram0 : pool.tokenProgram1,
+    outputTokenProgram: zeroForOne ? pool.tokenProgram1 : pool.tokenProgram0,
+    inputMint: request.inputMint,
+    outputMint: request.outputMint,
+    observationState: pool.observation,
   };
+  const instruction =
+    quote.kind === "exactIn"
+      ? getRaydiumCpmmSwapBaseInputInstruction(instructionAccounts, {
+          amountIn: quote.amountIn,
+          minimumAmountOut: quote.minimumAmountOut,
+        })
+      : getRaydiumCpmmSwapBaseOutputInstruction(instructionAccounts, {
+          maximumAmountIn: quote.maximumAmountIn,
+          amountOut: quote.amountOut,
+        });
   return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
 

@@ -1,3 +1,5 @@
+import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { createHash } from "node:crypto";
 import { TextEncoder } from "node:util";
 import {
@@ -8,8 +10,8 @@ import {
 } from "@solana/kit";
 
 export const DAMM_V2_PROGRAM = address("cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG");
-const TOKEN_PROGRAM = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-const TOKEN_2022_PROGRAM = address("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+const TOKEN_PROGRAM = TOKEN_PROGRAM_ADDRESS;
+const TOKEN_2022_PROGRAM = TOKEN_2022_PROGRAM_ADDRESS;
 const AUTHORITY = address("HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC");
 const encodeAddress = getAddressEncoder();
 const decodeAddress = getAddressDecoder();

@@ -1,9 +1,8 @@
 import {
-  AccountRole,
-  address,
   getAddressEncoder,
   getProgramDerivedAddress,
   type Address,
+  type Instruction,
 } from "@solana/kit";
 import {
   associatedTokenAddress,
@@ -29,7 +28,13 @@ import {
   readAmmPool,
 } from "./amm-state.js";
 
-const PUMP_PROGRAM = address("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
+import { PUMP_PROGRAM } from "./constants.js";
+import {
+  getPumpAmmBuyV2Instruction,
+  getPumpAmmBuyExactQuoteInV2Instruction,
+  getPumpAmmSellV2Instruction,
+} from "./instructions/amm/index.js";
+
 const bytes = getAddressEncoder();
 const utf8 = new TextEncoder();
 
@@ -196,55 +201,53 @@ async function build(
     pool.protocolFees + pool.creatorFees,
     rates,
   );
-  const first = quote.kind === "exactOut" ? quote.amountOut : quote.amountIn;
-  const second =
-    quote.kind === "exactOut" ? quote.maximumAmountIn : quote.minimumAmountOut;
-  assertAmount(first, "instructionAmount");
-  assertAmount(second, "instructionLimit");
-  const data = new Uint8Array(24);
-  data.set(
-    quote.kind === "exactOut"
-      ? [184, 23, 238, 97, 103, 197, 211, 61]
-      : isBuy
-        ? [194, 171, 28, 70, 104, 77, 91, 47]
-        : [93, 246, 130, 60, 231, 233, 64, 178],
-  );
-  const view = new DataView(data.buffer);
-  view.setBigUint64(8, first, true);
-  view.setBigUint64(16, second, true);
-  const readonly = (value: Address) => ({ address: value, role: AccountRole.READONLY });
-  const writable = (value: Address) => ({ address: value, role: AccountRole.WRITABLE });
-  return {
-    quote,
-    mayPartiallyFill: false,
-    instructions: [
-      {
-        programAddress: PUMP_AMM_PROGRAM,
-        data,
-        accounts: [
-          writable(request.pool),
-          { address: request.owner, role: AccountRole.WRITABLE_SIGNER },
-          readonly(global),
-          readonly(pool.baseMint),
-          readonly(pool.quoteMint),
-          writable(isBuy ? accounts.output : accounts.input),
-          writable(isBuy ? accounts.input : accounts.output),
-          writable(pool.baseVault),
-          writable(pool.quoteVault),
-          readonly(base.tokenProgram),
-          readonly(quoteMint.tokenProgram),
-          readonly(AMM_SYSTEM_PROGRAM),
-          writable(
-            await derive(PUMP_AMM_PROGRAM, "user_volume_accumulator", request.owner),
-          ),
-          readonly(feeConfig),
-          writable(buybackTokenAccount),
-          readonly(eventAuthority),
-          readonly(PUMP_AMM_PROGRAM),
-        ],
-      },
-    ],
+  const instructionAccounts = {
+    pool: request.pool,
+    user: request.owner,
+    globalConfig: global,
+    baseMint: pool.baseMint,
+    quoteMint: pool.quoteMint,
+    userBaseTokenAccount: isBuy ? accounts.output : accounts.input,
+    userQuoteTokenAccount: isBuy ? accounts.input : accounts.output,
+    poolBaseTokenAccount: pool.baseVault,
+    poolQuoteTokenAccount: pool.quoteVault,
+    baseTokenProgram: base.tokenProgram,
+    quoteTokenProgram: quoteMint.tokenProgram,
+    systemProgram: AMM_SYSTEM_PROGRAM,
+    userVolumeAccumulator: await derive(
+      PUMP_AMM_PROGRAM,
+      "user_volume_accumulator",
+      request.owner,
+    ),
+    feeConfig,
+    buybackFeeRecipient: buybackTokenAccount,
+    eventAuthority,
+    program: PUMP_AMM_PROGRAM,
   };
+  let instruction: Instruction;
+  if (quote.kind === "exactOut") {
+    assertAmount(quote.amountOut, "instructionAmount");
+    assertAmount(quote.maximumAmountIn, "instructionLimit");
+    instruction = getPumpAmmBuyV2Instruction(instructionAccounts, {
+      baseAmountOut: quote.amountOut,
+      maxQuoteAmountIn: quote.maximumAmountIn,
+    });
+  } else if (isBuy) {
+    assertAmount(quote.amountIn, "instructionAmount");
+    assertAmount(quote.minimumAmountOut, "instructionLimit");
+    instruction = getPumpAmmBuyExactQuoteInV2Instruction(instructionAccounts, {
+      spendableQuoteIn: quote.amountIn,
+      minBaseAmountOut: quote.minimumAmountOut,
+    });
+  } else {
+    assertAmount(quote.amountIn, "instructionAmount");
+    assertAmount(quote.minimumAmountOut, "instructionLimit");
+    instruction = getPumpAmmSellV2Instruction(instructionAccounts, {
+      baseAmountIn: quote.amountIn,
+      minQuoteAmountOut: quote.minimumAmountOut,
+    });
+  }
+  return { quote, mayPartiallyFill: false, instructions: [instruction] };
 }
 
 /**

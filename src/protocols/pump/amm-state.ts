@@ -1,12 +1,12 @@
 import { SYSTEM_PROGRAM_ADDRESS as AMM_SYSTEM_PROGRAM } from "@solana-program/system";
 import { WRAPPED_SOL_MINT as AMM_QUOTE_MINT } from "../../accounts/tokens.js";
-import { address, getAddressDecoder, type Address } from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { fail } from "../../core/errors.js";
 import { requireAccount } from "../../core/snapshot.js";
 import type { AccountSnapshot, SnapshotAccount } from "../../core/types.js";
 
-export const PUMP_AMM_PROGRAM = address("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
-export const AMM_FEE_PROGRAM = address("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
+import { PUMP_AMM_PROGRAM, PUMP_FEE_PROGRAM as AMM_FEE_PROGRAM } from "./constants.js";
+export { PUMP_AMM_PROGRAM, AMM_FEE_PROGRAM };
 export { AMM_SYSTEM_PROGRAM, AMM_QUOTE_MINT };
 const decoder = getAddressDecoder();
 

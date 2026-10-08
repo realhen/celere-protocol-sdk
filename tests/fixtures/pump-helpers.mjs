@@ -1,4 +1,12 @@
 import {
+  TOKEN_PROGRAM_ADDRESS,
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+} from "@solana-program/token";
+import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
+import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
+import { SYSVAR_RENT_ADDRESS } from "@solana/sysvars";
+import {
   AccountRole,
   address,
   getAddressEncoder,
@@ -11,13 +19,13 @@ import assert from "node:assert/strict";
 import { TextEncoder } from "node:util";
 
 export const PUMP = address("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
-export const SOL = address("So11111111111111111111111111111111111111112");
-export const TOKEN = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-export const TOKEN_2022 = address("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+export const SOL = WRAPPED_SOL_MINT;
+export const TOKEN = TOKEN_PROGRAM_ADDRESS;
+export const TOKEN_2022 = TOKEN_2022_PROGRAM_ADDRESS;
 const MAYHEM = address("MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e");
-const ASSOCIATED = address("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+const ASSOCIATED = ASSOCIATED_TOKEN_PROGRAM_ADDRESS;
 const METADATA = address("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
-const SYSTEM = address("11111111111111111111111111111111");
+const SYSTEM = SYSTEM_PROGRAM_ADDRESS;
 const bytes = getAddressEncoder();
 const utf8 = new TextEncoder();
 
@@ -120,7 +128,7 @@ export async function createCurveInstruction(user, mint, tokenProgram = TOKEN) {
               ),
             ),
           ]
-        : [readonly(address("SysvarRent111111111111111111111111111111111"))]),
+        : [readonly(SYSVAR_RENT_ADDRESS)]),
       readonly(await derive(PUMP, [utf8.encode("__event_authority")])),
       readonly(PUMP),
     ],

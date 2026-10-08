@@ -1,3 +1,6 @@
+import { meteoraDammV1Fixture } from "../fixtures/meteora-damm-v1.mjs";
+import { moonshotFixture } from "../fixtures/moonshot.mjs";
+import { vertigoFixture } from "../fixtures/vertigo.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { build } from "esbuild";
@@ -76,6 +79,9 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
             : value,
     );
     const fixtures = [
+      ["meteora-damm-v1", (await meteoraDammV1Fixture(signer.address)).request],
+      ["moonshot", (await moonshotFixture(signer.address)).request],
+      ["vertigo", (await vertigoFixture(signer.address)).request],
       ["pump", pump.observations[0].request],
       ["raydium-amm-v4", (await raydiumAmmV4Fixture(signer.address)).request],
       ["raydium-clmm", (await raydiumClmmFixture(signer.address)).request],

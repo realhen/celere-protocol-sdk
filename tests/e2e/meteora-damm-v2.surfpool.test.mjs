@@ -1,3 +1,5 @@
+import { SYSVAR_CLOCK_ADDRESS } from "@solana/sysvars";
+import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -44,7 +46,7 @@ async function installFixture(fixture, signer) {
     signer.address,
     {
       lamports: 10_000_000_000,
-      owner: "11111111111111111111111111111111",
+      owner: SYSTEM_PROGRAM_ADDRESS,
       executable: false,
       data: "",
     },
@@ -213,12 +215,8 @@ test(
         { kind: "exactOut", amountOut: 1_000_001n },
       ]) {
         const clock = Buffer.from(
-          (
-            await rpc("getAccountInfo", [
-              "SysvarC1ock11111111111111111111111111111111",
-              { encoding: "base64" },
-            ])
-          ).value.data[0],
+          (await rpc("getAccountInfo", [SYSVAR_CLOCK_ADDRESS, { encoding: "base64" }]))
+            .value.data[0],
           "base64",
         );
         const slot = clock.readBigUInt64LE(0);

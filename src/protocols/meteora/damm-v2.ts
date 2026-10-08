@@ -1,12 +1,9 @@
 /** Bigint adaptation of Meteora's MIT damm-v2-sdk; see NOTICE.md. */
 import {
-  AccountRole,
-  address,
   getAddressDecoder,
   getAddressEncoder,
   getProgramDerivedAddress,
   type Address,
-  type Instruction,
 } from "@solana/kit";
 import {
   readMint,
@@ -26,13 +23,13 @@ import type {
   SwapRequest,
 } from "../../core/types.js";
 
-/** Meteora DAMM v2 deployment on Solana mainnet. */
-export const METEORA_DAMM_V2_PROGRAM = address(
-  "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
-);
-const POOL_AUTHORITY = address("HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC");
+import {
+  METEORA_DAMM_V2_PROGRAM,
+  METEORA_DAMM_V2_POOL_AUTHORITY as POOL_AUTHORITY,
+} from "./constants.js";
+import { getMeteoraDammV2Swap2Instruction } from "./instructions/damm-v2/swap2.js";
+export { METEORA_DAMM_V2_PROGRAM } from "./constants.js";
 const POOL_DISCRIMINATOR = [241, 154, 109, 4, 17, 177, 109, 188];
-const SWAP_DISCRIMINATOR = [65, 75, 63, 76, 235, 91, 91, 136];
 const FEE_DENOMINATOR = 1_000_000_000n;
 const Q128 = 1n << 128n;
 const MIN_SQRT_PRICE = 4_295_048_016n;
@@ -351,40 +348,32 @@ async function build(
           expectedAmountOut: curve.output,
           fees,
         };
-  const data = new Uint8Array(25);
-  data.set(SWAP_DISCRIMINATOR);
-  const view = new DataView(data.buffer);
-  view.setBigUint64(8, quote.kind === "exactIn" ? quote.amountIn : quote.amountOut, true);
-  view.setBigUint64(
-    16,
-    quote.kind === "exactIn" ? quote.minimumAmountOut : quote.maximumAmountIn,
-    true,
-  );
-  data[24] = quote.kind === "exactIn" ? 0 : 2;
   const [eventAuthority] = await getProgramDerivedAddress({
     programAddress: METEORA_DAMM_V2_PROGRAM,
     seeds: [new TextEncoder().encode("__event_authority")],
   });
-  const instruction: Instruction = {
-    programAddress: METEORA_DAMM_V2_PROGRAM,
-    accounts: [
-      { address: POOL_AUTHORITY, role: AccountRole.READONLY },
-      { address: request.pool, role: AccountRole.WRITABLE },
-      { address: tokenAccounts.input, role: AccountRole.WRITABLE },
-      { address: tokenAccounts.output, role: AccountRole.WRITABLE },
-      { address: pool.vaultA, role: AccountRole.WRITABLE },
-      { address: pool.vaultB, role: AccountRole.WRITABLE },
-      { address: pool.mintA, role: AccountRole.READONLY },
-      { address: pool.mintB, role: AccountRole.READONLY },
-      { address: request.owner, role: AccountRole.READONLY_SIGNER },
-      { address: pool.tokenProgramA, role: AccountRole.READONLY },
-      { address: pool.tokenProgramB, role: AccountRole.READONLY },
-      { address: METEORA_DAMM_V2_PROGRAM, role: AccountRole.READONLY },
-      { address: eventAuthority, role: AccountRole.READONLY },
-      { address: METEORA_DAMM_V2_PROGRAM, role: AccountRole.READONLY },
-    ],
-    data,
-  };
+  const instruction = getMeteoraDammV2Swap2Instruction(
+    {
+      poolAuthority: POOL_AUTHORITY,
+      pool: request.pool,
+      userInputToken: tokenAccounts.input,
+      userOutputToken: tokenAccounts.output,
+      tokenVaultA: pool.vaultA,
+      tokenVaultB: pool.vaultB,
+      tokenMintA: pool.mintA,
+      tokenMintB: pool.mintB,
+      payer: request.owner,
+      tokenProgramA: pool.tokenProgramA,
+      tokenProgramB: pool.tokenProgramB,
+      eventAuthority,
+    },
+    {
+      amount: quote.kind === "exactIn" ? quote.amountIn : quote.amountOut,
+      otherAmountThreshold:
+        quote.kind === "exactIn" ? quote.minimumAmountOut : quote.maximumAmountIn,
+      swapMode: quote.kind === "exactIn" ? 0 : 2,
+    },
+  );
   return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
 

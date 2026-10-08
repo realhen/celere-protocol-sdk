@@ -1,11 +1,5 @@
 /** Modified offline adaptation of raydium-io/raydium-amm (Apache-2.0); see NOTICE.md. */
-import {
-  AccountRole,
-  address,
-  getAddressDecoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, getProgramDerivedAddress, type Address } from "@solana/kit";
 import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens.js";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
 import { fail } from "../../core/errors.js";
@@ -18,11 +12,12 @@ import type {
   SwapQuote,
   SwapRequest,
 } from "../../core/types.js";
-
-/** Raydium AMM v4 mainnet program, with native vault-only swap instructions. */
-export const RAYDIUM_AMM_V4_PROGRAM = address(
-  "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
-);
+import {
+  getRaydiumAmmV4SwapBaseInV2Instruction,
+  getRaydiumAmmV4SwapBaseOutV2Instruction,
+} from "./instructions/amm-v4/index.js";
+import { RAYDIUM_AMM_V4_PROGRAM } from "./constants.js";
+export { RAYDIUM_AMM_V4_PROGRAM } from "./constants.js";
 
 const decoder = getAddressDecoder();
 const U128_MAX = (1n << 128n) - 1n;
@@ -240,39 +235,26 @@ async function build(
   );
   if ((zeroForOne ? vault0.amount : vault1.amount) + quote.expectedAmountIn > U64_MAX)
     insufficient("Swap would overflow the input token vault");
-  const data = new Uint8Array(17);
-  data[0] = quote.kind === "exactIn" ? 16 : 17;
-  const view = new DataView(data.buffer);
-  view.setBigUint64(
-    1,
-    quote.kind === "exactIn" ? quote.amountIn : quote.maximumAmountIn,
-    true,
-  );
-  view.setBigUint64(
-    9,
-    quote.kind === "exactIn" ? quote.minimumAmountOut : quote.amountOut,
-    true,
-  );
-  return {
-    instructions: [
-      {
-        programAddress: RAYDIUM_AMM_V4_PROGRAM,
-        accounts: [
-          { address: TOKEN_PROGRAM, role: AccountRole.READONLY },
-          { address: request.pool, role: AccountRole.WRITABLE },
-          { address: authority, role: AccountRole.READONLY },
-          { address: pool.vault0, role: AccountRole.WRITABLE },
-          { address: pool.vault1, role: AccountRole.WRITABLE },
-          { address: tokenAccounts.input, role: AccountRole.WRITABLE },
-          { address: tokenAccounts.output, role: AccountRole.WRITABLE },
-          { address: request.owner, role: AccountRole.READONLY_SIGNER },
-        ],
-        data,
-      },
-    ],
-    quote,
-    mayPartiallyFill: false,
+  const instructionAccounts = {
+    pool: request.pool,
+    authority,
+    vault0: pool.vault0,
+    vault1: pool.vault1,
+    userInput: tokenAccounts.input,
+    userOutput: tokenAccounts.output,
+    owner: request.owner,
   };
+  const instruction =
+    quote.kind === "exactIn"
+      ? getRaydiumAmmV4SwapBaseInV2Instruction(instructionAccounts, {
+          amountIn: quote.amountIn,
+          minimumAmountOut: quote.minimumAmountOut,
+        })
+      : getRaydiumAmmV4SwapBaseOutV2Instruction(instructionAccounts, {
+          maximumAmountIn: quote.maximumAmountIn,
+          amountOut: quote.amountOut,
+        });
+  return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
 
 /**

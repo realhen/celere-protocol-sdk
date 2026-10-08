@@ -1,0 +1,28 @@
+MIT License
+
+Upstream: @vertigo-amm/vertigo-sdk 2.0.6, author Vertigo Protocol
+Package: https://www.npmjs.com/package/@vertigo-amm/vertigo-sdk/v/2.0.6
+Tarball SHA256: ce36367640768a4edeea4f2b5befd2bc9aacec277dc39fd42955a8cbba86b09e
+
+These packages declare the license below in their package metadata. The
+reviewed distributions do not include standalone license files. This record
+reproduces standard license terms; it is not a copy of an upstream LICENSE.
+Copyright in adapted portions remains with the respective upstream authors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

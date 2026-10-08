@@ -1,14 +1,10 @@
 /** Offline bigint adaptation of the ISC Meteora DLMM TypeScript SDK; see NOTICE.md. */
 import {
-  AccountRole,
-  address,
   getAddressDecoder,
   getAddressEncoder,
   getProgramDerivedAddress,
   type Address,
-  type Instruction,
 } from "@solana/kit";
-import { MEMO_PROGRAM_ADDRESS } from "@solana-program/memo";
 import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens.js";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
 import { fail } from "../../core/errors.js";
@@ -22,10 +18,10 @@ import type {
   SwapRequest,
 } from "../../core/types.js";
 
-/** Meteora DLMM deployment on Solana mainnet. */
-export const METEORA_DLMM_PROGRAM = address(
-  "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
-);
+import { METEORA_DLMM_PROGRAM } from "./constants.js";
+import { getMeteoraDlmmSwap2Instruction } from "./instructions/dlmm/swap2.js";
+import { getMeteoraDlmmSwapExactOut2Instruction } from "./instructions/dlmm/swap-exact-out2.js";
+export { METEORA_DLMM_PROGRAM } from "./constants.js";
 const Q64 = 1n << 64n;
 const FEE_PRECISION = 1_000_000_000n;
 const encodeAddress = getAddressEncoder();
@@ -477,51 +473,32 @@ async function build(
           expectedAmountOut: curve.output,
           fees,
         };
-  const data = new Uint8Array(28);
-  data.set(
-    quote.kind === "exactIn"
-      ? [65, 75, 63, 76, 235, 91, 91, 136]
-      : [43, 215, 247, 132, 137, 60, 243, 81],
-  );
-  viewOf(data).setBigUint64(
-    8,
-    quote.kind === "exactIn" ? quote.amountIn : quote.maximumAmountIn,
-    true,
-  );
-  viewOf(data).setBigUint64(
-    16,
-    quote.kind === "exactIn" ? quote.minimumAmountOut : quote.amountOut,
-    true,
-  );
-  const instruction: Instruction = {
-    programAddress: METEORA_DLMM_PROGRAM,
-    accounts: [
-      { address: request.pool, role: AccountRole.WRITABLE },
-      {
-        address: bitmap.data ? bitmap.address : METEORA_DLMM_PROGRAM,
-        role: bitmap.data ? AccountRole.WRITABLE : AccountRole.READONLY,
-      },
-      { address: pool.reserveX, role: AccountRole.WRITABLE },
-      { address: pool.reserveY, role: AccountRole.WRITABLE },
-      { address: tokenAccounts.input, role: AccountRole.WRITABLE },
-      { address: tokenAccounts.output, role: AccountRole.WRITABLE },
-      { address: pool.mintX, role: AccountRole.READONLY },
-      { address: pool.mintY, role: AccountRole.READONLY },
-      { address: pool.oracle, role: AccountRole.WRITABLE },
-      { address: METEORA_DLMM_PROGRAM, role: AccountRole.READONLY },
-      { address: request.owner, role: AccountRole.READONLY_SIGNER },
-      { address: TOKEN_PROGRAM, role: AccountRole.READONLY },
-      { address: TOKEN_PROGRAM, role: AccountRole.READONLY },
-      { address: MEMO_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-      {
-        address: await pda([textEncoder.encode("__event_authority")]),
-        role: AccountRole.READONLY,
-      },
-      { address: METEORA_DLMM_PROGRAM, role: AccountRole.READONLY },
-      ...curve.arrays.map((address) => ({ address, role: AccountRole.WRITABLE })),
-    ],
-    data,
+  const instructionAccounts = {
+    pool: request.pool,
+    bitmapExtension: bitmap.data ? bitmap.address : null,
+    reserveX: pool.reserveX,
+    reserveY: pool.reserveY,
+    userTokenIn: tokenAccounts.input,
+    userTokenOut: tokenAccounts.output,
+    tokenMintX: pool.mintX,
+    tokenMintY: pool.mintY,
+    oracle: pool.oracle,
+    sender: request.owner,
+    tokenProgramX: TOKEN_PROGRAM,
+    tokenProgramY: TOKEN_PROGRAM,
+    eventAuthority: await pda([textEncoder.encode("__event_authority")]),
+    binArrays: curve.arrays,
   };
+  const instruction =
+    quote.kind === "exactIn"
+      ? getMeteoraDlmmSwap2Instruction(instructionAccounts, {
+          amountIn: quote.amountIn,
+          minimumAmountOut: quote.minimumAmountOut,
+        })
+      : getMeteoraDlmmSwapExactOut2Instruction(instructionAccounts, {
+          maximumAmountIn: quote.maximumAmountIn,
+          amountOut: quote.amountOut,
+        });
   return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
 

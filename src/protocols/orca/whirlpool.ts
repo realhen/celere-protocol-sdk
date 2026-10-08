@@ -1,5 +1,5 @@
-import { MEMO_PROGRAM_ADDRESS as MEMO_PROGRAM } from "@solana-program/memo";
-import { AccountRole, type Address, type Instruction } from "@solana/kit";
+import type { Address } from "@solana/kit";
+import { getOrcaSwapV2Instruction } from "./instructions/swap-v2.js";
 import type { TickArrayFacade } from "@orca-so/whirlpools-core";
 import {
   WHIRLPOOL_PROGRAM,
@@ -8,7 +8,6 @@ import {
   poolAddress,
   tickArrayAddress,
   oracleAddress,
-  swapData,
   type Pool,
 } from "./layout.js";
 import { readMint, readTokenAccount } from "../../accounts/tokens.js";
@@ -292,37 +291,33 @@ async function build(
   const paddedArrays = [...arrays];
   while (paddedArrays.length < 3) paddedArrays.push(paddedArrays[0]!);
   const supplementalArrays = paddedArrays.slice(3);
-  const instruction: Instruction = {
-    programAddress: WHIRLPOOL_PROGRAM,
-    accounts: [
-      { address: tokenA.tokenProgram, role: AccountRole.READONLY },
-      { address: tokenB.tokenProgram, role: AccountRole.READONLY },
-      { address: MEMO_PROGRAM, role: AccountRole.READONLY },
-      { address: request.owner, role: AccountRole.READONLY_SIGNER },
-      { address: request.pool, role: AccountRole.WRITABLE },
-      { address: pool.tokenMintA, role: AccountRole.READONLY },
-      { address: pool.tokenMintB, role: AccountRole.READONLY },
-      { address: aToB ? accounts.input : accounts.output, role: AccountRole.WRITABLE },
-      { address: pool.tokenVaultA, role: AccountRole.WRITABLE },
-      { address: aToB ? accounts.output : accounts.input, role: AccountRole.WRITABLE },
-      { address: pool.tokenVaultB, role: AccountRole.WRITABLE },
-      ...paddedArrays
-        .slice(0, 3)
-        .map((array) => ({ address: array.address, role: AccountRole.WRITABLE })),
-      { address: oracle, role: AccountRole.WRITABLE },
-      ...supplementalArrays.map((array) => ({
-        address: array.address,
-        role: AccountRole.WRITABLE,
-      })),
-    ],
-    data: swapData(
-      quote.kind === "exactIn" ? quote.amountIn : quote.amountOut,
-      quote.kind === "exactIn" ? quote.minimumAmountOut : quote.maximumAmountIn,
-      quote.kind === "exactIn",
+  const instruction = getOrcaSwapV2Instruction(
+    {
+      tokenProgramA: tokenA.tokenProgram,
+      tokenProgramB: tokenB.tokenProgram,
+      tokenAuthority: request.owner,
+      whirlpool: request.pool,
+      tokenMintA: pool.tokenMintA,
+      tokenMintB: pool.tokenMintB,
+      tokenOwnerAccountA: aToB ? accounts.input : accounts.output,
+      tokenVaultA: pool.tokenVaultA,
+      tokenOwnerAccountB: aToB ? accounts.output : accounts.input,
+      tokenVaultB: pool.tokenVaultB,
+      tickArray0: paddedArrays[0]!.address,
+      tickArray1: paddedArrays[1]!.address,
+      tickArray2: paddedArrays[2]!.address,
+      oracle,
+      supplementalTickArrays: supplementalArrays.map((array) => array.address),
+    },
+    {
+      amount: quote.kind === "exactIn" ? quote.amountIn : quote.amountOut,
+      otherAmountThreshold:
+        quote.kind === "exactIn" ? quote.minimumAmountOut : quote.maximumAmountIn,
+      sqrtPriceLimit: 0n,
+      amountSpecifiedIsInput: quote.kind === "exactIn",
       aToB,
-      supplementalArrays.length,
-    ),
-  };
+    },
+  );
   return {
     instructions: [instruction],
     quote,

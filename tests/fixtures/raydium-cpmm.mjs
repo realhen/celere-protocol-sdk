@@ -1,3 +1,4 @@
+import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { createHash } from "node:crypto";
 import { TextEncoder } from "node:util";
 import {
@@ -8,7 +9,7 @@ import {
 } from "@solana/kit";
 
 export const CPMM_PROGRAM = address("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
-export const TOKEN_PROGRAM = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+export const TOKEN_PROGRAM = TOKEN_PROGRAM_ADDRESS;
 const decodeAddress = getAddressDecoder();
 const encodeAddress = getAddressEncoder();
 

@@ -1,0 +1,29 @@
+MIT License
+
+Upstream: @meteora-ag/dynamic-amm-sdk 1.4.1, author meteora-ag
+Source: https://github.com/MeteoraAg/damm-v1-sdk/tree/02c66a3c13ebabdf71eb29d87996aaa7a06a7c29
+Upstream: @meteora-ag/vault-sdk 2.3.1
+Source: https://github.com/MeteoraAg/vault-sdk/tree/c774c30f64b17fe1d2c3c9fe733a3cbc252803f9
+
+These packages declare the license below in their package metadata. The
+reviewed distributions do not include standalone license files. This record
+reproduces standard license terms; it is not a copy of an upstream LICENSE.
+Copyright in adapted portions remains with the respective upstream authors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

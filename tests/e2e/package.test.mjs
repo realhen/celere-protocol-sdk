@@ -4,6 +4,10 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { generateKeyPairSigner } from "@solana/kit";
+import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
+import { raydiumCpmmFixture } from "../fixtures/raydium-cpmm.mjs";
 
 test("packed public package installs offline and exposes usable strict TypeScript entrypoints", async () => {
   const directory = await mkdtemp(join(tmpdir(), "celere-package-"));
@@ -70,36 +74,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
     );
     await writeFile(
       join(directory, "consumer.ts"),
-      `
-      import { address, buildSwapInstructions, compileTransaction, getSwapRequirements, type SwapRequest, type BuildError } from "celere-protocol-sdk";
-      import { createProtocolSdk } from "celere-protocol-sdk/core";
-      import { raydiumCpmmAdapter } from "celere-protocol-sdk/protocols/raydium-cpmm";
-      import { pumpAdapter } from "celere-protocol-sdk/protocols/pump";
-      import { orcaWhirlpoolAdapter } from "celere-protocol-sdk/protocols/orca";
-      import { pumpAmmAdapter } from "celere-protocol-sdk/protocols/pump-amm";
-      import { raydiumLaunchlabAdapter } from "celere-protocol-sdk/protocols/raydium-launchlab";
-      import { meteoraDammV2Adapter } from "celere-protocol-sdk/protocols/meteora-damm-v2";
-      import { raydiumAmmV4Adapter } from "celere-protocol-sdk/protocols/raydium-amm-v4";
-      import { raydiumClmmAdapter } from "celere-protocol-sdk/protocols/raydium-clmm";
-      import { meteoraDlmmAdapter } from "celere-protocol-sdk/protocols/meteora-dlmm";
-      import { compileTransaction as compiler } from "celere-protocol-sdk/transactions";
-      declare const request: SwapRequest;
-      const subset = createProtocolSdk([raydiumCpmmAdapter, pumpAdapter, orcaWhirlpoolAdapter, pumpAmmAdapter, raydiumLaunchlabAdapter, meteoraDammV2Adapter, raydiumAmmV4Adapter, raydiumClmmAdapter, meteoraDlmmAdapter]);
-      const requirements = await getSwapRequirements(request);
-      const result = await buildSwapInstructions(request);
-      if (result.ok) {
-        const quote = result.value.quote;
-        if (quote.kind === "exactOut") { const limit: bigint = quote.maximumAmountIn; void limit; }
-        const tx = compileTransaction({ feePayer: address("11111111111111111111111111111111"), lifetime: { blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1n }, instructions: result.value.instructions });
-        if (tx.ok) { const bytes: Uint8Array = tx.value.wireBytes; void bytes; }
-      } else {
-        const error: BuildError = result.error;
-        if (error.code === "MISSING_ACCOUNTS") { const role: string | undefined = error.accounts[0]?.role; void role; }
-      }
-      // @ts-expect-error Atomic quantities must never accept floating-point numbers.
-      const wrong: SwapRequest["amount"] = { kind: "exactIn", amountIn: 0.5 };
-      void [subset, requirements, compiler, wrong];
-    `,
+      await readFile(new URL("../consumers/package.ts", import.meta.url), "utf8"),
     );
     execFileSync(
       process.execPath,
@@ -128,6 +103,84 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       { cwd: directory, encoding: "utf8" },
     );
     assert.equal(output.trim(), "21");
+    const cases = [];
+    const owner = (await generateKeyPairSigner()).address;
+    const lifetime = {
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 1n,
+    };
+    for (const reverse of [false, true]) {
+      const fixture = await raydiumCpmmFixture(owner, { reverse });
+      for (const amount of [
+        { kind: "exactIn", amountIn: 1_000_001n },
+        { kind: "exactOut", amountOut: 1_000_001n },
+      ]) {
+        const built = await buildSwapInstructions({ ...fixture.request, amount });
+        assert.equal(built.ok, true);
+        assert.equal(built.value.instructions.length, 1);
+        const compiled = compileTransaction({
+          instructions: built.value.instructions,
+          feePayer: owner,
+          lifetime,
+        });
+        assert.equal(compiled.ok, true);
+        const { quote } = built.value;
+        cases.push({
+          kind: amount.kind,
+          accounts: {
+            owner,
+            authority: fixture.authority,
+            ammConfig: fixture.config,
+            pool: fixture.pool,
+            inputTokenAccount: fixture.request.tokenAccounts.input,
+            outputTokenAccount: fixture.request.tokenAccounts.output,
+            inputVault: reverse ? fixture.vault1 : fixture.vault0,
+            outputVault: reverse ? fixture.vault0 : fixture.vault1,
+            inputTokenProgram: TOKEN_PROGRAM_ADDRESS,
+            outputTokenProgram: TOKEN_PROGRAM_ADDRESS,
+            inputMint: fixture.request.inputMint,
+            outputMint: fixture.request.outputMint,
+            observationState: fixture.observation,
+          },
+          args:
+            quote.kind === "exactIn"
+              ? { amountIn: quote.amountIn, minimumAmountOut: quote.minimumAmountOut }
+              : { maximumAmountIn: quote.maximumAmountIn, amountOut: quote.amountOut },
+          lifetime,
+          expectedInstruction: built.value.instructions[0],
+          expectedWireBytes: compiled.value.wireBytes,
+        });
+      }
+    }
+    await writeFile(
+      join(directory, "native-instructions.json"),
+      JSON.stringify(
+        {
+          entrypoints: Object.keys(sourceManifest.exports)
+            .filter((path) => path.startsWith("./instructions/"))
+            .map((path) => path.slice(2)),
+          cases,
+        },
+        (_, value) =>
+          typeof value === "bigint"
+            ? { bigint: String(value) }
+            : value instanceof Uint8Array
+              ? { bytes: Array.from(value) }
+              : value,
+      ),
+    );
+    await writeFile(
+      join(directory, "native-instructions.mjs"),
+      await readFile(new URL("../consumers/native-instructions.mjs", import.meta.url)),
+    );
+    const nativeOutput = execFileSync(process.execPath, ["native-instructions.mjs"], {
+      cwd: directory,
+      encoding: "utf8",
+    });
+    const nativeResult = JSON.parse(nativeOutput);
+    assert.equal(nativeResult.entrypoints, 12);
+    assert.equal(nativeResult.cases, 4);
+    assert.ok(nativeResult.builderCount >= 23);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

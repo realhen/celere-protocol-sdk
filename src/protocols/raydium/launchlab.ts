@@ -1,8 +1,5 @@
 /** Native LaunchLab interface facts: raydium-io/raydium-idl e7e0c96; independent implementation. */
-import { SYSTEM_PROGRAM_ADDRESS as SYSTEM_PROGRAM } from "@solana-program/system";
 import {
-  AccountRole,
-  address,
   getAddressDecoder,
   getAddressEncoder,
   getProgramDerivedAddress,
@@ -27,11 +24,13 @@ import type {
   SnapshotAccount,
   SwapFee,
 } from "../../core/types.js";
-
-/** Mainnet LaunchLab bonding-curve program. */
-export const RAYDIUM_LAUNCHLAB_PROGRAM = address(
-  "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj",
-);
+import {
+  getRaydiumLaunchlabBuyExactInInstruction,
+  getRaydiumLaunchlabSellExactInInstruction,
+  getRaydiumLaunchlabSellExactOutInstruction,
+} from "./instructions/launchlab/index.js";
+import { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants.js";
+export { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants.js";
 const encoder = getAddressEncoder();
 const decoder = getAddressDecoder();
 const textEncoder = new TextEncoder();
@@ -371,50 +370,39 @@ async function build(
     encoder.encode(pool.creator),
     encoder.encode(pool.quoteMint),
   ]);
-  const data = new Uint8Array(32);
-  data.set(
-    request.amount.kind === "exactIn"
-      ? buy
-        ? [250, 234, 13, 123, 213, 156, 19, 236]
-        : [149, 39, 222, 155, 211, 124, 152, 26]
-      : [95, 200, 71, 34, 8, 9, 11, 166],
-  );
-  const view = new DataView(data.buffer);
-  view.setBigUint64(
-    8,
-    swapQuote.kind === "exactIn" ? swapQuote.amountIn : swapQuote.amountOut,
-    true,
-  );
-  view.setBigUint64(
-    16,
-    swapQuote.kind === "exactIn" ? swapQuote.minimumAmountOut : swapQuote.maximumAmountIn,
-    true,
-  );
-  const metas: [Address, AccountRole][] = [
-    [request.owner, AccountRole.WRITABLE_SIGNER],
-    [authority, AccountRole.READONLY],
-    [pool.config, AccountRole.READONLY],
-    [pool.platform, AccountRole.READONLY],
-    [request.pool, AccountRole.WRITABLE],
-    [buy ? accounts.output : accounts.input, AccountRole.WRITABLE],
-    [buy ? accounts.input : accounts.output, AccountRole.WRITABLE],
-    [pool.baseVault, AccountRole.WRITABLE],
-    [pool.quoteVault, AccountRole.WRITABLE],
-    [pool.baseMint, AccountRole.READONLY],
-    [pool.quoteMint, AccountRole.READONLY],
-    [base.tokenProgram, AccountRole.READONLY],
-    [quote.tokenProgram, AccountRole.READONLY],
-    [eventAuthority, AccountRole.READONLY],
-    [RAYDIUM_LAUNCHLAB_PROGRAM, AccountRole.READONLY],
-    [SYSTEM_PROGRAM, AccountRole.READONLY],
-    [platformFeeVault, AccountRole.WRITABLE],
-    [creatorFeeVault, AccountRole.WRITABLE],
-  ];
-  const instruction: Instruction = {
-    programAddress: RAYDIUM_LAUNCHLAB_PROGRAM,
-    data,
-    accounts: metas.map(([address, role]) => ({ address, role })),
+  const instructionAccounts = {
+    owner: request.owner,
+    authority,
+    config: pool.config,
+    platform: pool.platform,
+    pool: request.pool,
+    userBase: buy ? accounts.output : accounts.input,
+    userQuote: buy ? accounts.input : accounts.output,
+    baseVault: pool.baseVault,
+    quoteVault: pool.quoteVault,
+    baseMint: pool.baseMint,
+    quoteMint: pool.quoteMint,
+    baseTokenProgram: base.tokenProgram,
+    quoteTokenProgram: quote.tokenProgram,
+    eventAuthority,
+    platformFeeVault,
+    creatorFeeVault,
   };
+  let instruction: Instruction;
+  if (swapQuote.kind === "exactOut") {
+    instruction = getRaydiumLaunchlabSellExactOutInstruction(instructionAccounts, {
+      amountOut: swapQuote.amountOut,
+      maximumAmountIn: swapQuote.maximumAmountIn,
+    });
+  } else {
+    const instructionArgs = {
+      amountIn: swapQuote.amountIn,
+      minimumAmountOut: swapQuote.minimumAmountOut,
+    };
+    instruction = buy
+      ? getRaydiumLaunchlabBuyExactInInstruction(instructionAccounts, instructionArgs)
+      : getRaydiumLaunchlabSellExactInInstruction(instructionAccounts, instructionArgs);
+  }
   return {
     instructions: [instruction],
     quote: swapQuote,

@@ -1,3 +1,10 @@
+import {
+  TOKEN_PROGRAM_ADDRESS,
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+} from "@solana-program/token";
+import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
+import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { createHash } from "node:crypto";
 import { TextEncoder } from "node:util";
 import {
@@ -10,11 +17,11 @@ import {
 export const PUMP_AMM = address("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
 export const PUMP = address("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 export const FEE_PROGRAM = address("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
-export const TOKEN = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-export const TOKEN_2022 = address("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-export const SOL = address("So11111111111111111111111111111111111111112");
-export const SYSTEM = address("11111111111111111111111111111111");
-export const ATA_PROGRAM = address("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+export const TOKEN = TOKEN_PROGRAM_ADDRESS;
+export const TOKEN_2022 = TOKEN_2022_PROGRAM_ADDRESS;
+export const SOL = WRAPPED_SOL_MINT;
+export const SYSTEM = SYSTEM_PROGRAM_ADDRESS;
+export const ATA_PROGRAM = ASSOCIATED_TOKEN_PROGRAM_ADDRESS;
 const bytes = getAddressEncoder();
 const decoder = getAddressDecoder();
 const utf8 = new TextEncoder();
