@@ -1,4 +1,5 @@
-import { AccountRole, address, type Address, type Instruction } from "@solana/kit";
+import { MEMO_PROGRAM_ADDRESS as MEMO_PROGRAM } from "@solana-program/memo";
+import { AccountRole, type Address, type Instruction } from "@solana/kit";
 import type { TickArrayFacade } from "@orca-so/whirlpools-core";
 import {
   WHIRLPOOL_PROGRAM,
@@ -23,7 +24,6 @@ import type {
 } from "../../core/types.js";
 import { orcaCore } from "./core.js";
 
-const MEMO_PROGRAM = address("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 const TICK_ARRAY_SIZE = 88;
 const MIN_TICK = -443636;
 const MAX_TICK = 443636;

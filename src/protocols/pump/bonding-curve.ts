@@ -1,6 +1,6 @@
+import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS as ASSOCIATED_TOKEN_PROGRAM } from "@solana-program/token";
 import {
   AccountRole,
-  address,
   getAddressEncoder,
   getProgramDerivedAddress,
   type Address,
@@ -27,7 +27,6 @@ import {
   readRecipients,
 } from "./state.js";
 
-const ASSOCIATED_TOKEN_PROGRAM = address("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 const addressEncoder = getAddressEncoder();
 const utf8 = new TextEncoder();
 

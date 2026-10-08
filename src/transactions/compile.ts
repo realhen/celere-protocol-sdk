@@ -1,6 +1,10 @@
+import {
+  COMPUTE_BUDGET_PROGRAM_ADDRESS as COMPUTE_PROGRAM,
+  getSetComputeUnitLimitInstruction,
+  getSetComputeUnitPriceInstruction,
+} from "@solana-program/compute-budget";
 import { isValidAddress as isAddress } from "../core/addresses.js";
 import {
-  address,
   appendTransactionMessageInstructions,
   blockhash,
   compileTransaction as compileKitTransaction,
@@ -46,7 +50,6 @@ export interface CompiledTransaction {
   readonly byteLength: number;
 }
 
-const COMPUTE_PROGRAM = address("ComputeBudget111111111111111111111111111111");
 const V0_PACKET_LIMIT = 1232;
 
 function computeInstructions(
@@ -58,10 +61,9 @@ function computeInstructions(
       message: "Compute units must be an integer from 1 through 1400000",
       field: "computeBudget.units",
     });
-  const units = new Uint8Array(5);
-  units[0] = 2;
-  new DataView(units.buffer).setUint32(1, budget.units, true);
-  const instructions: Instruction[] = [{ programAddress: COMPUTE_PROGRAM, data: units }];
+  const instructions: Instruction[] = [
+    getSetComputeUnitLimitInstruction({ units: budget.units }),
+  ];
   if (budget.microLamports !== undefined) {
     if (
       typeof budget.microLamports !== "bigint" ||
@@ -73,10 +75,9 @@ function computeInstructions(
         message: "Compute unit price must be a u64 bigint",
         field: "computeBudget.microLamports",
       });
-    const price = new Uint8Array(9);
-    price[0] = 3;
-    new DataView(price.buffer).setBigUint64(1, budget.microLamports, true);
-    instructions.push({ programAddress: COMPUTE_PROGRAM, data: price });
+    instructions.push(
+      getSetComputeUnitPriceInstruction({ microLamports: budget.microLamports }),
+    );
   }
   return instructions;
 }

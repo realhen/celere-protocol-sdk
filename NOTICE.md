@@ -6,9 +6,17 @@ Celere-authored code is licensed under MIT. Components adapted or redistributed 
 
 The native account layout, instruction layout, and integer fee/swap arithmetic in `src/protocols/raydium/cpmm.ts` were adapted to a stateless TypeScript interface from [raydium-io/raydium-cp-swap](https://github.com/raydium-io/raydium-cp-swap/tree/b3187ae53a1b95a201f855a59024a12ca8f5b51a), revision `b3187ae53a1b95a201f855a59024a12ca8f5b51a`. This component remains subject to Apache-2.0; see `licenses/RAYDIUM-LICENSE`. Changes include caller-owned snapshots, structured errors, protocol-neutral requests, and portable instruction output.
 
+## Raydium LaunchLab
+
+The LaunchLab adapter is independently authored from the public native program interface documented in [raydium-io/raydium-idl](https://github.com/raydium-io/raydium-idl) and qualified through local execution of the deployed program. No LaunchLab SDK implementation or full IDL is redistributed, and the GPL-licensed Raydium SDK is not a dependency.
+
+## Meteora DAMM v2
+
+The native layout and integer formulas in `src/protocols/meteora/damm-v2.ts` are adapted from [MeteoraAg/damm-v2-sdk](https://github.com/MeteoraAg/damm-v2-sdk/tree/79ebbfe59a225e641a2f37cd03404f26de1b0c8e), revision `79ebbfe59a225e641a2f37cd03404f26de1b0c8e`, under MIT. See `licenses/METEORA-LICENSE`. Changes include bigint arithmetic, stateless raw-account decoding, portable instructions, structured errors, and explicit rejection of unqualified fee models. The SDK is not a runtime dependency; no code from the separately licensed on-chain program is redistributed.
+
 ## Pump
 
-Pump account/instruction layouts and fee arithmetic were implemented using the official `@pump-fun/pump-sdk` version `4.0.0`, whose package metadata declares MIT, and [Pump's public protocol documentation](https://github.com/pump-fun/pump-public-docs). Copyright belongs to the original Pump authors for any adapted portions. Pump's package is not a runtime dependency. Celere adds offline validation, deterministic account selection, structured errors, and native amount-mode handling.
+Pump account/instruction layouts and fee arithmetic were implemented using the official `@pump-fun/pump-sdk` version `4.0.0`, whose package metadata declares MIT, and [Pump's public protocol documentation](https://github.com/pump-fun/pump-public-docs). Copyright belongs to the original Pump authors for any adapted portions. PumpSwap uses the native v2 layouts and fee arithmetic documented by the MIT `@pump-fun/pump-swap-sdk` version `2.1.0`. Neither Pump package is a runtime dependency. Celere adds offline validation, deterministic account selection, structured errors, and native amount-mode handling.
 
 ## Orca
 
@@ -16,6 +24,6 @@ The package embeds the official `@orca-so/whirlpools-core` version `1.0.3` WebAs
 
 ## Solana
 
-Solana Kit and its transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives without exposing RPC, wallet, signing, or sending operations in its API.
+Solana Kit, the official `@solana-program/system`, `token`, `token-2022`, `memo`, and `compute-budget` clients, and their transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives without exposing RPC, wallet, signing, or sending operations in its API.
 
 No extracted Axiom JavaScript is included in this repository or package.

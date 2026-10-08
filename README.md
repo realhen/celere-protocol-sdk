@@ -2,7 +2,7 @@
 
 Strictly offline, typed Solana swap instruction and unsigned transaction builders.
 
-**Status: initial alpha.** Pump bonding curves, Raydium CPMM, and static-fee Orca Whirlpools are implemented and exercised against real programs in local Surfpool. The remaining Axiom registry entries are a coverage target, not supported adapters. This package has not been published to npm.
+**Status: alpha.** Six adapters are implemented: Pump bonding curves, PumpSwap, Raydium CPMM, Raydium LaunchLab, Meteora DAMM v2, and static-fee Orca Whirlpools. Qualified variants are exercised against real programs in local Surfpool. The remaining Axiom registry entries are a coverage target, not supported adapters. This package has not been published to npm.
 
 Callers supply account observations and chain context. Celere discovers dependencies, validates protocol state, calculates native swap amounts, and builds instructions. Callers own market selection, data acquisition, wallets, signing, and sending. Runtime code contains no RPC client, subscriptions, retries, sender selection, or key storage.
 
@@ -63,7 +63,7 @@ if (!requirements.ok) {
 }
 ```
 
-`owner` authorizes token/native SOL spending. `payer` pays for common token-account setup. `feePayer` belongs to transaction compilation and may differ from both. Protocol-created accounts can impose their own payer rules; Pump charges its owner for native account creation.
+`owner` authorizes token/native SOL spending. `payer` pays for common token-account setup. `feePayer` belongs to transaction compilation and may differ from both. Protocol-created accounts can impose their own payer rules; Pump, PumpSwap, and LaunchLab can charge the owner for program account creation.
 
 To request a native exact-output swap, use:
 
@@ -105,9 +105,9 @@ Public inputs/results use addresses, bigint amounts, byte arrays, and plain data
 - All quantities are atomic integer units, never floating-point token amounts.
 - Quotes describe expected account debit/credit; transaction fees and rent are excluded. Native exact-input budgets can leave integer-rounding dust unspent.
 - Slippage uses integral basis points from 0 through 9999. Exact-input minimum output rounds down; exact-output maximum input rounds up.
-- `fillPolicy` defaults to `requireFull`. Orca exact-input construction requires explicit `allowPartial`, because its native instruction can partially consume input. Native Orca exact output uses a zero price limit and rejects incomplete output on chain.
+- `fillPolicy` defaults to `requireFull`. Orca exact-input swaps and LaunchLab exact-input buys require explicit `allowPartial`, because their native instructions can partially consume input. Native Orca exact output uses a zero price limit and rejects incomplete output on chain. LaunchLab exact-output buys are rejected because the native instruction can succeed with less output at graduation.
 - Token accounts default to the owner's ATAs. An observed-absent output ATA is created idempotently. Input accounts and custom token accounts must already exist. The SDK never closes an existing account or generates temporary keys.
-- For Raydium/Orca, WSOL uses an existing wrapped token account. This alpha does not automatically wrap or unwrap SOL. For Pump's native-only curve instructions, the WSOL mint identifies native wallet lamports; `build.assets` makes this distinction explicit.
+- For PumpSwap, Raydium, Meteora, and Orca, WSOL uses an existing wrapped token account. This alpha does not automatically wrap or unwrap SOL. For Pump's native-only curve instructions, the WSOL mint identifies native wallet lamports; `build.assets` makes this distinction explicit.
 - Token transfer fees, hooks, and other unqualified extensions are rejected. Basic Token-2022 metadata extensions are accepted; see the execution coverage below.
 - Building does not prove wallet affordability, transaction landing, or execution success. Consumers may compose funding instructions before the returned swap plan.
 
@@ -131,15 +131,18 @@ The small `address()` and `basisPoints()` validation constructors throw for inva
 
 ## Current protocol coverage
 
-| Adapter            | Exact input                         | Native exact output | Initial qualification                                                                                       |
-| ------------------ | ----------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Pump bonding curve | Buy and sell                        | Buy; sell rejected  | Standard SOL curves, classic token and Token-2022 metadata; fee-tier and rounding checks                    |
-| Raydium CPMM       | Both directions                     | Both directions     | Classic-token pools, creator fees disabled/input/output, accrued-fee deductions, native slippage rejections |
-| Orca Whirlpool     | Both directions with `allowPartial` | Both directions     | Static fees and fixed tick arrays; adaptive fees/dynamic arrays rejected                                    |
+| Adapter            | Exact input                         | Native exact output | Initial qualification                                                                                                   |
+| ------------------ | ----------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Pump bonding curve | Buy and sell                        | Buy; sell rejected  | Standard SOL curves, classic token and Token-2022 metadata; fee-tier and rounding checks                                |
+| PumpSwap           | Buy and sell                        | Buy; sell rejected  | Standard WSOL quotes, canonical tier fees and permissionless flat fees; signed virtual reserves and accrued fee buckets |
+| Raydium CPMM       | Both directions                     | Both directions     | Classic-token pools, creator fees disabled/input/output, accrued-fee deductions, native slippage rejections             |
+| Raydium LaunchLab  | Buy with `allowPartial`; sell       | Sell; buy rejected  | Constant-product curves, trading/platform/creator fees, graduation boundary behavior                                    |
+| Meteora DAMM v2    | Both directions                     | Both directions     | Noncompounding pools, both fee collection directions, static/linear time fees, classic token and basic Token-2022       |
+| Orca Whirlpool     | Both directions with `allowPartial` | Both directions     | Static fees and fixed tick arrays; adaptive fees/dynamic arrays rejected                                                |
 
-Pump mayhem, cashback, configured creator fees, holder rewards, non-SOL quotes, completed-curve routing, and unsupported account versions are rejected explicitly. The Orca math is pinned to a historical Apache-2.0 release; newer features require a separately qualified implementation.
+Pump mayhem, cashback, configured creator fees, holder rewards, non-SOL quotes, completed-curve routing, and unsupported account versions are rejected explicitly. PumpSwap also rejects mayhem, cashback, configured creator fees, holder rewards, and non-WSOL quotes. Its listed buyback recipient ATA must already exist; exact-input buy limits must remain positive after slippage rounding. LaunchLab rejects nonconstant curves and migrated pools. Meteora rejects compounding, dynamic fees, rate limiters, market-cap fee schedulers, and nonstatic exponential fees. The Orca math is pinned to a historical Apache-2.0 release; newer features require a separately qualified implementation.
 
-Planned adapters: Pump AMM; Raydium V4/CLMM/LaunchLab; Meteora AMM/AMM V2/DLMM; Boop; Moonshot; Virtual Curve; Vertigo; Heaven; Sugar; Stable Swap; LiquidAF/LiquidAF AMM; Rise Rich; MetaDAO. These correspond to the 21 labels captured in Axiom's registry, not a promise that every label has unrestricted current trading support. `PROTOCOL_COVERAGE` exposes this inventory programmatically.
+Planned adapters: Raydium V4/CLMM; Meteora AMM/DLMM; Boop; Moonshot; Virtual Curve; Vertigo; Heaven; Sugar; Stable Swap; LiquidAF/LiquidAF AMM; Rise Rich; MetaDAO. These correspond to the 21 labels captured in Axiom's registry, not a promise that every label has unrestricted current trading support. `PROTOCOL_COVERAGE` exposes this inventory programmatically.
 
 ## Smaller browser bundles
 
@@ -152,7 +155,7 @@ import { raydiumCpmmAdapter } from "celere-protocol-sdk/protocols/raydium-cpmm";
 const sdk = createProtocolSdk([raydiumCpmmAdapter]);
 ```
 
-Additional subpaths: `/protocols/pump`, `/protocols/orca`, and `/transactions`. No code depends on the old `sol-trade-sdk` fork. Orca's official math WASM is embedded when this package is built; runtime initialization performs no fetch or file access. Third-party licenses remain in [NOTICE.md](NOTICE.md) and `licenses/`.
+Additional subpaths: `/protocols/pump`, `/protocols/pump-amm`, `/protocols/raydium-launchlab`, `/protocols/meteora-damm-v2`, `/protocols/orca`, and `/transactions`. Standard Solana addresses and common ATA/compute-budget primitives come from official `@solana-program/*` packages pinned to compatible Kit releases. These imports perform no RPC or wallet initialization. No code depends on the old `sol-trade-sdk` fork. Orca's official math WASM is embedded when this package is built; runtime initialization performs no fetch or file access. Third-party licenses remain in [NOTICE.md](NOTICE.md) and `licenses/`.
 
 ## Development and verification
 
@@ -171,6 +174,6 @@ surfpool start --port 18999 --ws-port 19000 --no-studio --no-tui --no-deploy \
 CELERE_SURFPOOL_URL=http://127.0.0.1:18999 npm run test:surfpool
 ```
 
-Native tests create ephemeral test keys, fetch the deployed programs into Surfpool, and submit transactions only to a loopback simulator. Pump creates fresh markets through the real program; CPMM uses isolated synthetic state; Orca remaps captured public liquidity to isolated addresses. Tests verify balance deltas and encoded constraints through the real programs. They do not demonstrate mainnet delivery or qualify every pool/token variant. Tests mutate simulator state, so do not point them at a simulator whose state must be preserved.
+Native tests create ephemeral test keys, fetch the deployed programs into Surfpool, and submit transactions only to a loopback simulator. Pump creates fresh markets through the real program; PumpSwap qualifies native migrated and permissionless pools; CPMM, LaunchLab, and Meteora use isolated synthetic state; Orca remaps captured public liquidity to isolated addresses. Tests verify balance deltas and encoded constraints through the real programs. They do not demonstrate mainnet delivery or qualify every pool/token variant. Tests mutate simulator state, so do not point them at a simulator whose state must be preserved.
 
 Repository code stays formatted and readable. Protocol logic belongs in adapters; caller workflows do not belong in this package. CI checks formatting, lint, strict types, builds, and public consumer workflows.

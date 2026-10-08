@@ -1,25 +1,24 @@
+import { SYSTEM_PROGRAM_ADDRESS as SYSTEM_PROGRAM } from "@solana-program/system";
 import {
-  address,
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  AccountRole,
-} from "@solana/kit";
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS as ASSOCIATED_TOKEN_PROGRAM,
+  TOKEN_PROGRAM_ADDRESS as TOKEN_PROGRAM,
+  findAssociatedTokenPda,
+  getCreateAssociatedTokenIdempotentInstructionDataEncoder,
+} from "@solana-program/token";
+import { TOKEN_2022_PROGRAM_ADDRESS as TOKEN_2022_PROGRAM } from "@solana-program/token-2022";
+import { address, getAddressDecoder, AccountRole } from "@solana/kit";
 import type { Address, Instruction } from "@solana/kit";
 import { fail } from "../core/errors.js";
 import { requireAccount } from "../core/snapshot.js";
 import type { AccountSnapshot, SnapshotAccount } from "../core/types.js";
 
-/** Classic SPL Token program. */
-export const TOKEN_PROGRAM = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-/** Token-2022 program; extensions are accepted only when explicitly supported. */
-export const TOKEN_2022_PROGRAM = address("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-/** Wrapped SOL mint. Native-only adapters report nativeSol asset semantics explicitly. */
+export { TOKEN_PROGRAM, TOKEN_2022_PROGRAM };
+/**
+ * Wrapped SOL mint. Native-only adapters report nativeSol asset semantics explicitly.
+ * @remarks The official Token client does not export the native mint address.
+ */
 export const WRAPPED_SOL_MINT = address("So11111111111111111111111111111111111111112");
-const ASSOCIATED_TOKEN_PROGRAM = address("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-const SYSTEM_PROGRAM = address("11111111111111111111111111111111");
 const addressDecoder = getAddressDecoder();
-const addressEncoder = getAddressEncoder();
 
 /** Mint fields needed by common instruction construction; no third-party SDK objects. */
 export interface MintInfo {
@@ -129,14 +128,7 @@ export async function associatedTokenAddress(
   mint: Address,
   tokenProgram: Address,
 ): Promise<Address> {
-  const [ata] = await getProgramDerivedAddress({
-    programAddress: ASSOCIATED_TOKEN_PROGRAM,
-    seeds: [
-      addressEncoder.encode(owner),
-      addressEncoder.encode(tokenProgram),
-      addressEncoder.encode(mint),
-    ],
-  });
+  const [ata] = await findAssociatedTokenPda({ owner, mint, tokenProgram });
   return ata;
 }
 
@@ -158,6 +150,6 @@ export function createAssociatedTokenInstruction(
       { address: SYSTEM_PROGRAM, role: AccountRole.READONLY },
       { address: tokenProgram, role: AccountRole.READONLY },
     ],
-    data: new Uint8Array([1]),
+    data: getCreateAssociatedTokenIdempotentInstructionDataEncoder().encode({}),
   };
 }
