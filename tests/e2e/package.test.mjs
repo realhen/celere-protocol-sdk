@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -35,9 +35,37 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         },
       }),
     );
+    const consumerManifest = JSON.parse(
+      await readFile(join(directory, "package.json"), "utf8"),
+    );
+    const sourceManifest = JSON.parse(await readFile("package.json", "utf8"));
+    const sourceLock = JSON.parse(await readFile("package-lock.json", "utf8"));
+    const productionPackages = Object.fromEntries(
+      Object.entries(sourceLock.packages).filter(
+        ([name, info]) => name !== "" && !info.dev,
+      ),
+    );
+    const consumerLock = {
+      name: consumerManifest.name,
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        "": { name: consumerManifest.name, dependencies: consumerManifest.dependencies },
+        ...productionPackages,
+        "node_modules/celere-protocol-sdk": {
+          version: sourceManifest.version,
+          resolved: consumerManifest.dependencies["celere-protocol-sdk"],
+          integrity: packed.integrity,
+          license: sourceManifest.license,
+          dependencies: sourceManifest.dependencies,
+          engines: sourceManifest.engines,
+        },
+      },
+    };
+    await writeFile(join(directory, "package-lock.json"), JSON.stringify(consumerLock));
     execFileSync(
       "npm",
-      ["install", "--offline", "--ignore-scripts", "--no-audit", "--no-fund"],
+      ["ci", "--offline", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"],
       { cwd: directory, stdio: "pipe" },
     );
     await writeFile(
