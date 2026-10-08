@@ -2,7 +2,7 @@
 
 Strictly offline, typed Solana swap instruction and unsigned transaction builders.
 
-**Status: alpha.** Six adapters are implemented: Pump bonding curves, PumpSwap, Raydium CPMM, Raydium LaunchLab, Meteora DAMM v2, and static-fee Orca Whirlpools. Qualified variants are exercised against real programs in local Surfpool. The remaining Axiom registry entries are a coverage target, not supported adapters. This package has not been published to npm.
+**Status: alpha.** Nine adapters are implemented: Pump bonding curves, PumpSwap, Raydium AMM v4, CPMM, CLMM, LaunchLab, Meteora DAMM v2, DLMM, and static-fee Orca Whirlpools. Qualified variants are exercised against real programs in local Surfpool. The remaining Axiom registry entries are a coverage target, not supported adapters. This package has not been published to npm.
 
 Callers supply account observations and chain context. Celere discovers dependencies, validates protocol state, calculates native swap amounts, and builds instructions. Callers own market selection, data acquisition, wallets, signing, and sending. Runtime code contains no RPC client, subscriptions, retries, sender selection, or key storage.
 
@@ -136,13 +136,18 @@ The small `address()` and `basisPoints()` validation constructors throw for inva
 | Pump bonding curve | Buy and sell                        | Buy; sell rejected  | Standard SOL curves, classic token and Token-2022 metadata; fee-tier and rounding checks                                |
 | PumpSwap           | Buy and sell                        | Buy; sell rejected  | Standard WSOL quotes, canonical tier fees and permissionless flat fees; signed virtual reserves and accrued fee buckets |
 | Raydium CPMM       | Both directions                     | Both directions     | Classic-token pools, creator fees disabled/input/output, accrued-fee deductions, native slippage rejections             |
+| Raydium AMM v4     | Both directions                     | Both directions     | Classic-token vault-backed pools, pending-PnL deductions, swap-only and opened waiting-trade status                     |
+| Raydium CLMM       | Both directions                     | Both directions     | Classic-token legacy pools, static input fees, tick crossings and both bitmap-extension directions                      |
+| Meteora DLMM       | Both directions                     | Both directions     | Classic-token permissionless pools, input fees, static/dynamic fees, bin crossings and bitmap extensions                |
 | Raydium LaunchLab  | Buy with `allowPartial`; sell       | Sell; buy rejected  | Constant-product curves, trading/platform/creator fees, graduation boundary behavior                                    |
 | Meteora DAMM v2    | Both directions                     | Both directions     | Noncompounding pools, both fee collection directions, static/linear time fees, classic token and basic Token-2022       |
 | Orca Whirlpool     | Both directions with `allowPartial` | Both directions     | Static fees and fixed tick arrays; adaptive fees/dynamic arrays rejected                                                |
 
-Pump mayhem, cashback, configured creator fees, holder rewards, non-SOL quotes, completed-curve routing, and unsupported account versions are rejected explicitly. PumpSwap also rejects mayhem, cashback, configured creator fees, holder rewards, and non-WSOL quotes. Its listed buyback recipient ATA must already exist; exact-input buy limits must remain positive after slippage rounding. LaunchLab rejects nonconstant curves and migrated pools. Meteora rejects compounding, dynamic fees, rate limiters, market-cap fee schedulers, and nonstatic exponential fees. The Orca math is pinned to a historical Apache-2.0 release; newer features require a separately qualified implementation.
+Pump mayhem, cashback, configured creator fees, holder rewards, non-SOL quotes, completed-curve routing, and unsupported account versions are rejected explicitly. PumpSwap also rejects mayhem, cashback, configured creator fees, holder rewards, and non-WSOL quotes. Its listed buyback recipient ATA must already exist; exact-input buy limits must remain positive after slippage rounding. LaunchLab rejects nonconstant curves and migrated pools. Meteora DAMM v2 rejects compounding, dynamic fees, rate limiters, market-cap fee schedulers, and nonstatic exponential fees. The Orca math is pinned to a historical Apache-2.0 release; newer features require a separately qualified implementation.
 
-Planned adapters: Raydium V4/CLMM; Meteora AMM/DLMM; Boop; Moonshot; Virtual Curve; Vertigo; Heaven; Sugar; Stable Swap; LiquidAF/LiquidAF AMM; Rise Rich; MetaDAO. These correspond to the 21 labels captured in Axiom's registry, not a promise that every label has unrestricted current trading support. `PROTOCOL_COVERAGE` exposes this inventory programmatically.
+Raydium AMM v4 rejects orderbook-active pool modes and Token-2022. CLMM rejects dynamic fees, fixed-token/output fees, permissioned pools, limit-order fields, and Token-2022; its bitmap-extension account must be supplied. DLMM supports permissionless type-0 pools with input fees and up to eight bin arrays per swap; it rejects other pool address schemes, output fees, limit-order features, and Token-2022. Discovery reports missing arrays in stages. Exceeding the supported DLMM array count returns an unsupported-feature error. CLMM and DLMM use native exact-output instructions and reject incomplete fills on chain.
+
+Planned adapters: Meteora AMM; Boop; Moonshot; Virtual Curve; Vertigo; Heaven; Sugar; Stable Swap; LiquidAF/LiquidAF AMM; Rise Rich; MetaDAO. These correspond to the 21 labels captured in Axiom's registry, not a promise that every label has unrestricted current trading support. `PROTOCOL_COVERAGE` exposes this inventory programmatically.
 
 ## Smaller browser bundles
 
@@ -155,7 +160,7 @@ import { raydiumCpmmAdapter } from "celere-protocol-sdk/protocols/raydium-cpmm";
 const sdk = createProtocolSdk([raydiumCpmmAdapter]);
 ```
 
-Additional subpaths: `/protocols/pump`, `/protocols/pump-amm`, `/protocols/raydium-launchlab`, `/protocols/meteora-damm-v2`, `/protocols/orca`, and `/transactions`. Standard Solana addresses and common ATA/compute-budget primitives come from official `@solana-program/*` packages pinned to compatible Kit releases. These imports perform no RPC or wallet initialization. No code depends on the old `sol-trade-sdk` fork. Orca's official math WASM is embedded when this package is built; runtime initialization performs no fetch or file access. Third-party licenses remain in [NOTICE.md](NOTICE.md) and `licenses/`.
+Additional subpaths: `/protocols/pump`, `/protocols/pump-amm`, `/protocols/raydium-amm-v4`, `/protocols/raydium-clmm`, `/protocols/raydium-launchlab`, `/protocols/meteora-damm-v2`, `/protocols/meteora-dlmm`, `/protocols/orca`, and `/transactions`. Standard Solana addresses and common ATA/compute-budget primitives come from official `@solana-program/*` packages pinned to compatible Kit releases. These imports perform no RPC or wallet initialization. No code depends on the old `sol-trade-sdk` fork. Orca's official math WASM is embedded when this package is built; runtime initialization performs no fetch or file access. Third-party licenses remain in [NOTICE.md](NOTICE.md) and `licenses/`.
 
 ## Development and verification
 
@@ -164,16 +169,26 @@ npm run format
 npm run check
 ```
 
-The default suite exercises public consumer flows using captured local execution receipts, synthetic protocol state, and public pool data. It checks offline construction, staged account discovery, invalid inputs, native amount-mode encoding, worker structured cloning, browser bundling, transaction limits, and installing the actual packed package. Native-program tests are skipped unless a local Surfpool endpoint is supplied.
+The default suite exercises public consumer flows using captured local execution receipts, synthetic protocol state, and public pool data. It checks offline construction, staged account discovery, invalid inputs, native amount-mode encoding, worker structured cloning, browser bundling, transaction limits, and installing the actual packed package. The default `npm test` suite skips native-program tests unless a local Surfpool endpoint is supplied. Use the dedicated command below to run every test against real programs.
 
-Run a separate disposable simulator, then the native suite:
+With the [Surfpool CLI](https://docs.surfpool.run/) installed and on `PATH`, run:
 
 ```sh
-surfpool start --port 18999 --ws-port 19000 --no-studio --no-tui --no-deploy \
-  --rpc-url https://api.mainnet-beta.solana.com --block-production-mode transaction
+npm run test:surfpool
+```
+
+The runner starts an isolated simulator on available loopback ports, runs the full suite, and stops its own simulator afterward. Diagnostics remain in ignored `outputs/surfpool/` logs. Initial program hydration requires access to public mainnet RPC; SDK runtime operations remain offline. To run one native workflow:
+
+```sh
+npm run test:surfpool -- tests/e2e/raydium-clmm.surfpool.test.mjs
+```
+
+You can also supply an existing disposable simulator. The runner leaves its lifecycle to you:
+
+```sh
 CELERE_SURFPOOL_URL=http://127.0.0.1:18999 npm run test:surfpool
 ```
 
-Native tests create ephemeral test keys, fetch the deployed programs into Surfpool, and submit transactions only to a loopback simulator. Pump creates fresh markets through the real program; PumpSwap qualifies native migrated and permissionless pools; CPMM, LaunchLab, and Meteora use isolated synthetic state; Orca remaps captured public liquidity to isolated addresses. Tests verify balance deltas and encoded constraints through the real programs. They do not demonstrate mainnet delivery or qualify every pool/token variant. Tests mutate simulator state, so do not point them at a simulator whose state must be preserved.
+Native tests create ephemeral test keys, fetch the deployed programs into Surfpool, and submit transactions only to a loopback simulator. Pump creates fresh markets through the real program; PumpSwap qualifies native migrated and permissionless pools; Raydium AMM v4, CPMM, CLMM, LaunchLab, and Meteora use isolated synthetic state; Orca remaps captured public liquidity to isolated addresses. Tests verify balance deltas, fee rounding, and encoded constraints through the real programs. New AMM v4, CLMM, and DLMM workflows cover both directions and amount modes, crossed liquidity ranges, adverse slippage, and depleted liquidity; failed swaps must leave user balances unchanged. They do not demonstrate mainnet delivery or qualify every pool/token variant. Tests mutate simulator state, so do not point them at a simulator whose state must be preserved.
 
 Repository code stays formatted and readable. Protocol logic belongs in adapters; caller workflows do not belong in this package. CI checks formatting, lint, strict types, builds, and public consumer workflows.

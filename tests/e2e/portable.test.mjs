@@ -7,6 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { generateKeyPairSigner } from "@solana/kit";
+import { raydiumAmmV4Fixture } from "../fixtures/raydium-amm-v4.mjs";
+import { raydiumClmmFixture } from "../fixtures/raydium-clmm.mjs";
+import { meteoraDlmmFixture } from "../fixtures/meteora-dlmm.mjs";
 import { pumpAmmFixture } from "../fixtures/pump-amm.mjs";
 import { raydiumLaunchlabFixture } from "../fixtures/raydium-launchlab.mjs";
 import { meteoraDammV2Fixture } from "../fixtures/meteora-damm-v2.mjs";
@@ -74,6 +77,9 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
     );
     const fixtures = [
       ["pump", pump.observations[0].request],
+      ["raydium-amm-v4", (await raydiumAmmV4Fixture(signer.address)).request],
+      ["raydium-clmm", (await raydiumClmmFixture(signer.address)).request],
+      ["meteora-dlmm", (await meteoraDlmmFixture(signer.address)).request],
       ["pump-amm", (await pumpAmmFixture(signer.address)).request],
       ["launchlab", (await raydiumLaunchlabFixture(signer.address)).request],
       ["meteora-damm-v2", (await meteoraDammV2Fixture(signer.address)).request],

@@ -79,9 +79,12 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       import { pumpAmmAdapter } from "celere-protocol-sdk/protocols/pump-amm";
       import { raydiumLaunchlabAdapter } from "celere-protocol-sdk/protocols/raydium-launchlab";
       import { meteoraDammV2Adapter } from "celere-protocol-sdk/protocols/meteora-damm-v2";
+      import { raydiumAmmV4Adapter } from "celere-protocol-sdk/protocols/raydium-amm-v4";
+      import { raydiumClmmAdapter } from "celere-protocol-sdk/protocols/raydium-clmm";
+      import { meteoraDlmmAdapter } from "celere-protocol-sdk/protocols/meteora-dlmm";
       import { compileTransaction as compiler } from "celere-protocol-sdk/transactions";
       declare const request: SwapRequest;
-      const subset = createProtocolSdk([raydiumCpmmAdapter, pumpAdapter, orcaWhirlpoolAdapter, pumpAmmAdapter, raydiumLaunchlabAdapter, meteoraDammV2Adapter]);
+      const subset = createProtocolSdk([raydiumCpmmAdapter, pumpAdapter, orcaWhirlpoolAdapter, pumpAmmAdapter, raydiumLaunchlabAdapter, meteoraDammV2Adapter, raydiumAmmV4Adapter, raydiumClmmAdapter, meteoraDlmmAdapter]);
       const requirements = await getSwapRequirements(request);
       const result = await buildSwapInstructions(request);
       if (result.ok) {

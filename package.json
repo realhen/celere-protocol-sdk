@@ -1,6 +1,6 @@
 {
   "name": "celere-protocol-sdk",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Strictly offline Solana swap instruction and unsigned transaction builders",
   "type": "module",
   "license": "MIT",
@@ -56,6 +56,18 @@
     "./protocols/pump-amm": {
       "types": "./dist/protocols/pump/amm.d.ts",
       "import": "./dist/protocols/pump/amm.js"
+    },
+    "./protocols/raydium-amm-v4": {
+      "types": "./dist/protocols/raydium/amm-v4.d.ts",
+      "import": "./dist/protocols/raydium/amm-v4.js"
+    },
+    "./protocols/raydium-clmm": {
+      "types": "./dist/protocols/raydium/clmm.d.ts",
+      "import": "./dist/protocols/raydium/clmm.js"
+    },
+    "./protocols/meteora-dlmm": {
+      "types": "./dist/protocols/meteora/dlmm.d.ts",
+      "import": "./dist/protocols/meteora/dlmm.js"
     }
   },
   "scripts": {
@@ -80,6 +92,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@solana/sysvars": "5.5.1",
     "@types/node": "22.18.6",
     "esbuild": "0.28.2",
     "eslint": "10.12.0",
