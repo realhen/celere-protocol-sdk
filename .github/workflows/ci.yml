@@ -30,12 +30,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
-      - name: Install verified Surfpool 1.0.0
+      - name: Install verified Surfpool 1.6.0
         shell: bash
         run: |
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/surfpool.tar.gz" \
-            https://github.com/solana-foundation/surfpool/releases/download/v1.0.0/surfpool-linux-x64.tar.gz
-          echo "4812efc59f8f144a891df7fab9f52d88779fcf35ac8b6b5d6cdd5fb173bda7b1  $RUNNER_TEMP/surfpool.tar.gz" | sha256sum --check --strict
+            https://github.com/solana-foundation/surfpool/releases/download/v1.6.0/surfpool-linux-x64.tar.gz
+          echo "cb471b00aa3b7d603338eb74ebfec1d23959ecba005b5f1be42ba8d174107fc2  $RUNNER_TEMP/surfpool.tar.gz" | sha256sum --check --strict
           mkdir -p "$RUNNER_TEMP/surfpool-bin"
           tar -xzf "$RUNNER_TEMP/surfpool.tar.gz" -C "$RUNNER_TEMP/surfpool-bin"
           echo "$RUNNER_TEMP/surfpool-bin" >> "$GITHUB_PATH"
