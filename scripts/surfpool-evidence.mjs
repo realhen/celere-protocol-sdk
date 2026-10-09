@@ -234,7 +234,15 @@ export async function createSurfpoolEvidence(endpoint) {
             address,
             { encoding: "base64", commitment: "confirmed" },
           ]);
-          assert.ok(!hydrated.error, `Unable to hydrate transaction account ${address}`);
+          assert.ok(
+            !hydrated.error && hydrated.result && "value" in hydrated.result,
+            `Unable to hydrate transaction account ${address}`,
+          );
+          if (hydrated.result.value === null) {
+            // Preserve verified absence without re-fetching uncreated accounts or virtual sysvars.
+            const absent = await rpc("surfnet_offlineAccount", [address]);
+            assert.ok(!absent.error, `Unable to retain absent account ${address}`);
+          }
         }
       }
       const response = await rpc(request.method, request.params);
