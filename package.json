@@ -14,7 +14,8 @@
     "README.md",
     "LICENSE",
     "NOTICE.md",
-    "licenses"
+    "licenses",
+    "example"
   ],
   "sideEffects": false,
   "engines": {

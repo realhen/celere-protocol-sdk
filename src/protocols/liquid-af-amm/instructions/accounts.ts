@@ -1,6 +1,6 @@
 import type { Address } from "@solana/kit";
 
-/** Raw LiquidAF AMM addresses; every PDA and token relationship is caller-validated. */
+/** Accounts shared by LiquidAF AMM’s native swap instructions. */
 export interface LiquidAfAmmSwapAccounts {
   readonly user: Address;
   readonly pool: Address;

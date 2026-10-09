@@ -18,13 +18,43 @@ import {
 import { LIQUID_AF_AMM_PROGRAM } from "../constants.js";
 import type { LiquidAfAmmSwapAccounts } from "./accounts.js";
 
-/** Atomic token amounts for the native LiquidAF AMM `sell_exact_out` instruction. */
+/**
+ * Native arguments for {@link sell_exact_out}.
+ *
+ * Amounts use each asset’s smallest unit as bigint; read the mint’s decimals before
+ * converting display quantities. The builder does not quote, convert units, or choose a
+ * slippage tolerance.
+ *
+ * @remarks
+ * Amount fields must fit an unsigned 64-bit integer (0 through 2^64 - 1). Encoding
+ * successfully does not establish that the trade can execute.
+ */
 export interface LiquidAfAmmSellExactOutArgs {
+  /**
+   * Maximum acceptable base token input, in base-token atomic units. For example,
+   * `500_000_000n` means 500 tokens when the base mint has six decimals.
+   *
+   * Increase the required input from a quote for the requested output by your chosen
+   * slippage tolerance, rounding up in atomic units. A quote of `500_000_000n` with a 1%
+   * tolerance gives `505_000_000n`. Include applicable trading fees in that input quote;
+   * transaction fees and rent remain separate SOL costs.
+   *
+   * Zero is a zero spending limit, not an unlimited-input sentinel.
+   */
   readonly maximumAmountIn: bigint;
+  /**
+   * Requested quote asset output, in quote-asset atomic units. For example,
+   * `1_000_000_000n` means 1 wrapped SOL on a SOL-paired market; `10_000_000n` means 10
+   * USDC with six decimals.
+   *
+   * Quote the input required for this output, then set the maximum-input argument from
+   * that quote and your chosen tolerance. This value is not a price or a slippage
+   * percentage.
+   */
   readonly amountOut: bigint;
 }
 
-/** 24 bytes: discriminator [0,8), maximumAmountIn LE [8,16), amountOut LE [16,24). */
+/** Encodes the native `sell_exact_out` arguments and instruction discriminator. */
 const instructionDataEncoder = getStructEncoder([
   ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
   ["maximumAmountIn", getU64Encoder()],
@@ -32,10 +62,52 @@ const instructionDataEncoder = getStructEncoder([
 ]);
 
 /**
- * Builds the raw native AMM `sell_exact_out` instruction without fetching or signer objects.
- * @remarks The caller validates state, PDA relationships, token programs, fees and slippage.
- * Amounts use atomic token units. Omitted oracle accounts use the Anchor program sentinel.
- * @throws Synchronously when an amount cannot be encoded as an unsigned u64.
+ * Creates a LiquidAF AMM sell instruction for a requested output amount.
+ *
+ * Accounts and arguments are supplied by the caller. This function performs no fetching,
+ * address derivation, quoting, signing, or transaction submission.
+ *
+ * @param accounts - Accounts required by the native instruction.
+ * @param args - Atomic amounts and execution bounds chosen by the caller.
+ * @returns An unsigned instruction to include in a transaction.
+ * @throws Synchronously if an amount is outside the unsigned 64-bit range.
+ * On-chain account, balance, price, and slippage failures occur during execution, not
+ * during construction.
+ *
+ * @example
+ * Build an output-target trade with a caller-chosen 1% tolerance. Amounts below
+ * illustrate a hypothetical quote, not live market data.
+ *
+ * ```ts
+ * import {
+ *   sell_exact_out,
+ *   type LiquidAfAmmSwapAccounts,
+ *   type LiquidAfAmmSellExactOutArgs,
+ * } from "celere-protocol-sdk/instructions/liquid-af-amm";
+ *
+ * // Resolve these accounts from your application's account data.
+ * declare const accounts: LiquidAfAmmSwapAccounts;
+ *
+ * const amountOut = 1_000_000_000n; // 1 wrapped SOL.
+ * const quotedAmountIn = 500_000_000n; // Hypothetical quote: 500 base tokens with six decimals.
+ * const slippageBps = 100n; // 1%; chosen by the caller.
+ * const maximumAmountIn =
+ *   (quotedAmountIn * (10_000n + slippageBps) + 9_999n) / 10_000n;
+ *
+ * const args: LiquidAfAmmSellExactOutArgs = {
+ *   maximumAmountIn,
+ *   amountOut,
+ * };
+ *
+ * const instruction = sell_exact_out(accounts, args);
+ * ```
+ *
+ * @remarks
+ * Both assets use token accounts. Fund wrapped SOL before executing a SOL-paired swap.
+ * An omitted oracle account uses the Anchor program-ID sentinel.
+ *
+ * @see {@link LiquidAfAmmSwapAccounts}
+ * @see {@link LiquidAfAmmSellExactOutArgs}
  */
 export function sell_exact_out(
   accounts: LiquidAfAmmSwapAccounts,

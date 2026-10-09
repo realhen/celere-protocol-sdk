@@ -1,6 +1,6 @@
 import type { Address } from "@solana/kit";
 
-/** Native SOL curve account addresses; the caller validates every PDA and token relationship. */
+/** Accounts shared by LiquidAF curve’s native swap instructions. */
 export interface LiquidAfNativeSwapAccounts {
   readonly user: Address;
   readonly feeRecipient: Address;

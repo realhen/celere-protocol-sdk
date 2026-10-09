@@ -9,14 +9,16 @@ import {
 } from "@solana/kit";
 import { PUMP_AMM_PROGRAM } from "../../constants.js";
 
+/** Identifies PumpSwap’s native `multi_hop_swap` instruction. */
 const DISCRIMINATOR = new Uint8Array([43, 100, 73, 19, 233, 246, 111, 148]);
+/** Encodes the native `multi_hop_swap` arguments and instruction discriminator. */
 const instructionDataEncoder = getStructEncoder([
   ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
   ["amountIn", getU64Encoder()],
   ["minAmountOut", getU64Encoder()],
 ]);
 
-/** A remaining-account group, in native route order. Curves use their canonical token ATAs. */
+/** Accounts for one caller-selected hop in PumpSwap’s native `multi_hop_swap` instruction. */
 export interface PumpAmmMultiHopSwapHopAccounts {
   readonly baseMint: Address;
   readonly quoteMint: Address;
@@ -25,7 +27,7 @@ export interface PumpAmmMultiHopSwapHopAccounts {
   readonly quoteVault: Address;
 }
 
-/** Fixed native accounts plus five explicitly named accounts for each hop. */
+/** Accounts required by PumpSwap’s native `multi_hop_swap` instruction. */
 export interface PumpAmmMultiHopSwapAccounts {
   readonly user: Address;
   readonly userInTokenAccount: Address;
@@ -46,20 +48,98 @@ export interface PumpAmmMultiHopSwapAccounts {
   readonly hops: readonly PumpAmmMultiHopSwapHopAccounts[];
 }
 
-/** Atomic endpoint limits; the native route supports exact input only. */
+/**
+ * Native arguments for {@link multi_hop_swap}.
+ *
+ * Amounts use each asset’s smallest unit as bigint; read the mint’s decimals before
+ * converting display quantities. The builder does not quote, convert units, or choose a
+ * slippage tolerance.
+ *
+ * @remarks
+ * Amount fields must fit an unsigned 64-bit integer (0 through 2^64 - 1). Encoding
+ * successfully does not establish that the trade can execute.
+ */
 export interface PumpAmmMultiHopSwapArgs {
+  /**
+   * Amount of input token supplied to the trade, in input-token atomic units. For example,
+   * `1_000_000_000n` means 1 wrapped SOL when wrapped SOL is the input mint.
+   *
+   * Use a quote for this same input amount and the supplied market state. Trading fees are
+   * handled by the native program; transaction fees and account-creation rent are separate
+   * SOL costs.
+   *
+   * This amount applies at the first route input; it is not a per-hop amount.
+   */
   readonly amountIn: bigint;
+  /**
+   * Minimum acceptable output token output, in output-token atomic units. For example,
+   * `500_000_000n` means 500 tokens when the output mint has six decimals.
+   *
+   * Reduce the output from a quote for the same input by your chosen slippage tolerance,
+   * rounding down in atomic units. A quote of `500_000_000n` with a 1% tolerance gives
+   * `495_000_000n`. Use the output the recipient would receive after applicable trading
+   * fees.
+   *
+   * Zero supplies no positive minimum-output protection; it does not request an automatic
+   * quote.
+   *
+   * This amount applies at the final route output; it is not a per-hop amount.
+   */
   readonly minAmountOut: bigint;
 }
 
 /**
- * Build PumpSwap `multi_hop_swap` without quoting or validating account state.
- * @remarks Bytes 0–7 are the discriminator, 8–15 are `amountIn` (u64 little endian),
- * and 16–23 are `minAmountOut` (u64 little endian). Total length is 24 bytes.
- * Both user token accounts must exist when this instruction executes. A SOL curve at
- * the currency endpoint transfers native lamports while its WSOL account is only read
- * for the mint. No intermediate user token accounts are passed.
- * @throws Synchronous codec errors if an amount cannot be encoded.
+ * Creates a PumpSwap instruction for a caller-selected route with a specified input
+ * budget.
+ *
+ * Accounts and arguments are supplied by the caller. This function performs no fetching,
+ * address derivation, quoting, signing, or transaction submission.
+ *
+ * @param accounts - Accounts required by the native instruction.
+ * @param args - Atomic amounts and execution bounds chosen by the caller.
+ * @returns An unsigned instruction to include in a transaction.
+ * @throws Synchronously if an amount is outside the unsigned 64-bit range.
+ * On-chain account, balance, price, and slippage failures occur during execution, not
+ * during construction.
+ *
+ * @example
+ * Build an input-budget trade with a caller-chosen 1% tolerance. Amounts below
+ * illustrate a hypothetical quote, not live market data.
+ *
+ * ```ts
+ * import {
+ *   multi_hop_swap,
+ *   type PumpAmmMultiHopSwapAccounts,
+ *   type PumpAmmMultiHopSwapArgs,
+ * } from "celere-protocol-sdk/instructions/pump-amm";
+ *
+ * // Resolve these accounts from your application's account data.
+ * declare const accounts: PumpAmmMultiHopSwapAccounts;
+ *
+ * const amountIn = 1_000_000_000n; // 1 wrapped SOL.
+ * const quotedAmountOut = 500_000_000n; // Hypothetical quote: 500 base tokens with six decimals.
+ * const slippageBps = 100n; // 1%; chosen by the caller.
+ * const minimumAmountOut =
+ *   (quotedAmountOut * (10_000n - slippageBps)) / 10_000n;
+ *
+ * const args: PumpAmmMultiHopSwapArgs = {
+ *   amountIn,
+ *   minAmountOut: minimumAmountOut,
+ * };
+ *
+ * const instruction = multi_hop_swap(accounts, args);
+ * ```
+ *
+ * @remarks
+ * Supply hops in the route’s execution order. The builder neither chooses a route nor
+ * validates its length, mint continuity or supported pool combinations. Both endpoint
+ * user token accounts must exist; no intermediate user token accounts are passed. A SOL
+ * curve at the currency endpoint transfers native lamports while the WSOL token account
+ * is read for its mint. Quote the native route as a whole: its fee treatment differs
+ * from chaining standalone swaps.
+ *
+ * @see {@link PumpAmmMultiHopSwapAccounts}
+ * @see {@link PumpAmmMultiHopSwapArgs}
  */
 export function multi_hop_swap(
   accounts: PumpAmmMultiHopSwapAccounts,

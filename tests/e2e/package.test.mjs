@@ -85,6 +85,52 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       ["ci", "--offline", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"],
       { cwd: directory, stdio: "pipe" },
     );
+    // Compile documentation exactly as a consumer sees it in the installed package.
+    const installedPackage = join(directory, "node_modules/celere-protocol-sdk");
+    const documentationSources = [];
+    for (const [index, file] of instructionFiles.entries()) {
+      const declarationPath = file.path.replace(/\.js$/, ".d.ts");
+      const declaration = await readFile(join(installedPackage, declarationPath), "utf8");
+      const snippets = [
+        ...declaration.matchAll(/^\s*\* ?```ts\r?\n([\s\S]*?)^\s*\* ?```/gm),
+      ];
+      assert.ok(snippets.length > 0, `Missing public usage example: ${declarationPath}`);
+      for (const [snippetIndex, snippet] of snippets.entries()) {
+        const examplePath = join(
+          directory,
+          `instruction-example-${index}-${snippetIndex}.ts`,
+        );
+        await writeFile(examplePath, snippet[1].replace(/^\s*\* ?/gm, ""));
+        documentationSources.push(examplePath);
+      }
+    }
+    const protocolExamples = packed.files.filter(
+      (file) => file.path.startsWith("example/") && file.path.endsWith(".ts"),
+    );
+    assert.equal(protocolExamples.length, 20);
+    documentationSources.push(
+      ...protocolExamples.map((file) => join(installedPackage, file.path)),
+    );
+    execFileSync(
+      process.execPath,
+      [
+        resolve("node_modules/typescript/bin/tsc"),
+        "--strict",
+        "--noEmit",
+        "--skipLibCheck",
+        "--noUncheckedIndexedAccess",
+        "--exactOptionalPropertyTypes",
+        "--verbatimModuleSyntax",
+        "--target",
+        "ES2022",
+        "--module",
+        "NodeNext",
+        "--moduleResolution",
+        "NodeNext",
+        ...documentationSources,
+      ],
+      { cwd: directory, stdio: "pipe" },
+    );
     await writeFile(
       join(directory, "consumer.ts"),
       await readFile(new URL("../consumers/package.ts", import.meta.url), "utf8"),
