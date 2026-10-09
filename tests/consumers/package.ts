@@ -4,8 +4,7 @@ import { liquidAfAdapter } from "celere-protocol-sdk/protocols/liquid-af";
 import { boopAdapter } from "celere-protocol-sdk/protocols/boop";
 import { heavenAdapter } from "celere-protocol-sdk/protocols/heaven";
 import { metadaoAdapter } from "celere-protocol-sdk/protocols/metadao";
-import { virtualCurveAdapter } from "celere-protocol-sdk/protocols/virtual-curve";
-import { stableSwapAdapters } from "celere-protocol-sdk/protocols/stable-swap";
+import { meteoraDbcAdapter } from "celere-protocol-sdk/protocols/meteora-dbc";
 import {
   address,
   buildSwapInstructions,
@@ -29,8 +28,6 @@ import { moonshotAdapter } from "celere-protocol-sdk/protocols/moonshot";
 import { vertigoAdapter } from "celere-protocol-sdk/protocols/vertigo";
 import { compileTransaction as compiler } from "celere-protocol-sdk/transactions";
 declare const request: SwapRequest;
-const stableSubset = createProtocolSdk(stableSwapAdapters);
-void stableSubset;
 const subset = createProtocolSdk([
   liquidAfAmmAdapter,
   riseRichAdapter,
@@ -38,7 +35,7 @@ const subset = createProtocolSdk([
   boopAdapter,
   heavenAdapter,
   metadaoAdapter,
-  virtualCurveAdapter,
+  meteoraDbcAdapter,
   meteoraDammV1Adapter,
   moonshotAdapter,
   vertigoAdapter,

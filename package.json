@@ -1,7 +1,7 @@
 {
   "name": "celere-protocol-sdk",
-  "version": "0.1.0-alpha.6",
-  "description": "Strictly offline Solana swap instruction and unsigned transaction builders",
+  "version": "0.1.0-alpha.7",
+  "description": "Strictly offline native Solana protocol instruction and unsigned transaction builders",
   "type": "module",
   "license": "MIT",
   "author": "realhen",
@@ -105,17 +105,13 @@
       "types": "./dist/protocols/rise-rich/curve.d.ts",
       "import": "./dist/protocols/rise-rich/curve.js"
     },
-    "./protocols/stable-swap": {
-      "types": "./dist/protocols/stable-swap/index.d.ts",
-      "import": "./dist/protocols/stable-swap/index.js"
-    },
     "./protocols/vertigo": {
       "types": "./dist/protocols/vertigo/amm.d.ts",
       "import": "./dist/protocols/vertigo/amm.js"
     },
-    "./protocols/virtual-curve": {
-      "types": "./dist/protocols/virtual-curve/adapter.d.ts",
-      "import": "./dist/protocols/virtual-curve/adapter.js"
+    "./protocols/meteora-dbc": {
+      "types": "./dist/protocols/meteora-dbc/adapter.d.ts",
+      "import": "./dist/protocols/meteora-dbc/adapter.js"
     },
     "./instructions/boop": {
       "types": "./dist/protocols/boop/instructions/index.d.ts",
@@ -185,10 +181,6 @@
       "types": "./dist/protocols/rise-rich/instructions/index.d.ts",
       "import": "./dist/protocols/rise-rich/instructions/index.js"
     },
-    "./instructions/stable-swap": {
-      "types": "./dist/protocols/stable-swap/instructions/index.d.ts",
-      "import": "./dist/protocols/stable-swap/instructions/index.js"
-    },
     "./instructions/sugar": {
       "types": "./dist/protocols/sugar/instructions/index.d.ts",
       "import": "./dist/protocols/sugar/instructions/index.js"
@@ -197,9 +189,9 @@
       "types": "./dist/protocols/vertigo/instructions/index.d.ts",
       "import": "./dist/protocols/vertigo/instructions/index.js"
     },
-    "./instructions/virtual-curve": {
-      "types": "./dist/protocols/virtual-curve/instructions/index.d.ts",
-      "import": "./dist/protocols/virtual-curve/instructions/index.js"
+    "./instructions/meteora-dbc": {
+      "types": "./dist/protocols/meteora-dbc/instructions/index.d.ts",
+      "import": "./dist/protocols/meteora-dbc/instructions/index.js"
     }
   },
   "scripts": {

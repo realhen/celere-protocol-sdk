@@ -9,7 +9,7 @@ export interface CurvePoint {
   readonly liquidity: bigint;
 }
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "virtual-curve", message });
+  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "meteora-dbc", message });
 }
 function deltaBase(
   low: bigint,

@@ -30,6 +30,9 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         !["index.js", "accounts.js"].includes(file.path.split("/").at(-1)),
     );
     assert.equal(instructionFiles.length, 51);
+    assert.ok(
+      packed.files.every((file) => !/\/(virtual-curve|stable-swap)\//.test(file.path)),
+    );
     for (const file of instructionFiles)
       assert.match(file.path.split("/").at(-1), /^[a-z][a-z0-9_]*\.js$/);
 
@@ -112,7 +115,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       ],
       { cwd: directory, encoding: "utf8" },
     );
-    assert.equal(output.trim(), "21");
+    assert.equal(output.trim(), "20");
     const cases = [];
     const owner = (await generateKeyPairSigner()).address;
     const lifetime = {
@@ -188,7 +191,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       encoding: "utf8",
     });
     const nativeResult = JSON.parse(nativeOutput);
-    assert.equal(nativeResult.entrypoints, 21);
+    assert.equal(nativeResult.entrypoints, 20);
     assert.equal(nativeResult.cases, 4);
     assert.ok(nativeResult.builderCount >= 51);
   } finally {

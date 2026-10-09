@@ -19,7 +19,7 @@ import { raydiumCpmmAdapter } from "./protocols/raydium/cpmm.js";
 import { raydiumLaunchlabAdapter } from "./protocols/raydium/launchlab.js";
 import { riseRichAdapter } from "./protocols/rise-rich/curve.js";
 import { vertigoAdapter } from "./protocols/vertigo/amm.js";
-import { virtualCurveAdapter } from "./protocols/virtual-curve/adapter.js";
+import { meteoraDbcAdapter } from "./protocols/meteora-dbc/adapter.js";
 
 const sdk = createProtocolSdk([
   pumpAdapter,
@@ -34,7 +34,7 @@ const sdk = createProtocolSdk([
   moonshotAdapter,
   orcaWhirlpoolAdapter,
   raydiumLaunchlabAdapter,
-  virtualCurveAdapter,
+  meteoraDbcAdapter,
   vertigoAdapter,
   heavenAdapter,
   liquidAfAdapter,

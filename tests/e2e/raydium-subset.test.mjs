@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
 import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
-import { stableSwapAdapters } from "../../dist/protocols/stable-swap/index.js";
+import { raydiumAmmV4Adapter } from "../../dist/protocols/raydium/amm-v4.js";
+import { raydiumClmmAdapter } from "../../dist/protocols/raydium/clmm.js";
 import { raydiumAmmV4Fixture } from "../fixtures/raydium-amm-v4.mjs";
 import { raydiumClmmFixture } from "../fixtures/raydium-clmm.mjs";
 
@@ -14,8 +15,8 @@ function value(result) {
   );
   return result.value;
 }
-test("Stable Swap subset resolves canonical Raydium identities and builds both native amount modes", async () => {
-  const sdk = createProtocolSdk(stableSwapAdapters);
+test("Caller-selected Raydium subset resolves native protocol identities and builds both native amount modes", async () => {
+  const sdk = createProtocolSdk([raydiumAmmV4Adapter, raydiumClmmAdapter]);
   const owner = (await generateKeyPairSigner()).address;
   for (const [id, factory] of [
     ["raydium-amm-v4", raydiumAmmV4Fixture],

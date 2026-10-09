@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
 import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
-import { virtualCurveAdapter } from "../../dist/protocols/virtual-curve/adapter.js";
-import { virtualCurveFixture } from "../fixtures/virtual-curve.mjs";
-const sdk = createProtocolSdk([virtualCurveAdapter]);
+import { meteoraDbcAdapter } from "../../dist/protocols/meteora-dbc/adapter.js";
+import { meteoraDbcFixture } from "../fixtures/meteora-dbc.mjs";
+const sdk = createProtocolSdk([meteoraDbcAdapter]);
 function value(r) {
   assert.equal(
     r.ok,
@@ -16,7 +16,7 @@ function value(r) {
 function write(data, o, n) {
   new DataView(data.buffer).setBigUint64(o, n, true);
 }
-test("offline Virtual Curve consumer discovers config and builds both native full-fill modes across segments", async () => {
+test("offline Meteora DBC consumer discovers config and builds both native full-fill modes across segments", async () => {
   const signer = await generateKeyPairSigner(),
     original = globalThis.fetch;
   globalThis.fetch = () => {
@@ -25,7 +25,7 @@ test("offline Virtual Curve consumer discovers config and builds both native ful
   try {
     for (const reverse of [false, true])
       for (const collectFeeMode of [0, 1]) {
-        const fixture = await virtualCurveFixture(signer.address, {
+        const fixture = await meteoraDbcFixture(signer.address, {
           reverse,
           collectFeeMode,
         });
@@ -83,7 +83,7 @@ test("offline Virtual Curve consumer discovers config and builds both native ful
     globalThis.fetch = original;
   }
 });
-test("Virtual Curve reports malformed, unqualified and exhausted snapshots with structured errors", async () => {
+test("Meteora DBC reports malformed, unqualified and exhausted snapshots with structured errors", async () => {
   const signer = await generateKeyPairSigner();
   for (const [change, code] of [
     [
@@ -123,7 +123,7 @@ test("Virtual Curve reports malformed, unqualified and exhausted snapshots with 
       "INSUFFICIENT_LIQUIDITY",
     ],
   ]) {
-    const f = await virtualCurveFixture(signer.address);
+    const f = await meteoraDbcFixture(signer.address);
     change(f);
     const result = await sdk.buildSwapInstructions(f.request);
     assert.equal(result.ok, false);

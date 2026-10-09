@@ -17,10 +17,10 @@ import type {
   SwapQuote,
   SwapRequest,
 } from "../../core/types.js";
-import { VIRTUAL_CURVE_PROGRAM, VIRTUAL_CURVE_AUTHORITY } from "./constants.js";
+import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants.js";
 import { swap2 } from "./instructions/swap2.js";
 import { calculateCurveSwap, type CurvePoint } from "./math.js";
-export { VIRTUAL_CURVE_PROGRAM, VIRTUAL_CURVE_AUTHORITY } from "./constants.js";
+export { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants.js";
 const decoder = getAddressDecoder(),
   encoder = getAddressEncoder();
 const FEE_DENOMINATOR = 1_000_000_000n;
@@ -55,13 +55,13 @@ function invalid(key: Address, message: string): never {
 function unsupported(feature: string): never {
   fail({
     code: "UNSUPPORTED_POOL_FEATURE",
-    protocol: "virtual-curve",
+    protocol: "meteora-dbc",
     feature,
     message: `Meteora DBC ${feature} is not qualified for this release`,
   });
 }
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "virtual-curve", message });
+  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "meteora-dbc", message });
 }
 function view(data: Uint8Array): DataView {
   return new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -77,7 +77,7 @@ function readPool(request: SwapRequest): Pool {
       request.snapshot,
       request.pool,
       "DBC pool",
-      VIRTUAL_CURVE_PROGRAM,
+      METEORA_DBC_PROGRAM,
     ),
     data = account.data,
     v = view(data);
@@ -110,7 +110,7 @@ function readConfig(request: SwapRequest, pool: Pool): Config {
     request.snapshot,
     pool.config,
     "DBC config",
-    VIRTUAL_CURVE_PROGRAM,
+    METEORA_DBC_PROGRAM,
   ).data;
   if (
     data.length !== 1048 ||
@@ -220,7 +220,7 @@ async function build(
     break;
   }
   const [expectedPool] = await getProgramDerivedAddress({
-    programAddress: VIRTUAL_CURVE_PROGRAM,
+    programAddress: METEORA_DBC_PROGRAM,
     seeds: [
       "pool",
       encoder.encode(pool.config),
@@ -241,7 +241,7 @@ async function build(
     if (readMint(request.snapshot, mint).tokenProgram !== TOKEN_PROGRAM)
       unsupported("Token-2022 assets");
     const [expected] = await getProgramDerivedAddress({
-      programAddress: VIRTUAL_CURVE_PROGRAM,
+      programAddress: METEORA_DBC_PROGRAM,
       seeds: ["token_vault", encoder.encode(mint), encoder.encode(request.pool)],
     });
     if (vault !== expected) invalid(vault, "DBC vault PDA mismatch");
@@ -253,14 +253,14 @@ async function build(
     pool.baseVault,
     pool.baseMint,
     TOKEN_PROGRAM,
-    VIRTUAL_CURVE_AUTHORITY,
+    METEORA_DBC_AUTHORITY,
   ).amount;
   const quoteBalance = readTokenAccount(
     request.snapshot,
     pool.quoteVault,
     config.quoteMint,
     TOKEN_PROGRAM,
-    VIRTUAL_CURVE_AUTHORITY,
+    METEORA_DBC_AUTHORITY,
   ).amount;
   if (
     pool.baseReserve + pool.baseFees > baseBalance ||
@@ -343,7 +343,7 @@ async function build(
         fees,
       };
   const [eventAuthority] = await getProgramDerivedAddress({
-    programAddress: VIRTUAL_CURVE_PROGRAM,
+    programAddress: METEORA_DBC_PROGRAM,
     seeds: ["__event_authority"],
   });
   const instruction = swap2(
@@ -376,9 +376,9 @@ async function build(
  * quote-token fee collection and creator fee splits use caller chain context.
  * Dynamic/rate-limited fees, first-swap privileges and Token-2022 fail explicitly.
  */
-export const virtualCurveAdapter: ProtocolAdapter = {
-  id: "virtual-curve",
-  programAddresses: [VIRTUAL_CURVE_PROGRAM],
+export const meteoraDbcAdapter: ProtocolAdapter = {
+  id: "meteora-dbc",
+  programAddresses: [METEORA_DBC_PROGRAM],
   requirements,
   build,
 };

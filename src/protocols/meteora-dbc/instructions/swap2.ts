@@ -9,7 +9,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { VIRTUAL_CURVE_PROGRAM, VIRTUAL_CURVE_AUTHORITY } from "../constants.js";
+import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "../constants.js";
 const discriminator = Uint8Array.of(65, 75, 63, 76, 235, 91, 91, 136);
 const dataEncoder = getStructEncoder([
   ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
@@ -18,7 +18,7 @@ const dataEncoder = getStructEncoder([
   ["swapMode", getU8Encoder()],
 ]);
 /** Native swap2 accounts for classic SPL pools, without referral or special fee accounts. */
-export interface VirtualCurveSwap2Accounts {
+export interface MeteoraDbcSwap2Accounts {
   readonly config: Address;
   readonly pool: Address;
   readonly inputTokenAccount: Address;
@@ -31,7 +31,7 @@ export interface VirtualCurveSwap2Accounts {
   readonly eventAuthority: Address;
 }
 /** Token amounts are atomic units, with the direction determined by the input account. */
-export interface VirtualCurveSwap2Args {
+export interface MeteoraDbcSwap2Args {
   /** Input for mode 0; desired output for mode 2. */
   readonly amount: bigint;
   /** Minimum output for mode 0; maximum input for mode 2. */
@@ -47,13 +47,13 @@ export interface VirtualCurveSwap2Args {
  * @throws Synchronous codec errors for out-of-range amounts.
  */
 export function swap2(
-  accounts: VirtualCurveSwap2Accounts,
-  args: VirtualCurveSwap2Args,
+  accounts: MeteoraDbcSwap2Accounts,
+  args: MeteoraDbcSwap2Args,
 ): Instruction {
   return {
-    programAddress: VIRTUAL_CURVE_PROGRAM,
+    programAddress: METEORA_DBC_PROGRAM,
     accounts: [
-      { address: VIRTUAL_CURVE_AUTHORITY, role: AccountRole.READONLY },
+      { address: METEORA_DBC_AUTHORITY, role: AccountRole.READONLY },
       { address: accounts.config, role: AccountRole.READONLY },
       { address: accounts.pool, role: AccountRole.WRITABLE },
       { address: accounts.inputTokenAccount, role: AccountRole.WRITABLE },
@@ -65,9 +65,9 @@ export function swap2(
       { address: accounts.payer, role: AccountRole.READONLY_SIGNER },
       { address: TOKEN_PROGRAM_ADDRESS, role: AccountRole.READONLY },
       { address: TOKEN_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-      { address: VIRTUAL_CURVE_PROGRAM, role: AccountRole.READONLY },
+      { address: METEORA_DBC_PROGRAM, role: AccountRole.READONLY },
       { address: accounts.eventAuthority, role: AccountRole.READONLY },
-      { address: VIRTUAL_CURVE_PROGRAM, role: AccountRole.READONLY },
+      { address: METEORA_DBC_PROGRAM, role: AccountRole.READONLY },
     ],
     data: dataEncoder.encode({
       discriminator,

@@ -6,10 +6,8 @@ import {
   getAddressDecoder,
   getProgramDerivedAddress,
 } from "@solana/kit";
-export const VIRTUAL_CURVE_PROGRAM = address(
-  "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
-);
-export const VIRTUAL_CURVE_AUTHORITY = address(
+export const METEORA_DBC_PROGRAM = address("dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN");
+export const METEORA_DBC_AUTHORITY = address(
   "FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM",
 );
 const enc = getAddressEncoder(),
@@ -41,7 +39,7 @@ function tokenData(mint, owner, amount) {
   return data;
 }
 /** Synthetic three-segment DBC curve with accrued protocol, partner and creator fees. */
-export async function virtualCurveFixture(
+export async function meteoraDbcFixture(
   owner,
   {
     reverse = false,
@@ -62,15 +60,15 @@ export async function virtualCurveFixture(
     Buffer.compare(b, a),
   );
   const [pool] = await getProgramDerivedAddress({
-    programAddress: VIRTUAL_CURVE_PROGRAM,
+    programAddress: METEORA_DBC_PROGRAM,
     seeds: ["pool", enc.encode(config), ...sorted],
   });
   const [baseVault] = await getProgramDerivedAddress({
-    programAddress: VIRTUAL_CURVE_PROGRAM,
+    programAddress: METEORA_DBC_PROGRAM,
     seeds: ["token_vault", enc.encode(baseMint), enc.encode(pool)],
   });
   const [quoteVault] = await getProgramDerivedAddress({
-    programAddress: VIRTUAL_CURVE_PROGRAM,
+    programAddress: METEORA_DBC_PROGRAM,
     seeds: ["token_vault", enc.encode(quoteMint), enc.encode(pool)],
   });
   const poolData = new Uint8Array(424);
@@ -135,19 +133,19 @@ export async function virtualCurveFixture(
       slot: 100n,
     };
   }
-  add(pool, VIRTUAL_CURVE_PROGRAM, poolData);
-  add(config, VIRTUAL_CURVE_PROGRAM, configData);
+  add(pool, METEORA_DBC_PROGRAM, poolData);
+  add(config, METEORA_DBC_PROGRAM, configData);
   add(baseMint, TOKEN_PROGRAM_ADDRESS, mintData());
   add(quoteMint, TOKEN_PROGRAM_ADDRESS, mintData());
   add(
     baseVault,
     TOKEN_PROGRAM_ADDRESS,
-    tokenData(baseMint, VIRTUAL_CURVE_AUTHORITY, 2_000_000_321n),
+    tokenData(baseMint, METEORA_DBC_AUTHORITY, 2_000_000_321n),
   );
   add(
     quoteVault,
     TOKEN_PROGRAM_ADDRESS,
-    tokenData(quoteMint, VIRTUAL_CURVE_AUTHORITY, 1_000_000_339n),
+    tokenData(quoteMint, METEORA_DBC_AUTHORITY, 1_000_000_339n),
   );
   add(userBase, TOKEN_PROGRAM_ADDRESS, tokenData(baseMint, owner, 3_000_000_000n));
   add(userQuote, TOKEN_PROGRAM_ADDRESS, tokenData(quoteMint, owner, 3_000_000_000n));

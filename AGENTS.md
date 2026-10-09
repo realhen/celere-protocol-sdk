@@ -1,5 +1,6 @@
 # Development contracts
 
+- Name public protocol identities, subpaths, and modules after the native protocol. Do not introduce trading-terminal aliases or activity-based availability policies. Direct instruction builders must remain independent of optional quote and execution-policy helpers.
 - Keep this package strictly offline. Runtime source must not fetch, subscribe, sign, send, manage wallets, or own market caches.
 - Protocol decoding, account discovery, quoting, fee handling, and native instruction construction belong in protocol adapters.
 - Use atomic bigint amounts and explicit chain context. Exact output requires native on-chain exact-output execution; never substitute inverse exact-input sizing.

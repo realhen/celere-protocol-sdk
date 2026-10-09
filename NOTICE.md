@@ -44,9 +44,9 @@ The Vertigo account and instruction interfaces in `src/protocols/vertigo/amm.ts`
 
 The package embeds the official `@orca-so/whirlpools-core` version `1.0.3` WebAssembly math implementation at build time. This version was published under Apache-2.0, before the later license change; source revision `fa6429d1e413893b34dc38cbbd009984b6bc5f28`. See `licenses/ORCA-LICENSE`. The build wrapper embeds the upstream bytes so consumers need no runtime file access or network initialization. The initial adapter qualifies static-fee pools and rejects newer unsupported features explicitly.
 
-## Meteora Virtual Curve / DBC
+## Meteora DBC
 
-The offline layouts, liquidity traversal, and integer fees in `src/protocols/virtual-curve/` reference the MIT [MeteoraAg/dynamic-bonding-curve-sdk](https://github.com/MeteoraAg/dynamic-bonding-curve-sdk/tree/a28b7239e71899eb52ff7aacac4dec90441885c4), revision `a28b7239e71899eb52ff7aacac4dec90441885c4`, SDK version `1.5.13`. See `licenses/METEORA-DBC-LICENSE`. Celere uses caller-owned state, native bigint operations, explicit unsupported-feature checks, and portable instruction output; the upstream SDK is not a runtime dependency.
+The offline layouts, liquidity traversal, and integer fees in `src/protocols/meteora-dbc/` reference the MIT [MeteoraAg/dynamic-bonding-curve-sdk](https://github.com/MeteoraAg/dynamic-bonding-curve-sdk/tree/a28b7239e71899eb52ff7aacac4dec90441885c4), revision `a28b7239e71899eb52ff7aacac4dec90441885c4`, SDK version `1.5.13`. See `licenses/METEORA-DBC-LICENSE`. Celere uses caller-owned state, native bigint operations, explicit unsupported-feature checks, and portable instruction output; the upstream SDK is not a runtime dependency.
 
 ## Heaven
 

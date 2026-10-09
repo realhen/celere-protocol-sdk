@@ -10,16 +10,13 @@ import {
   signTransaction,
 } from "@solana/kit";
 import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
-import { virtualCurveAdapter } from "../../dist/protocols/virtual-curve/adapter.js";
-const { buildSwapInstructions } = createProtocolSdk([virtualCurveAdapter]);
-import {
-  virtualCurveFixture,
-  VIRTUAL_CURVE_PROGRAM,
-} from "../fixtures/virtual-curve.mjs";
+import { meteoraDbcAdapter } from "../../dist/protocols/meteora-dbc/adapter.js";
+const { buildSwapInstructions } = createProtocolSdk([meteoraDbcAdapter]);
+import { meteoraDbcFixture, METEORA_DBC_PROGRAM } from "../fixtures/meteora-dbc.mjs";
 
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
-  throw new Error("Native Virtual Curve tests only accept loopback simulators");
+  throw new Error("Native Meteora DBC tests only accept loopback simulators");
 function value(result) {
   assert.equal(
     result.ok,
@@ -114,14 +111,14 @@ function putU128(data, offset, amount) {
   v.setBigUint64(offset + 8, amount >> 64n, true);
 }
 test(
-  "native Virtual Curve fills both modes across segments with output/quote fees and creator splits",
+  "native Meteora DBC fills both modes across segments with output/quote fees and creator splits",
   { skip: !endpoint, timeout: 240000 },
   async (context) => {
     const signer = await generateKeyPairSigner();
     for (const reverse of [false, true])
       for (const collectFeeMode of [0, 1])
         for (const kind of ["exactIn", "exactOut"]) {
-          const f = await virtualCurveFixture(signer.address, {
+          const f = await meteoraDbcFixture(signer.address, {
             reverse,
             collectFeeMode,
             label: `native:${reverse}:${collectFeeMode}:${kind}`,
@@ -141,7 +138,7 @@ test(
           assert.equal(receipt.meta.err, null, JSON.stringify(receipt.meta));
           assert.ok(
             receipt.meta.logMessages.some((line) =>
-              line.includes(`Program ${VIRTUAL_CURVE_PROGRAM} invoke`),
+              line.includes(`Program ${METEORA_DBC_PROGRAM} invoke`),
             ),
           );
           const debit = -balanceChange(receipt, f.request.tokenAccounts.input),
@@ -193,7 +190,7 @@ test(
   },
 );
 test(
-  "native Virtual Curve enforces stale slippage and rejects partial fills at curve/migration boundaries",
+  "native Meteora DBC enforces stale slippage and rejects partial fills at curve/migration boundaries",
   { skip: !endpoint, timeout: 180000 },
   async (context) => {
     const signer = await generateKeyPairSigner(),
@@ -201,7 +198,7 @@ test(
     for (const reverse of [false, true])
       for (const kind of ["exactIn", "exactOut"])
         for (const failure of ["slippage", "boundary"]) {
-          const f = await virtualCurveFixture(signer.address, {
+          const f = await meteoraDbcFixture(signer.address, {
             reverse,
             label: `reject:${reverse}:${kind}:${failure}`,
           });
@@ -224,7 +221,7 @@ test(
             );
           if (failure === "boundary") {
             const swap = built.instructions.find(
-              (instruction) => instruction.programAddress === VIRTUAL_CURVE_PROGRAM,
+              (instruction) => instruction.programAddress === METEORA_DBC_PROGRAM,
             );
             new DataView(
               swap.data.buffer,
@@ -258,14 +255,14 @@ test(
 );
 
 test(
-  "native Virtual Curve applies a completed linear fee schedule",
+  "native Meteora DBC applies a completed linear fee schedule",
   { skip: !endpoint, timeout: 120000 },
   async () => {
     const signer = await generateKeyPairSigner();
     const clock = await accountData(SYSVAR_CLOCK_ADDRESS);
     const unixTimestamp = clock.readBigInt64LE(32);
     for (const reverse of [false, true]) {
-      const f = await virtualCurveFixture(signer.address, {
+      const f = await meteoraDbcFixture(signer.address, {
         reverse,
         linear: true,
         unixTimestamp,
@@ -292,7 +289,7 @@ test(
 );
 
 test(
-  "native Virtual Curve uses the active linear period from caller slot or timestamp",
+  "native Meteora DBC uses the active linear period from caller slot or timestamp",
   { skip: !endpoint, timeout: 150000 },
   async () => {
     const signer = await generateKeyPairSigner();
@@ -303,7 +300,7 @@ test(
           unixTimestamp = clock.readBigInt64LE(32);
         const point = activationType === 0 ? slot : unixTimestamp;
         const frequency = activationType === 0 ? 100_000n : 3600n;
-        const f = await virtualCurveFixture(signer.address, {
+        const f = await meteoraDbcFixture(signer.address, {
           reverse: activationType === 1,
           linear: true,
           unixTimestamp,
