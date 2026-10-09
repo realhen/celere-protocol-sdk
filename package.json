@@ -1,7 +1,7 @@
 {
   "name": "celere-protocol-sdk",
   "version": "0.1.0-alpha.7",
-  "description": "Strictly offline native Solana protocol instruction and unsigned transaction builders",
+  "description": "Native Solana protocol builders with optional concurrent transaction sending",
   "type": "module",
   "license": "MIT",
   "author": "realhen",
@@ -193,6 +193,14 @@
     "./instructions/meteora-dbc": {
       "types": "./dist/protocols/meteora-dbc/instructions/index.d.ts",
       "import": "./dist/protocols/meteora-dbc/instructions/index.js"
+    },
+    "./sender": {
+      "types": "./dist/sender/index.d.ts",
+      "import": "./dist/sender/index.js"
+    },
+    "./nonce": {
+      "types": "./dist/nonce/index.d.ts",
+      "import": "./dist/nonce/index.js"
     }
   },
   "scripts": {

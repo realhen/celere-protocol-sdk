@@ -182,3 +182,56 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("optional sender and nonce entrypoints bundle for a browser worker without Node shims", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "celere-sender-browser-"));
+  try {
+    const browserPath = join(directory, "browser.mjs");
+    await build({
+      stdin: {
+        contents: `export * from './dist/sender/index.js'; export { discoverNonceAccounts } from './dist/nonce/index.js'; export { generateKeyPairSigner, getBase64Encoder, getTransactionDecoder, getSignatureFromTransaction } from '@solana/kit';`,
+        resolveDir: process.cwd(),
+      },
+      outfile: browserPath,
+      bundle: true,
+      platform: "browser",
+      format: "esm",
+      target: "es2022",
+    });
+    await writeFile(
+      join(directory, "worker.mjs"),
+      `
+      import { parentPort, workerData } from 'node:worker_threads';
+      globalThis.isSecureContext = true;
+      globalThis.fetch = () => { throw new Error('Unexpected network access'); };
+      const sdk = await import(workerData.module);
+      const payer = await sdk.generateKeyPairSigner();
+      const nonce = await sdk.generateKeyPairSigner();
+      let calls = 0;
+      const sender = sdk.createSenderClient({defaultRpc: {url: 'https://fixture.invalid'}, fetch: async (_url, init) => {
+        calls++;
+        const bytes = sdk.getBase64Encoder().encode(JSON.parse(init.body).params[0]);
+        return new Response(JSON.stringify({result:sdk.getSignatureFromTransaction(sdk.getTransactionDecoder().decode(bytes))}));
+      }}).addRoute(sdk.zeroSlot({apiKey:'fixture'})).build();
+      if(calls !== 0) throw new Error('Construction performed network access');
+      const submission = await sender.send({feePayer:payer.address,signers:[payer],nonce:{account:nonce.address,authority:payer.address,value:nonce.address},instructions:[{programAddress:'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr',data:new Uint8Array([97])}],fees:{computeUnitLimit:100000,computeUnitPriceMicroLamports:0n,tipLamports:1000000n}});
+      parentPort.postMessage({calls,results:await submission.results,discovery:typeof sdk.discoverNonceAccounts});
+    `,
+    );
+    const result = await new Promise((resolve, reject) => {
+      const worker = new Worker(join(directory, "worker.mjs"), {
+        workerData: { module: pathToFileURL(browserPath).href },
+      });
+      worker.once("message", resolve);
+      worker.once("error", reject);
+      worker.once("exit", (code) => {
+        if (code !== 0) reject(new Error(`Worker exited ${code}`));
+      });
+    });
+    assert.equal(result.calls, 2);
+    assert.equal(result.discovery, "function");
+    assert.ok(result.results.every((r) => r.status === "accepted"));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -74,6 +74,10 @@ The independently authored LiquidAF curve/AMM builders, decoders, and bigint mat
 
 ## Solana
 
-Solana Kit, `@solana/sysvars`, the official `@solana-program/system`, `token`, `token-2022`, `memo`, and `compute-budget` clients, and their transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives without exposing RPC, wallet, signing, or sending operations in its API.
+Solana Kit, `@solana/sysvars`, the official `@solana-program/system`, `token`, `token-2022`, `memo`, and `compute-budget` clients, and their transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives for offline protocol construction and optional caller-requested signing, HTTP submission, and nonce discovery.
 
 No extracted Axiom JavaScript is included in this repository or package.
+
+## Sender reference
+
+The sender adapters are independently authored using provider HTTP interface facts and the [fnzero sol-trade-sdk-nodejs SWQoS implementation](https://github.com/0xfnzero/sol-trade-sdk-nodejs/tree/56a4105360b5de50d19adf5b3dffbc1124634a86/src/swqos), revision `56a4105360b5de50d19adf5b3dffbc1124634a86`, as a design and transport reference. No upstream implementation code is copied, and no fnzero runtime dependency is introduced. Provider documentation links and compatibility limits are recorded in README.md.

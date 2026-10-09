@@ -1,20 +1,100 @@
 # celere-protocol-sdk
 
-Strictly offline, typed native Solana protocol instruction and unsigned transaction builders.
+Typed native Solana protocol instruction builders, offline transaction compilation, and an optional concurrent sender.
 
 **Status: alpha.** Native instruction builders cover 20 protocol deployments. Optional swap adapters support 19 of them with the variant limits below. Sugar's deployed program currently fails on chain, but its historical instruction builders remain available. This package has not been published to npm.
 
-Callers select the protocol and native instruction, supply accounts and arguments, and receive a portable unsigned instruction. Builders encode the native ABI without choosing routes, inspecting trading activity, fetching accounts, quoting amounts, or applying the optional swap API's fill policy. Callers own wallet management, signing, sending, and execution policy.
+Callers select the protocol and native instruction, supply accounts and arguments, and receive a portable unsigned instruction. Builders encode the native ABI without choosing routes, inspecting trading activity, fetching accounts, quoting amounts, or applying the optional swap API's fill policy. Callers own wallets and execution policy. The optional `/sender` entrypoint accepts caller-owned Kit signers and submits transactions.
 
 Optional offline helpers provide account discovery, state validation, quotes, and swap limits from caller-supplied snapshots. Their supported variants and execution guarantees are separate from direct instruction construction.
 
-Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto; async APIs do not imply network access.
+Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto. The root, protocol builders, and `/transactions` remain strictly offline; `/sender` and `/nonce` perform explicitly requested network operations.
 
 ```sh
 npm ci --ignore-scripts
 npm run build
 npm pack
 ```
+
+## Concurrent sender
+
+Import from `celere-protocol-sdk/sender`. Configure once, supply protocol instructions, signer(s), nonce, and fees per transaction. See [the complete typed example](example/sender.ts) for all five providers and regional lanes.
+
+```ts
+import {
+  createSenderClient,
+  astralane,
+  heliusSender,
+  Region,
+} from "celere-protocol-sdk/sender";
+
+const sender = createSenderClient({ defaultRpc: { url: rpcUrl } })
+  .addRoute(astralane({ apiKey: astralaneKey, region: Region.Frankfurt }))
+  .addRoute(astralane({ apiKey: astralaneKey, region: Region.NewYork }))
+  .addRoute(heliusSender({ apiKey: heliusKey, region: Region.Frankfurt }))
+  .build();
+
+const submission = await sender.send({
+  instructions, // Any protocol's Kit-compatible instructions.
+  feePayer: wallet.address,
+  signers: [wallet], // Include a separate nonce authority or other required signers, if applicable.
+  nonce: selectedNonce, // { account, authority, value }, already created and fetched by your app.
+  fees: {
+    computeUnitLimit: 200_000,
+    computeUnitPriceMicroLamports: 50_000n,
+    tipLamports: 1_000_000n,
+  },
+});
+
+// The requests are already in flight; signatures are available without waiting for responses.
+const signatures = submission.variants.map((variant) => variant.signature);
+const transportResults = await submission.results; // Optional: HTTP results, never confirmation.
+```
+
+The equivalent class configuration is `new SenderClient({ defaultRpc: { url: rpcUrl }, routes: [astralane(...), heliusSender(...)] })`. Builders are immutable: retain the value returned by `addRoute`/`addRoutes`. Explicit route names are optional; the client assigns unique IDs for results.
+
+The sender creates one untipped default RPC variant and provider-tipped variants. Regions with identical tip requirements reuse signed bytes and a signature. Every distinct variant uses the same nonce account and value, with the nonce advance instruction first. All required partial signers receive the variants in a batch; signatures are verified before dispatch. All HTTP requests launch concurrently, without waiting for the first acknowledgment. There are no trade-time fee, blockhash, nonce, or simulation reads.
+
+`onRouteResult` is an optional callback passed to `send`: it receives each route's `RouteResult` as it settles. It does not track on-chain transactions, gate dispatch, or delay `results`; callback errors are isolated. Any application tracking code is your own, outside the SDK. `SubmissionStatus.Accepted` means the provider returned the expected signature; `Rejected` is an explicit transport rejection; `Unknown` covers timeouts, disconnects, malformed responses and mismatched signatures. Unknown submissions may still land. `NotSubmitted` means cancellation occurred before that route was attempted. Local preparation/signing failures throw `SenderError` before dispatch. A rejected route does not fail the other routes.
+
+Every HTTP attempt has a bounded deadline (`timeoutMs`, default 3000, including reading the body). The client performs no retries. Provider-internal forwarding/retry behavior is independent of the client. Cancellation after dispatch does not cancel an on-chain transaction. There is no `start`/`close`, background polling, confirmation, recovery, persistent execution store, or required intent ID. An injected `fetch` can use a caller-managed connection pool; its lifecycle belongs to the caller. Reuse a client and transport for connection reuse; this package does not promise warmed connections or a measured landing-latency bound.
+
+For external signing, call `sender.prepare(request)`, sign each `prepared.variants[i].transaction` without modifying its message, then call `sender.submitSigned(prepared, signedTransactions)`. Keep the original prepared object and use the same client. Kit partial signers return signatures only; modifying or signing-and-sending wallets require an application adapter. Wallets may prompt for multiple distinct messages. The sender never accepts private keys directly.
+
+### Nonce ownership and discovery
+
+Provision and fund durable nonce accounts beforehand using the official System Program instructions. One nonce can arbitrate the variants of one logical trade; concurrent independent trades need different available nonce accounts. The caller owns selection, freshness, and safe reuse. Never blindly pick a random account from a shared pool: two sends can choose the same nonce value. Slot duration does not establish availability, and a submitted transaction can remain pending beyond a slot. A failed durable-nonce transaction can also consume its nonce.
+
+Optional one-shot discovery uses `getProgramAccounts`, filtered by System Program, account size, and nonce authority:
+
+```ts
+import { discoverNonceAccounts } from "celere-protocol-sdk/nonce";
+
+const accounts = await discoverNonceAccounts({
+  rpc,
+  authority: wallet.address,
+  commitment: "confirmed",
+});
+// Select a current snapshot your application can exclusively use.
+```
+
+Discovery returns initialized current-version accounts and their observed slot. It establishes authority, not whether another process has pending transactions using those accounts. No application registry/filter is required if all discovered accounts belong to your execution workload. RPC providers must allow System Program scans; unsupported scans surface as errors. Refresh the chosen account's value after consumption before reusing it. Confirmation, nonce invalidation, and any cross-process coordination remain application concerns. A timeout does not free a nonce for a different trade. RPC-only sends may instead use `lifetime: { blockhash, lastValidBlockHeight }`; multiple distinct variants require a durable nonce.
+
+### Provider configuration
+
+These adapters submit single transactions over HTTP. They do not implement bundles, gRPC or QUIC. `Region` values select documented regional endpoints; unsupported combinations fail rather than falling back to another region. `endpoint` overrides accept full submission URLs for proxies or private deployments. Some provider regional endpoints use HTTP; browser callers must choose HTTPS endpoints with suitable CORS support and avoid exposing server credentials. Existing Kit types, including commitment strings, are preserved; SDK-owned provider/region/status values are enums.
+
+| Adapter        | Per-variant tip floor | Notes                                                                                                                                                      |
+| -------------- | --------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `astralane`    |       10,000 lamports | Binary Iris (`/irisb`) wire format; regional variants share bytes.                                                                                         |
+| `blockRazor`   |      100,000 lamports | Fast mode; sandwich mitigation is incompatible with nonce fan-out.                                                                                         |
+| `zeroSlot`     |    1,000,000 lamports | Advanced-plan callers can explicitly set `minimumTipLamports: 100_000n` in route options. This selects the provider plan floor, not the transaction's tip. |
+| `nextBlock`    |      100,000 lamports | HTTP v2, skip preflight and disable retries requested.                                                                                                     |
+| `heliusSender` |    1,000,000 lamports | Sender Max default; requires at least 5,000 lamports in priority fees. `HeliusSenderMode.SwqosOnly` selects the 5,000-lamport tip tier.                    |
+
+Fees are explicit per send. `tipOverrides` uses `SenderProvider` keys and applies to all that provider's regional lanes. Below-floor amounts fail before signing; the SDK never silently raises your fees. Compute-unit limits cover the whole transaction, including setup, nonce and tip instructions. Set priority price from your application's fee estimate; simulate/estimate compute outside the latency-sensitive send call when needed. No automatic fee sampling or CU estimation is implied by these example values. Floors and endpoints follow the references below and may change with provider plans.
+
+Provider references: [Astralane](https://astralane.gitbook.io/docs/low-latency/quickstart), [BlockRazor](https://docs.blockrazor.io/transaction-submission/transaction-sending/solana/send-transaction), [0slot](https://0slot.trade/docs.php), [NextBlock](https://nextblock.io), [Helius Max](https://www.helius.dev/docs/sending-transactions/sender-max). Binary Iris request shape and endpoints were cross-checked against the pinned [fnzero sender implementation](https://github.com/0xfnzero/sol-trade-sdk-nodejs/tree/56a4105360b5de50d19adf5b3dffbc1124634a86/src/swqos). Tests cover real loopback HTTP contracts and local Surfpool execution; they do not establish live provider acceptance or landing performance.
 
 ## Native instruction builders
 

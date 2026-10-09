@@ -107,7 +107,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
     const protocolExamples = packed.files.filter(
       (file) => file.path.startsWith("example/") && file.path.endsWith(".ts"),
     );
-    assert.equal(protocolExamples.length, 20);
+    assert.equal(protocolExamples.length, 21);
     documentationSources.push(
       ...protocolExamples.map((file) => join(installedPackage, file.path)),
     );
