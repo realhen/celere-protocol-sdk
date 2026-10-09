@@ -136,8 +136,7 @@ export async function createSurfpoolEvidence(endpoint) {
     protectedAccounts.add(program);
     protectedAccounts.add(programDataAddress);
   }
-  async function observe(request, response) {
-    if (!["sendTransaction", "simulateTransaction"].includes(request.method)) return;
+  function transactionMessage(request) {
     assert.equal(
       request.params[1]?.encoding,
       "base64",
@@ -146,9 +145,10 @@ export async function createSurfpoolEvidence(endpoint) {
     const transaction = getTransactionDecoder().decode(
       Buffer.from(request.params[0], "base64"),
     );
-    const message = getCompiledTransactionMessageDecoder().decode(
-      transaction.messageBytes,
-    );
+    return getCompiledTransactionMessageDecoder().decode(transaction.messageBytes);
+  }
+  async function observe(request, response, message) {
+    if (!message) return;
     const matches = message.instructions.flatMap((instruction, index) => {
       const program = message.staticAccounts[instruction.programAddressIndex];
       const data = Buffer.from(instruction.data ?? []);
@@ -223,8 +223,22 @@ export async function createSurfpoolEvidence(endpoint) {
         !/^(surfnet_setProgram|surfnet_cloneProgram)/.test(request.method),
         "Tests must not replace deployed program binaries",
       );
+      const message = ["sendTransaction", "simulateTransaction"].includes(request.method)
+        ? transactionMessage(request)
+        : undefined;
+      if (message) {
+        // Hydrate through individual reads before Surfpool 1.6 batches missing accounts.
+        // Reads preserve locally seeded state; absent accounts remain absent.
+        for (const address of message.staticAccounts) {
+          const hydrated = await rpc("getAccountInfo", [
+            address,
+            { encoding: "base64", commitment: "confirmed" },
+          ]);
+          assert.ok(!hydrated.error, `Unable to hydrate transaction account ${address}`);
+        }
+      }
       const response = await rpc(request.method, request.params);
-      await observe(request, response);
+      await observe(request, response, message);
       outgoing.writeHead(200, { "Content-Type": "application/json" });
       outgoing.end(JSON.stringify({ ...response, id: request.id }));
     } catch (error) {
