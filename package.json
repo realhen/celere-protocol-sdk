@@ -204,7 +204,8 @@
     "test": "npm run build && node --test --test-concurrency=1 tests/e2e/*.test.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
     "prepack": "npm run build",
-    "test:surfpool": "npm run build && node scripts/test-surfpool.mjs"
+    "test:surfpool": "npm run build && node scripts/test-surfpool.mjs",
+    "test:surfpool:ci": "npm run build && node scripts/test-surfpool.mjs --require-coverage"
   },
   "dependencies": {
     "@orca-so/whirlpools-core": "1.0.3",

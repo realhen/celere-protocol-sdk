@@ -290,6 +290,18 @@ With the [Surfpool CLI](https://docs.surfpool.run/) installed and on `PATH`, run
 npm run test:surfpool
 ```
 
+GitHub Actions also runs the strict native gate on every push and pull request, on manual dispatch, and daily to detect mainnet program changes:
+
+```bash
+npm run test:surfpool:ci
+```
+
+This gate installs the checksum-pinned Surfpool release defined in [CI](.github/workflows/ci.yml), starts a fresh simulator backed by mainnet RPC, and hydrates every protocol program before running the complete native suite. The evidence proxy records program addresses, deployment slots, ELF SHA-256 hashes, and confirmed transaction signatures. It rejects attempts to replace those program binaries. For every exported native instruction, the gate requires a successful local confirmed receipt with a native program invocation. Test failures, skips, TODOs, missing receipts, and missing instruction coverage fail the job.
+
+Sugar is an explicit exception: its four historical instructions must produce the checked disabled-program rejection, and are reported as `disabled-program-rejection`, never as successful swaps. Tests also cover native limitations such as clipped output; a successful instruction does not imply an unconditional full-fill guarantee.
+
+The workflow uploads `native-coverage.json`, `results.tap`, stderr and simulator diagnostics as the `native-execution-<commit>` artifact. The report marks a run passed only when the tests and instruction coverage both pass. Program fingerprints identify what was executed; each fresh run loads the current deployment, rather than pinning historical binaries. Mainnet RPC availability is required, and an unavailable program fails the job instead of skipping it. There is no automatic npm publication; this job is the native validation gate for future release workflows.
+
 The runner starts an isolated simulator on available loopback ports, runs the full suite, and stops its own simulator afterward. Diagnostics remain in ignored `outputs/surfpool/` logs. Initial program hydration requires access to public mainnet RPC; SDK runtime operations remain offline. To run one native workflow:
 
 ```sh

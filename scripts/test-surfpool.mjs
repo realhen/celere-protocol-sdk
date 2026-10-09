@@ -1,15 +1,23 @@
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtemp, mkdir, open, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, open, rm, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { createSurfpoolEvidence } from "./surfpool-evidence.mjs";
+
 const root = fileURLToPath(new URL("../", import.meta.url));
 let simulator;
 let tests;
 let interrupted = false;
+let evidence;
+let testOutput = "";
+let testErrors = "";
+let failureMessage;
+const strict = process.argv.includes("--require-coverage");
+const outputDirectory = join(root, "outputs", "surfpool");
 
 function interrupt() {
   interrupted = true;
@@ -109,6 +117,16 @@ async function stopSimulator() {
 let directory;
 let log;
 try {
+  await mkdir(outputDirectory, { recursive: true });
+  if (
+    strict &&
+    (process.env.CELERE_SURFPOOL_URL ||
+      process.argv.slice(2).some((arg) => arg !== "--require-coverage"))
+  ) {
+    throw new Error(
+      "Strict native coverage requires a fresh managed simulator and the complete native suite",
+    );
+  }
   let endpoint = process.env.CELERE_SURFPOOL_URL;
   if (endpoint) {
     const url = new URL(endpoint);
@@ -157,30 +175,114 @@ try {
     await awaitSimulator(endpoint);
   }
   if (interrupted) throw new Error("Native validation interrupted");
-  const patterns = process.argv.slice(2);
+  if (strict) {
+    console.log(
+      "Hydrating mainnet program binaries and recording deployment provenance...",
+    );
+    evidence = await createSurfpoolEvidence(endpoint);
+    endpoint = evidence.endpoint;
+  }
+  const patterns = strict
+    ? (await readdir(join(root, "tests/e2e")))
+        .filter((file) => file.includes("surfpool") && file.endsWith(".test.mjs"))
+        .sort()
+        .map((file) => `tests/e2e/${file}`)
+    : process.argv.slice(2);
   tests = start(
     process.execPath,
     [
       "--test",
       "--test-concurrency=1",
+      "--test-reporter=tap",
       ...(patterns.length ? patterns : ["tests/e2e/*.test.mjs"]),
     ],
     {
       cwd: root,
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, CELERE_SURFPOOL_URL: endpoint },
     },
   );
+  tests.child.stdout.on("data", (chunk) => {
+    testOutput += chunk.toString();
+    process.stdout.write(chunk);
+  });
+  tests.child.stderr.on("data", (chunk) => {
+    testErrors += chunk.toString();
+    process.stderr.write(chunk);
+  });
   process.exitCode = await tests.done;
   if (tests.failure) throw tests.failure;
+  if (strict) {
+    const totals = Object.fromEntries(
+      [
+        ...testOutput.matchAll(/^# (tests|pass|fail|skipped|cancelled|todo) (\d+)$/gm),
+      ].map((match) => [match[1], Number(match[2])]),
+    );
+    if (
+      !(totals.tests > 0) ||
+      totals.pass !== totals.tests ||
+      ["fail", "skipped", "cancelled", "todo"].some((key) => totals[key] !== 0)
+    ) {
+      throw new Error(
+        `Native suite must pass without skips or TODOs: ${JSON.stringify(totals)}`,
+      );
+    }
+    const report = evidence.report();
+    if (!report.complete)
+      throw new Error(
+        `Native coverage incomplete: ${report.instructions
+          .filter((entry) => !entry.covered)
+          .map((entry) => `${entry.protocol}/${entry.name}`)
+          .join(", ")}; evidence errors: ${report.errors.join("; ")}`,
+      );
+    console.log(
+      `Native coverage complete: ${report.instructions.length} instructions across ${report.programs.length} protocols, ${report.confirmedTransactions} confirmed transactions.`,
+    );
+  }
 } catch (error) {
+  failureMessage = error instanceof Error ? error.message : String(error);
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = interrupted ? 130 : 1;
 } finally {
-  await stopSimulator();
-  await log?.close();
-  if (directory) await rm(directory, { recursive: true, force: true });
-  process.off("SIGINT", interrupt);
-  process.off("SIGTERM", interrupt);
-  if (interrupted) process.exitCode = 130;
+  try {
+    if (strict) {
+      await writeFile(join(outputDirectory, "results.tap"), testOutput);
+      await writeFile(join(outputDirectory, "tests.stderr.log"), testErrors);
+      const report = evidence?.report();
+      await writeFile(
+        join(outputDirectory, "native-coverage.json"),
+        JSON.stringify(
+          {
+            timestamp: new Date().toISOString(),
+            revision: execFileSync("git", ["rev-parse", "HEAD"], {
+              cwd: root,
+              encoding: "utf8",
+            }).trim(),
+            workingTreeDirty:
+              execFileSync("git", ["status", "--porcelain"], {
+                cwd: root,
+                encoding: "utf8",
+              }).trim().length > 0,
+            node: process.version,
+            surfpool: execFileSync("surfpool", ["--version"], {
+              encoding: "utf8",
+            }).trim(),
+            ...report,
+            passed: !interrupted && process.exitCode === 0 && report?.complete === true,
+            failure: failureMessage ?? null,
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+    }
+  } finally {
+    await evidence?.close();
+    await stopSimulator();
+    await log?.close();
+    if (directory) await rm(directory, { recursive: true, force: true });
+    process.off("SIGINT", interrupt);
+    process.off("SIGTERM", interrupt);
+    if (interrupted) process.exitCode = 130;
+  }
 }
