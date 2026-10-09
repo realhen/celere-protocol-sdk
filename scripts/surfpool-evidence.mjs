@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import {
+  createSolanaRpc,
+  fetchAddressesForLookupTables,
   getAddressDecoder,
   getCompiledTransactionMessageDecoder,
   getTransactionDecoder,
@@ -229,7 +231,23 @@ export async function createSurfpoolEvidence(endpoint) {
       if (message) {
         // Hydrate through individual reads before Surfpool 1.6 batches missing accounts.
         // Reads preserve locally seeded state; absent accounts remain absent.
-        for (const address of message.staticAccounts) {
+        const addresses = new Set(message.staticAccounts);
+        const lookups = message.addressTableLookups ?? [];
+        if (lookups.length) {
+          const tables = await fetchAddressesForLookupTables(
+            lookups.map((lookup) => lookup.lookupTableAddress),
+            createSolanaRpc(endpoint),
+            { abortSignal: globalThis.AbortSignal.timeout(90_000) },
+          );
+          for (const lookup of lookups) {
+            for (const index of [...lookup.writableIndexes, ...lookup.readonlyIndexes]) {
+              const address = tables[lookup.lookupTableAddress]?.[index];
+              assert.ok(address, `Missing lookup-table address at index ${index}`);
+              addresses.add(address);
+            }
+          }
+        }
+        for (const address of addresses) {
           const hydrated = await rpc("getAccountInfo", [
             address,
             { encoding: "base64", commitment: "confirmed" },
