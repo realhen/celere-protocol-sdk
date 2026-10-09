@@ -180,7 +180,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
     const nativeResult = JSON.parse(nativeOutput);
     assert.equal(nativeResult.entrypoints, 21);
     assert.equal(nativeResult.cases, 4);
-    assert.ok(nativeResult.builderCount >= 43);
+    assert.ok(nativeResult.builderCount >= 51);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

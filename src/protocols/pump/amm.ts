@@ -6,6 +6,7 @@ import {
 } from "@solana/kit";
 import {
   associatedTokenAddress,
+  createAssociatedTokenInstruction,
   readMint,
   readTokenAccount,
 } from "../../accounts/tokens.js";
@@ -91,6 +92,7 @@ async function requirements(
         tokenProgram,
       ),
       role: "Pump AMM buyback recipient token account",
+      optional: true,
     });
   }
   return result;
@@ -170,13 +172,35 @@ async function build(
     pool.quoteMint,
     quoteMint.tokenProgram,
   );
-  readTokenAccount(
-    request.snapshot,
-    buybackTokenAccount,
-    pool.quoteMint,
-    quoteMint.tokenProgram,
-    globalState.buybackRecipient,
-  );
+  const setupInstructions: Instruction[] = [];
+  if (request.snapshot.accounts[buybackTokenAccount] === null) {
+    setupInstructions.push(
+      createAssociatedTokenInstruction(
+        request.payer,
+        globalState.buybackRecipient,
+        pool.quoteMint,
+        quoteMint.tokenProgram,
+        buybackTokenAccount,
+      ),
+    );
+  } else {
+    readTokenAccount(
+      request.snapshot,
+      buybackTokenAccount,
+      pool.quoteMint,
+      quoteMint.tokenProgram,
+      globalState.buybackRecipient,
+    );
+  }
+  if (
+    pool.isHolderReward &&
+    pool.coinCreator !== (await derive(PUMP_PROGRAM, "holder-rewards", pool.baseMint))
+  )
+    fail({
+      code: "INVALID_ACCOUNT",
+      address: request.pool,
+      message: "Pump AMM holder-reward creator is not the canonical rewards PDA",
+    });
   const canonical =
     pool.creator === (await derive(PUMP_PROGRAM, "pool-authority", pool.baseMint));
   if (baseVault.amount === 0n)
@@ -191,6 +215,11 @@ async function build(
     canonical,
     ((quoteVault.amount + pool.virtualQuoteReserves) * base.supply) / baseVault.amount,
     pool.coinCreator,
+    {
+      quoteMint: pool.quoteMint,
+      creatorFeeConfigurable: globalState.creatorFeeConfigurable,
+      creatorFeeBps: pool.creatorFeeBps,
+    },
   );
   const quote = quotePumpAmm(
     request,
@@ -200,6 +229,7 @@ async function build(
     pool.virtualQuoteReserves,
     pool.protocolFees + pool.creatorFees,
     rates,
+    pool.quoteMint,
   );
   const instructionAccounts = {
     pool: request.pool,
@@ -247,14 +277,20 @@ async function build(
       minQuoteAmountOut: quote.minimumAmountOut,
     });
   }
-  return { quote, mayPartiallyFill: false, instructions: [instruction] };
+  return {
+    quote,
+    mayPartiallyFill: false,
+    setupInstructions,
+    instructions: [instruction],
+  };
 }
 
 /**
- * Pump AMM native v2 swaps for standard WSOL-quoted pools.
+ * Pump AMM native v2 swaps with SOL, USDC, or token quote assets.
  * @remarks Both assets use SPL accounts: callers supply wrapped SOL themselves. The owner may
  * additionally pay program account rent, outside quoted swap amounts. LP and protocol fees are
- * combined as trade fees; creator fees are separate. A listed buyback ATA must already exist.
+ * combined as trade fees; creator fees are separate, including fees retained for holder rewards.
+ * An observed-absent buyback ATA is created idempotently, with rent paid by the caller payer.
  */
 export const pumpAmmAdapter: ProtocolAdapter = {
   id: "pump-amm",

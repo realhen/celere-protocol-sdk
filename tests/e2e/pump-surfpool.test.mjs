@@ -100,10 +100,26 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
               BigInt(transaction.meta.preBalances[index])
             );
           };
-          const creatorDelta = balanceDelta(swap.accounts[isBuy ? 9 : 8].address);
-          const protocolDelta =
-            balanceDelta(swap.accounts[1].address) +
-            balanceDelta(swap.accounts.at(-1).address);
+          let creatorDelta;
+          let protocolDelta;
+          if (swap.accounts.length === 17) {
+            const before = Buffer.from(request.snapshot.accounts[pool].data);
+            const after = Buffer.from(
+              (await rpc(url, "getAccountInfo", [pool, { encoding: "base64" }])).value
+                .data[0],
+              "base64",
+            );
+            creatorDelta = after.readBigUInt64LE(125) - before.readBigUInt64LE(125);
+            protocolDelta =
+              after.readBigUInt64LE(133) -
+              before.readBigUInt64LE(133) +
+              balanceDelta(swap.accounts[13].address);
+          } else {
+            creatorDelta = balanceDelta(swap.accounts[9].address);
+            protocolDelta =
+              balanceDelta(swap.accounts[1].address) +
+              balanceDelta(swap.accounts.at(-1).address);
+          }
           assert.equal(
             creatorDelta,
             build.quote.fees.find((fee) => fee.kind === "creator").amount,

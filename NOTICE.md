@@ -28,7 +28,9 @@ The account layouts, bin traversal, integer prices, and fee formulas in `src/pro
 
 ## Pump
 
-Pump account/instruction layouts and fee arithmetic were implemented using the official `@pump-fun/pump-sdk` version `4.0.0`, whose package metadata declares MIT, and [Pump's public protocol documentation](https://github.com/pump-fun/pump-public-docs). Copyright belongs to the original Pump authors for any adapted portions. PumpSwap uses the native v2 layouts and fee arithmetic documented by the MIT `@pump-fun/pump-swap-sdk` version `2.1.0`. Neither Pump package is a runtime dependency. Celere adds offline validation, deterministic account selection, structured errors, and native amount-mode handling.
+The layouts and integer arithmetic in `src/protocols/pump/` reference the MIT-declared official packages `@pump-fun/pump-sdk` version `4.0.0` (package gitHead `b168cc2e819e18b5e38c40ac62682153013db71b`) and `@pump-fun/pump-swap-sdk` version `2.1.0` (package gitHead `0bc59090bbd0b8d6c27b8df72d52e30bfc069c3b`). Public ABI facts reference [Pump's protocol documentation](https://github.com/pump-fun/pump-public-docs/tree/2293f9a66c654e9fe82dc5e8f4618538f24bb35f) at revision `2293f9a66c654e9fe82dc5e8f4618538f24bb35f`. This includes v3 curve trades, v2 pool trades, retained fee sweeps, synthetic migration, and native multi-hop fee allocation.
+
+The reviewed npm distributions declare MIT and identify Pump Fun as author, but contain no standalone license file; `licenses/PUMP-LICENSE` records attribution and standard MIT terms. Neither upstream SDK is a runtime dependency and no full IDL is redistributed. Adaptations use native bigint, strict caller-owned snapshots, deterministic account selection, structured errors, and native execution guarantees. Fee rounding and version behavior are qualified against deployed programs in Surfpool, including cases where the published quote helper differs from execution.
 
 ## Moonshot / Moonit
 

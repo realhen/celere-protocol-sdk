@@ -6,6 +6,7 @@ import {
 } from "../../core/amounts.js";
 import { fail } from "../../core/errors.js";
 import type { SwapQuote, SwapRequest } from "../../core/types.js";
+import type { Address } from "@solana/kit";
 import { AMM_QUOTE_MINT, type PumpAmmFeeRates } from "./amm-state.js";
 
 function insufficientLiquidity(): never {
@@ -16,7 +17,7 @@ function insufficientLiquidity(): never {
   });
 }
 
-function fees(amount: bigint, rates: PumpAmmFeeRates) {
+function fees(amount: bigint, rates: PumpAmmFeeRates, quoteMint: Address) {
   const lp = ceilDiv(amount * rates.lpBps, 10_000n);
   const protocol = ceilDiv(amount * rates.protocolBps, 10_000n);
   const creator = ceilDiv(amount * rates.creatorBps, 10_000n);
@@ -24,13 +25,18 @@ function fees(amount: bigint, rates: PumpAmmFeeRates) {
     lp,
     total: lp + protocol + creator,
     breakdown: [
-      { kind: "trade" as const, mint: AMM_QUOTE_MINT, amount: lp + protocol },
-      { kind: "creator" as const, mint: AMM_QUOTE_MINT, amount: creator },
+      { kind: "trade" as const, mint: quoteMint, amount: lp + protocol },
+      { kind: "creator" as const, mint: quoteMint, amount: creator },
     ],
   };
 }
 
-/** Native v2 integer contracts. Sell exact-output is rejected, never emulated by inverse sizing. */
+/**
+ * Native v2 integer contracts. Sell exact-output is rejected, never emulated by inverse sizing.
+ * @param quoteMint - Mint in which all fee amounts are denominated.
+ * @param route - Native multi-hop buys price the entire budget remainder after fees; single-hop
+ * buys price the initially grossed-down net. Route callers must supply the per-leg fee assignment.
+ */
 export function quotePumpAmm(
   request: SwapRequest,
   isBuy: boolean,
@@ -39,6 +45,8 @@ export function quotePumpAmm(
   virtualQuoteReserves: bigint,
   feeBuckets: bigint,
   rates: PumpAmmFeeRates,
+  quoteMint: Address = AMM_QUOTE_MINT,
+  route = false,
 ): SwapQuote {
   const effectiveQuoteReserve = quoteReserve + virtualQuoteReserves;
   if (baseReserve === 0n || effectiveQuoteReserve <= 0n || feeBuckets > quoteReserve)
@@ -55,7 +63,7 @@ export function quotePumpAmm(
     const amountOut = request.amount.amountOut;
     if (amountOut >= baseReserve) insufficientLiquidity();
     const netQuote = ceilDiv(effectiveQuoteReserve * amountOut, baseReserve - amountOut);
-    const charged = fees(netQuote, rates);
+    const charged = fees(netQuote, rates, quoteMint);
     const expectedAmountIn = netQuote + charged.total;
     assertAmount(expectedAmountIn, "expectedAmountIn");
     return {
@@ -74,14 +82,14 @@ export function quotePumpAmm(
     let netQuote =
       (amountIn * 10_000n) /
       (10_000n + rates.lpBps + rates.protocolBps + rates.creatorBps);
-    charged = fees(netQuote, rates);
-    if (netQuote + charged.total > amountIn) netQuote = amountIn - charged.total;
+    charged = fees(netQuote, rates, quoteMint);
+    if (route || netQuote + charged.total > amountIn) netQuote = amountIn - charged.total;
     if (netQuote <= 1n) insufficientLiquidity();
     expectedAmountOut =
       (baseReserve * (netQuote - 1n)) / (effectiveQuoteReserve + netQuote - 1n);
   } else {
     const grossQuote = (effectiveQuoteReserve * amountIn) / (baseReserve + amountIn);
-    charged = fees(grossQuote, rates);
+    charged = fees(grossQuote, rates, quoteMint);
     if (grossQuote - charged.lp > quoteReserve - feeBuckets) insufficientLiquidity();
     expectedAmountOut = grossQuote - charged.total;
   }

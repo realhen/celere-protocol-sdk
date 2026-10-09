@@ -1,3 +1,6 @@
+import { pumpV3Fixture } from "../fixtures/pump-v3.mjs";
+import { pumpAmmQuotesFixture } from "../fixtures/pump-amm-quotes.mjs";
+import { pumpRouteFixture } from "../fixtures/pump-route.mjs";
 import { liquidAfAmmFixture } from "../fixtures/liquid-af-amm.mjs";
 import { riseRichFixture } from "../fixtures/rise-rich.mjs";
 import { liquidAfFixture } from "../fixtures/liquid-af.mjs";
@@ -36,8 +39,8 @@ const workerScript = `
   const sdk = await import(workerData.module);
   const results = [];
   for (const request of workerData.requests) {
-    const discovery = await sdk.getSwapRequirements(request);
-    const build = await sdk.buildSwapInstructions(request);
+    const discovery = await (request.hops ? sdk.getRouteRequirements(request) : sdk.getSwapRequirements(request));
+    const build = await (request.hops ? sdk.buildRouteInstructions(request) : sdk.buildSwapInstructions(request));
     const compiled = build.ok
       ? sdk.compileTransaction({
           instructions: build.value.instructions,
@@ -86,6 +89,39 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
             : value,
     );
     const fixtures = [
+      [
+        "pump",
+        (
+          await pumpV3Fixture(signer.address, {
+            quote: "token",
+            quote2022: true,
+            crossing: true,
+          })
+        ).request,
+      ],
+      [
+        "pump-amm",
+        (await pumpAmmQuotesFixture(signer.address, { quote: "usdc" })).request,
+      ],
+      [
+        "pump-amm",
+        (
+          await pumpRouteFixture(signer.address, {
+            kinds: ["curve", "pool"],
+            crossing: 0,
+          })
+        ).request,
+      ],
+      [
+        "pump-amm",
+        (
+          await pumpRouteFixture(signer.address, {
+            kinds: ["pool", "curve"],
+            currency: "usdc",
+            reverse: true,
+          })
+        ).request,
+      ],
       ["liquid-af-amm", (await liquidAfAmmFixture(signer.address)).request],
       ["rise-rich", (await riseRichFixture(signer.address)).request],
       ["liquid-af", (await liquidAfFixture(signer.address)).request],

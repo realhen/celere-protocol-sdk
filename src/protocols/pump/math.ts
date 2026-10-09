@@ -6,37 +6,83 @@ import {
 } from "../../core/amounts.js";
 import { fail } from "../../core/errors.js";
 import type { SwapFee, SwapQuote, SwapRequest } from "../../core/types.js";
-import { NATIVE_SOL_MINT, type PumpCurve, type PumpFees } from "./state.js";
+import type { PumpCurve, PumpFees } from "./state.js";
+
+/** Caller-observed inventory and global charge needed to price synthetic migration. */
+export interface PumpQuoteOptions {
+  readonly baseVaultBalance: bigint;
+  readonly migrationFee: bigint;
+  /** Enabled only for native v3 buys and multi-hop curve instructions. */
+  readonly allowSynthetic?: boolean;
+  /** Native multi-hop consumes the entire last budget even if it buys zero extra atoms. */
+  readonly route?: boolean;
+}
 
 function insufficientLiquidity(): never {
   fail({
     code: "INSUFFICIENT_LIQUIDITY",
     protocol: "pump",
-    message: "Swap exceeds the supported bonding curve liquidity",
+    message: "Swap exceeds the available Pump curve or synthetic pool liquidity",
   });
 }
 
-function feesFor(amount: bigint, rates: PumpFees) {
+function feesFor(amount: bigint, rates: PumpFees, curve: PumpCurve): readonly SwapFee[] {
   return [
     {
-      kind: "trade" as const,
-      mint: NATIVE_SOL_MINT,
+      kind: "trade",
+      mint: curve.quoteMint,
       amount: ceilDiv(amount * rates.protocolBps, 10_000n),
     },
     {
-      kind: "creator" as const,
-      mint: NATIVE_SOL_MINT,
+      kind: "creator",
+      mint: curve.quoteMint,
       amount: ceilDiv(amount * rates.creatorBps, 10_000n),
     },
   ];
 }
+function totalFees(fees: readonly SwapFee[]): bigint {
+  return fees.reduce((sum, fee) => sum + fee.amount, 0n);
+}
+function buyNet(budget: bigint, rates: PumpFees, curve: PumpCurve) {
+  let net = (budget * 10_000n) / (10_000n + rates.protocolBps + rates.creatorBps);
+  const fees = feesFor(net, rates, curve);
+  const cost = net + totalFees(fees);
+  if (cost > budget) net -= cost - budget;
+  return { net, fees };
+}
+function curveCost(curve: PumpCurve, tokens: bigint): bigint {
+  if (tokens >= curve.virtualTokens) insufficientLiquidity();
+  return (tokens * curve.virtualSol) / (curve.virtualTokens - tokens) + 1n;
+}
+function futurePool(curve: PumpCurve, curveNet: bigint, options?: PumpQuoteOptions) {
+  if (!options?.allowSynthetic) insufficientLiquidity();
+  const base = options.baseVaultBalance - curve.realTokens;
+  const quote = curve.realSol + curveNet - options.migrationFee;
+  if (base <= 0n || quote <= 0n) insufficientLiquidity();
+  return { base, quote };
+}
+function combineFees(
+  first: readonly SwapFee[],
+  second: readonly SwapFee[],
+): readonly SwapFee[] {
+  return first.map((fee, index) => ({
+    ...fee,
+    amount: fee.amount + second[index]!.amount,
+  }));
+}
 
-/** Mirrors the native Pump buy, buy_exact_sol_in and sell integer contracts; no inverse execution modes. */
+/**
+ * Price native Pump instructions against immutable observations using atomic integer arithmetic.
+ * @remarks V3 completion prices each leg separately and charges each leg's rounded fees.
+ * `expectedAmountIn` can be smaller than an exact-input budget if its final tail buys no token atom.
+ * Route callers supply the route's effective fee mask and set `route` to match its consume-all contract.
+ */
 export function quotePump(
   request: SwapRequest,
   curve: PumpCurve,
   rates: PumpFees,
   isBuy: boolean,
+  options?: PumpQuoteOptions,
 ): SwapQuote {
   if (request.amount.kind === "exactOut") {
     if (!isBuy)
@@ -44,16 +90,22 @@ export function quotePump(
         code: "UNSUPPORTED_SWAP_MODE",
         protocol: "pump",
         mode: "exactOut",
-        message:
-          "Pump token-to-SOL swaps have no supported native exact-output instruction",
+        message: "Pump sells have no native exact-output instruction",
       });
     const amountOut = request.amount.amountOut;
-    if (amountOut > curve.realTokens || amountOut >= curve.virtualTokens)
-      insufficientLiquidity();
-    const netSol =
-      (amountOut * curve.virtualSol) / (curve.virtualTokens - amountOut) + 1n;
-    const fees = feesFor(netSol, rates);
-    const expectedAmountIn = netSol + fees.reduce((sum, fee) => sum + fee.amount, 0n);
+    const curveTokens = amountOut < curve.realTokens ? amountOut : curve.realTokens;
+    const net = curveCost(curve, curveTokens);
+    let fees = feesFor(net, rates, curve);
+    let expectedAmountIn = net + totalFees(fees);
+    if (amountOut > curve.realTokens) {
+      const pool = futurePool(curve, net, options);
+      const extra = amountOut - curve.realTokens;
+      if (extra >= pool.base) insufficientLiquidity();
+      const poolNet = ceilDiv(pool.quote * extra, pool.base - extra);
+      const poolFees = feesFor(poolNet, rates, curve);
+      expectedAmountIn += poolNet + totalFees(poolFees);
+      fees = combineFees(fees, poolFees);
+    }
     assertAmount(expectedAmountIn, "expectedAmountIn");
     return {
       kind: "exactOut",
@@ -65,23 +117,38 @@ export function quotePump(
     };
   }
   const amountIn = request.amount.amountIn;
-  let netSol: bigint;
+  let expectedAmountIn = amountIn;
   let expectedAmountOut: bigint;
   let fees: readonly SwapFee[];
   if (isBuy) {
-    netSol = (amountIn * 10_000n) / (10_000n + rates.protocolBps + rates.creatorBps);
-    fees = feesFor(netSol, rates);
-    const totalFees = fees.reduce((sum, fee) => sum + fee.amount, 0n);
-    if (netSol + totalFees > amountIn) netSol -= netSol + totalFees - amountIn;
-    if (netSol <= 1n) insufficientLiquidity();
+    const input = buyNet(amountIn, rates, curve);
+    if (input.net <= 1n) insufficientLiquidity();
+    fees = input.fees;
     expectedAmountOut =
-      ((netSol - 1n) * curve.virtualTokens) / (curve.virtualSol + netSol - 1n);
-    if (expectedAmountOut > curve.realTokens) insufficientLiquidity();
+      ((input.net - 1n) * curve.virtualTokens) / (curve.virtualSol + input.net - 1n);
+    if (expectedAmountOut > curve.realTokens) {
+      const net = curveCost(curve, curve.realTokens);
+      const pool = futurePool(curve, net, options);
+      fees = feesFor(net, rates, curve);
+      const curveTotal = net + totalFees(fees);
+      const left = amountIn - curveTotal;
+      const poolInput =
+        left > 0n
+          ? buyNet(left, rates, curve)
+          : { net: 0n, fees: feesFor(0n, rates, curve) };
+      const extra =
+        poolInput.net > 1n
+          ? ((poolInput.net - 1n) * pool.base) / (pool.quote + poolInput.net - 1n)
+          : 0n;
+      expectedAmountOut = curve.realTokens + extra;
+      if (extra > 0n || options?.route) fees = combineFees(fees, poolInput.fees);
+      else expectedAmountIn = curveTotal;
+    }
   } else {
-    netSol = (amountIn * curve.virtualSol) / (curve.virtualTokens + amountIn);
-    if (netSol > curve.realSol) insufficientLiquidity();
-    fees = feesFor(netSol, rates);
-    expectedAmountOut = netSol - fees.reduce((sum, fee) => sum + fee.amount, 0n);
+    const gross = (amountIn * curve.virtualSol) / (curve.virtualTokens + amountIn);
+    if (gross > curve.realSol) insufficientLiquidity();
+    fees = feesFor(gross, rates, curve);
+    expectedAmountOut = gross - totalFees(fees);
   }
   if (expectedAmountOut <= 0n) insufficientLiquidity();
   assertAmount(expectedAmountOut, "expectedAmountOut");
@@ -95,7 +162,7 @@ export function quotePump(
   return {
     kind: "exactIn",
     amountIn,
-    expectedAmountIn: amountIn,
+    expectedAmountIn,
     expectedAmountOut,
     minimumAmountOut,
     fees,

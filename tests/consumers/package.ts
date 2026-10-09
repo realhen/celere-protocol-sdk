@@ -112,3 +112,40 @@ const invalidNativeArgs: RaydiumCpmmSwapBaseInputArgs = {
   minimumAmountOut: 1n,
 };
 void invalidNativeArgs;
+
+import { createRouteSdk, type RouteRequest } from "celere-protocol-sdk/core";
+import { pumpRouteAdapter } from "celere-protocol-sdk/protocols/pump-routes";
+import { buildRouteInstructions, getRouteRequirements } from "celere-protocol-sdk";
+import {
+  getPumpBuyV3Instruction,
+  getPumpSweepCreatorFeeInstruction,
+  type PumpSweepCreatorFeeAccounts,
+} from "celere-protocol-sdk/instructions/pump";
+import {
+  getPumpAmmMultiHopSwapInstruction,
+  getPumpAmmSweepProtocolFeeInstruction,
+  type PumpAmmSweepProtocolFeeAccounts,
+} from "celere-protocol-sdk/instructions/pump-amm";
+declare const routeRequest: RouteRequest;
+const routeSubset = createRouteSdk([pumpRouteAdapter]);
+const routeRequirements = await getRouteRequirements(routeRequest);
+const route = await buildRouteInstructions(routeRequest);
+if (route.ok) {
+  const amount: bigint | undefined = route.value.hops[0]?.quote.expectedAmountOut;
+  compiler({
+    feePayer: routeRequest.payer,
+    instructions: route.value.instructions,
+    lifetime: { blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1n },
+  });
+  void amount;
+}
+declare const curveSweepAccounts: PumpSweepCreatorFeeAccounts;
+declare const poolSweepAccounts: PumpAmmSweepProtocolFeeAccounts;
+void [
+  routeSubset,
+  routeRequirements,
+  getPumpBuyV3Instruction,
+  getPumpAmmMultiHopSwapInstruction,
+  getPumpSweepCreatorFeeInstruction(curveSweepAccounts),
+  getPumpAmmSweepProtocolFeeInstruction(poolSweepAccounts),
+];

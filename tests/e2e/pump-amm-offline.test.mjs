@@ -97,6 +97,6 @@ test("Pump AMM caller resolves requirements and gets structured unsupported and 
   request.snapshot.accounts[request.pool].data[244] = 0;
   request.snapshot.accounts[fixture.buybackAta] = null;
   const absent = await buildSwapInstructions(request);
-  assert.equal(absent.ok, false);
-  assert.equal(absent.error.code, "INVALID_ACCOUNT");
+  assert.equal(absent.ok, true);
+  assert.equal(absent.value.setupInstructions.length, 1);
 });

@@ -19,3 +19,15 @@ export type {
 } from "./types.js";
 export { address } from "@solana/kit";
 export type { Address, Instruction } from "@solana/kit";
+
+export { createRouteSdk } from "./routes.js";
+export type { RouteSdk } from "./routes.js";
+export type {
+  RouteHop,
+  RouteRequest,
+  RouteRequirements,
+  RouteHopQuote,
+  RouteBuild,
+  ProtocolRoute,
+  RouteAdapter,
+} from "./route-types.js";

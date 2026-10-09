@@ -5,6 +5,7 @@ import { fail } from "../../core/errors.js";
 import { requireAccount } from "../../core/snapshot.js";
 import type { AccountSnapshot, SnapshotAccount } from "../../core/types.js";
 
+import { readPumpFeeSchedule } from "./fees.js";
 import { PUMP_AMM_PROGRAM, PUMP_FEE_PROGRAM as AMM_FEE_PROGRAM } from "./constants.js";
 export { PUMP_AMM_PROGRAM, AMM_FEE_PROGRAM };
 export { AMM_SYSTEM_PROGRAM, AMM_QUOTE_MINT };
@@ -20,6 +21,8 @@ export interface PumpAmmPool {
   readonly quoteVault: Address;
   readonly coinCreator: Address;
   readonly virtualQuoteReserves: bigint;
+  readonly creatorFeeBps: bigint;
+  readonly isHolderReward: boolean;
   readonly protocolFees: bigint;
   readonly creatorFees: bigint;
 }
@@ -75,11 +78,9 @@ export function readAmmPool(snapshot: AccountSnapshot, pool: Address): PumpAmmPo
     unsupported("pool-layout");
   if ((account.data[243] ?? 0) !== 0) unsupported("mayhem");
   if ((account.data[244] ?? 0) !== 0) unsupported("cashback");
-  if (account.data.length >= 270 && readU64(account, 261) !== 0n)
-    unsupported("configured-creator-fee");
-  if ((account.data[270] ?? 0) !== 0) unsupported("holder-rewards");
+  if ((account.data[269] ?? 0) > 1 || (account.data[270] ?? 0) > 1)
+    invalid(account, "Invalid Pump AMM pool boolean flag");
   const quoteMint = readAddress(account, 75);
-  if (quoteMint !== AMM_QUOTE_MINT) unsupported("non-WSOL-quote");
   const view = new DataView(
     account.data.buffer,
     account.data.byteOffset,
@@ -99,6 +100,8 @@ export function readAmmPool(snapshot: AccountSnapshot, pool: Address): PumpAmmPo
       account.data.length >= 261
         ? readU64(account, 245) | (BigInt(view.getBigInt64(253, true)) << 64n)
         : 0n,
+    creatorFeeBps: account.data.length >= 270 ? readU64(account, 261) : 0n,
+    isHolderReward: account.data.length >= 271 && account.data[270] === 1,
     protocolFees: account.data.length >= 287 ? readU64(account, 271) : 0n,
     creatorFees: account.data.length >= 287 ? readU64(account, 279) : 0n,
   };
@@ -108,7 +111,7 @@ export function readAmmPool(snapshot: AccountSnapshot, pool: Address): PumpAmmPo
 export function readAmmGlobal(
   snapshot: AccountSnapshot,
   global: Address,
-): { buybackRecipient: Address; disabled: number } {
+): { buybackRecipient: Address; disabled: number; creatorFeeConfigurable: boolean } {
   const account = requireAccount(
     snapshot,
     global,
@@ -121,16 +124,35 @@ export function readAmmGlobal(
   ).find((recipient) => recipient !== AMM_SYSTEM_PROGRAM);
   if (buybackRecipient === undefined || readU64(account, 899) > 10_000n)
     invalid(account, "Invalid Pump AMM buyback configuration");
-  return { buybackRecipient, disabled: account.data[56]! };
+  if ((account.data[940] ?? 0) > 1)
+    invalid(account, "Invalid Pump AMM configurable creator fee flag");
+  return {
+    buybackRecipient,
+    disabled: account.data[56]!,
+    creatorFeeConfigurable: account.data.length >= 949 && account.data[940] === 1,
+  };
 }
 
-/** Canonical SOL pools pay market-cap tiers; other pools pay the fee program's flat schedule. */
+/** Inputs that select the native fee schedule and optional per-pool creator override. */
+export interface PumpAmmFeeOptions {
+  readonly quoteMint?: Address;
+  readonly creatorFeeConfigurable?: boolean;
+  readonly creatorFeeBps?: bigint;
+}
+
+/**
+ * Select native SOL, stable, or exotic fees for canonical pools; permissionless pools pay flat fees.
+ * @remarks Version length gates are significant: stale bytes after a shortened tier vector in an
+ * older account must not be interpreted as a newer schedule. Creator fees retain their category
+ * on holder-reward pools; only the eventual payout destination changes.
+ */
 export function readAmmFees(
   snapshot: AccountSnapshot,
   feeConfig: Address,
   canonical: boolean,
   marketCap: bigint,
   coinCreator: Address,
+  options: PumpAmmFeeOptions = {},
 ): PumpAmmFeeRates {
   const account = requireAccount(
     snapshot,
@@ -139,31 +161,20 @@ export function readAmmFees(
     AMM_FEE_PROGRAM,
   );
   discriminator(account, [143, 52, 146, 187, 219, 123, 76, 155], 2512);
-  const readRates = (offset: number): PumpAmmFeeRates => ({
-    lpBps: readU64(account, offset),
-    protocolBps: readU64(account, offset + 8),
-    creatorBps: coinCreator === AMM_SYSTEM_PROGRAM ? 0n : readU64(account, offset + 16),
-  });
-  let rates = readRates(41);
-  if (canonical) {
-    const count = new DataView(
-      account.data.buffer,
-      account.data.byteOffset,
-      account.data.byteLength,
-    ).getUint32(65, true);
-    if (count === 0 || count > 50 || 69 + count * 40 > account.data.length)
-      invalid(account, "Invalid Pump AMM fee tier vector");
-    let previous = -1n;
-    for (let index = 0; index < count; index++) {
-      const offset = 69 + index * 40;
-      const threshold = readU64(account, offset) | (readU64(account, offset + 8) << 64n);
-      if (threshold <= previous)
-        invalid(account, "Pump AMM fee tiers must be strictly ordered");
-      previous = threshold;
-      if (index === 0 || threshold <= marketCap) rates = readRates(offset + 16);
-    }
-  }
-  if (rates.lpBps + rates.protocolBps + rates.creatorBps >= 10_000n)
+  const rates = readPumpFeeSchedule(
+    account,
+    canonical,
+    marketCap,
+    options.quoteMint ?? AMM_QUOTE_MINT,
+  );
+  const creatorBps =
+    coinCreator === AMM_SYSTEM_PROGRAM
+      ? 0n
+      : options.creatorFeeConfigurable && (options.creatorFeeBps ?? 0n) > 0n
+        ? options.creatorFeeBps!
+        : rates.creatorBps;
+  const result = { ...rates, creatorBps };
+  if (result.lpBps + result.protocolBps + result.creatorBps >= 10_000n)
     invalid(account, "Unsupported Pump AMM total fee rate");
-  return rates;
+  return result;
 }

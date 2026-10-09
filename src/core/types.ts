@@ -80,6 +80,7 @@ export interface SwapRequirements {
 
 /** Fee amounts use the indicated mint's atomic units; components must not be double counted. */
 export interface SwapFee {
+  /** Native fee category; creator fees can accrue to a sharing or holder-reward vault. */
   readonly kind: "trade" | "creator" | "transfer";
   readonly mint: Address;
   readonly amount: bigint;
@@ -129,6 +130,8 @@ export interface SwapBuild {
 
 /** Internal adapter output uses only portable Solana data, never SDK clients or keypairs. */
 export interface ProtocolSwap {
+  /** Idempotent setup for protocol-owned dependencies observed absent in the snapshot. */
+  readonly setupInstructions?: readonly Instruction[];
   readonly instructions: readonly Instruction[];
   readonly quote: SwapQuote;
   readonly mayPartiallyFill: boolean;

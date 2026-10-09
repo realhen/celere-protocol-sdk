@@ -18,6 +18,10 @@ export { TOKEN_PROGRAM, TOKEN_2022_PROGRAM };
  * @remarks The official Token client does not export the native mint address.
  */
 export const WRAPPED_SOL_MINT = address("So11111111111111111111111111111111111111112");
+/** Token-2022 native SOL mint; the pinned official Token-2022 client does not export it. */
+export const TOKEN_2022_NATIVE_MINT = address(
+  "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP",
+);
 const addressDecoder = getAddressDecoder();
 
 /** Mint fields needed by common instruction construction; no third-party SDK objects. */

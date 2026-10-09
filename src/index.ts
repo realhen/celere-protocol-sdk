@@ -1,3 +1,5 @@
+import { createRouteSdk } from "./core/routes.js";
+import { pumpRouteAdapter } from "./protocols/pump/route.js";
 import { createProtocolSdk } from "./core/sdk.js";
 import { boopAdapter } from "./protocols/boop/adapter.js";
 import { heavenAdapter } from "./protocols/heaven/amm.js";
@@ -40,6 +42,13 @@ const sdk = createProtocolSdk([
   riseRichAdapter,
   metadaoAdapter,
 ]);
+
+const routeSdk = createRouteSdk([pumpRouteAdapter]);
+
+/** Discover account observations for a caller-selected native route without I/O. */
+export const getRouteRequirements = routeSdk.getRouteRequirements;
+/** Build one native multi-hop instruction from immutable caller-owned snapshots. */
+export const buildRouteInstructions = routeSdk.buildRouteInstructions;
 
 /** Discover required account observations without performing network requests. */
 export const getSwapRequirements = sdk.getSwapRequirements;

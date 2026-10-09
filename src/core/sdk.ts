@@ -14,7 +14,8 @@ import type {
   SwapRequirements,
 } from "./types.js";
 
-function validateRequest(request: SwapRequest): void {
+/** Validate caller intent and immutable observation metadata without performing I/O. */
+export function validateRequest(request: SwapRequest): void {
   if (request === null || typeof request !== "object")
     fail({
       code: "INVALID_REQUEST",
@@ -236,7 +237,8 @@ export function createProtocolSdk(protocols: readonly ProtocolAdapter[]): Protoc
             message: "This native instruction cannot guarantee a complete fill",
             protocol: adapter.id,
           });
-        const instructions = [...tokenPlan.setup, ...swap.instructions];
+        const setupInstructions = [...tokenPlan.setup, ...(swap.setupInstructions ?? [])];
+        const instructions = [...setupInstructions, ...swap.instructions];
         const requiredSigners = [
           ...new Set(
             instructions.flatMap(
@@ -260,7 +262,7 @@ export function createProtocolSdk(protocols: readonly ProtocolAdapter[]): Protoc
             outputMint: request.outputMint,
             quote: swap.quote,
             instructions,
-            setupInstructions: tokenPlan.setup,
+            setupInstructions,
             swapInstructions: swap.instructions,
             cleanupInstructions: [],
             requiredSigners,
