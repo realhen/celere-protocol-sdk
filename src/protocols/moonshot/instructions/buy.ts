@@ -57,10 +57,7 @@ export interface MoonshotBuyArgs {
  * Callers validate account identities, PDAs, state, amounts and execution limits.
  * @throws Synchronous codec errors if an argument cannot be encoded.
  */
-export function getMoonshotBuyInstruction(
-  accounts: MoonshotBuyAccounts,
-  args: MoonshotBuyArgs,
-): Instruction {
+export function buy(accounts: MoonshotBuyAccounts, args: MoonshotBuyArgs): Instruction {
   const data = instructionDataEncoder.encode({
     discriminator: DISCRIMINATOR,
     tokenAmount: args.tokenAmount,

@@ -23,10 +23,10 @@ import type {
 } from "../../core/types.js";
 import { quotePump } from "./math.js";
 import {
-  getPumpBuyExactSolInInstruction,
-  getPumpBuyV3Instruction,
-  getPumpBuyExactQuoteInV3Instruction,
-  getPumpSellV3Instruction,
+  buy_exact_sol_in,
+  buy_v3,
+  buy_exact_quote_in_v3,
+  sell_v3,
 } from "./instructions/bonding-curve/index.js";
 import {
   NATIVE_SOL_MINT,
@@ -241,7 +241,7 @@ async function build(
 
     return {
       instructions: [
-        getPumpBuyExactSolInInstruction(instructionAccounts, {
+        buy_exact_sol_in(instructionAccounts, {
           spendableSolIn: quote.amountIn,
           minTokensOut: quote.minimumAmountOut,
         }),
@@ -325,17 +325,17 @@ async function build(
   if (quote.kind === "exactOut") {
     assertAmount(quote.amountOut, "instructionAmount");
     assertAmount(quote.maximumAmountIn, "instructionLimit");
-    instruction = getPumpBuyV3Instruction(v3Accounts, {
+    instruction = buy_v3(v3Accounts, {
       amount: quote.amountOut,
       maxSolCost: quote.maximumAmountIn,
     });
   } else if (isBuy)
-    instruction = getPumpBuyExactQuoteInV3Instruction(v3Accounts, {
+    instruction = buy_exact_quote_in_v3(v3Accounts, {
       spendableQuoteIn: quote.amountIn,
       minTokensOut: quote.minimumAmountOut,
     });
   else
-    instruction = getPumpSellV3Instruction(v3Accounts, {
+    instruction = sell_v3(v3Accounts, {
       amount: quote.amountIn,
       minSolOutput: quote.minimumAmountOut,
     });

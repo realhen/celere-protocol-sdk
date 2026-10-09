@@ -19,10 +19,7 @@ import type {
   SwapQuote,
   SwapRequest,
 } from "../../core/types.js";
-import {
-  getRaydiumCpmmSwapBaseInputInstruction,
-  getRaydiumCpmmSwapBaseOutputInstruction,
-} from "./instructions/cpmm/index.js";
+import { swap_base_input, swap_base_output } from "./instructions/cpmm/index.js";
 import { RAYDIUM_CPMM_PROGRAM } from "./constants.js";
 export { RAYDIUM_CPMM_PROGRAM } from "./constants.js";
 
@@ -378,11 +375,11 @@ async function build(
   };
   const instruction =
     quote.kind === "exactIn"
-      ? getRaydiumCpmmSwapBaseInputInstruction(instructionAccounts, {
+      ? swap_base_input(instructionAccounts, {
           amountIn: quote.amountIn,
           minimumAmountOut: quote.minimumAmountOut,
         })
-      : getRaydiumCpmmSwapBaseOutputInstruction(instructionAccounts, {
+      : swap_base_output(instructionAccounts, {
           maximumAmountIn: quote.maximumAmountIn,
           amountOut: quote.amountOut,
         });

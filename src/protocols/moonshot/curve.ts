@@ -34,10 +34,7 @@ import type {
 } from "../../core/types.js";
 
 import { MOONSHOT_PROGRAM } from "./constants.js";
-import {
-  getMoonshotBuyInstruction,
-  getMoonshotSellInstruction,
-} from "./instructions/index.js";
+import * as instructions from "./instructions/index.js";
 export { MOONSHOT_PROGRAM } from "./constants.js";
 const encoder = getAddressEncoder();
 const decoder = getAddressDecoder();
@@ -361,26 +358,26 @@ async function build(
   let instruction: Instruction;
   if (buy) {
     if (quote.kind === "exactIn") {
-      instruction = getMoonshotBuyInstruction(instructionAccounts, {
+      instruction = instructions.buy(instructionAccounts, {
         tokenAmount: quote.minimumAmountOut,
         collateralAmount: quote.amountIn,
         fixedSide: 0,
       });
     } else {
-      instruction = getMoonshotBuyInstruction(instructionAccounts, {
+      instruction = instructions.buy(instructionAccounts, {
         tokenAmount: quote.amountOut,
         collateralAmount: quote.maximumAmountIn,
         fixedSide: 1,
       });
     }
   } else if (quote.kind === "exactIn") {
-    instruction = getMoonshotSellInstruction(instructionAccounts, {
+    instruction = instructions.sell(instructionAccounts, {
       tokenAmount: quote.amountIn,
       collateralAmount: quote.minimumAmountOut,
       fixedSide: 0,
     });
   } else {
-    instruction = getMoonshotSellInstruction(instructionAccounts, {
+    instruction = instructions.sell(instructionAccounts, {
       tokenAmount: quote.maximumAmountIn,
       collateralAmount: quote.amountOut,
       fixedSide: 1,

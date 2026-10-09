@@ -12,10 +12,7 @@ import type {
   SwapQuote,
   SwapRequest,
 } from "../../core/types.js";
-import {
-  getRaydiumAmmV4SwapBaseInV2Instruction,
-  getRaydiumAmmV4SwapBaseOutV2Instruction,
-} from "./instructions/amm-v4/index.js";
+import { swap_base_in_v2, swap_base_out_v2 } from "./instructions/amm-v4/index.js";
 import { RAYDIUM_AMM_V4_PROGRAM } from "./constants.js";
 export { RAYDIUM_AMM_V4_PROGRAM } from "./constants.js";
 
@@ -246,11 +243,11 @@ async function build(
   };
   const instruction =
     quote.kind === "exactIn"
-      ? getRaydiumAmmV4SwapBaseInV2Instruction(instructionAccounts, {
+      ? swap_base_in_v2(instructionAccounts, {
           amountIn: quote.amountIn,
           minimumAmountOut: quote.minimumAmountOut,
         })
-      : getRaydiumAmmV4SwapBaseOutV2Instruction(instructionAccounts, {
+      : swap_base_out_v2(instructionAccounts, {
           maximumAmountIn: quote.maximumAmountIn,
           amountOut: quote.amountOut,
         });

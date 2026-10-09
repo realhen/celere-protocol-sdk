@@ -43,10 +43,7 @@ const dataEncoder = getStructEncoder([
  * The caller validates accounts, PDAs, pool state, and slippage before signing.
  * @throws Synchronously when numeric arguments exceed their codec ranges.
  */
-export function getVertigoBuyInstruction(
-  accounts: VertigoBuyAccounts,
-  args: VertigoBuyArgs,
-): Instruction {
+export function buy(accounts: VertigoBuyAccounts, args: VertigoBuyArgs): Instruction {
   const data = dataEncoder.encode({
     discriminator: new Uint8Array([102, 6, 61, 18, 1, 218, 235, 234]),
     amountIn: args.amountIn,

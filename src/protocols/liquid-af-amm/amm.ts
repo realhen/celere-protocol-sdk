@@ -30,9 +30,9 @@ import {
 } from "../liquid-af/shared-state.js";
 import { LIQUID_AF_AMM_PROGRAM } from "./constants.js";
 import {
-  getLiquidAfAmmBuyExactInInstruction,
-  getLiquidAfAmmSellExactInInstruction,
-  getLiquidAfAmmSellExactOutInstruction,
+  buy_exact_in,
+  sell_exact_in,
+  sell_exact_out,
   type LiquidAfAmmSwapAccounts,
 } from "./instructions/index.js";
 export { LIQUID_AF_AMM_PROGRAM } from "./constants.js";
@@ -514,7 +514,7 @@ async function build(
   if (request.amount.kind === "exactOut") {
     const maximumAmountIn = maximumInput(amountIn, request.slippageBps);
     const args = { amountOut, maximumAmountIn };
-    const instruction = getLiquidAfAmmSellExactOutInstruction(accounts, args);
+    const instruction = sell_exact_out(accounts, args);
     return {
       instructions: [instruction],
       quote: {
@@ -531,8 +531,8 @@ async function build(
   const minimumAmountOut = minimumOutput(amountOut, request.slippageBps);
   const args = { amountIn, minimumAmountOut };
   const instruction = pool.buy
-    ? getLiquidAfAmmBuyExactInInstruction(accounts, args)
-    : getLiquidAfAmmSellExactInInstruction(accounts, args);
+    ? buy_exact_in(accounts, args)
+    : sell_exact_in(accounts, args);
   return {
     instructions: [instruction],
     quote: {

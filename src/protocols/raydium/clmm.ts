@@ -32,7 +32,7 @@ import {
   clmmSqrtPriceAtTick,
   clmmSwapStep,
 } from "./clmm-math.js";
-import { getRaydiumClmmSwapInstruction } from "./instructions/clmm/index.js";
+import { swap } from "./instructions/clmm/index.js";
 import { RAYDIUM_CLMM_PROGRAM } from "./constants.js";
 export { RAYDIUM_CLMM_PROGRAM } from "./constants.js";
 const addressDecoder = getAddressDecoder();
@@ -542,7 +542,7 @@ async function build(
   return {
     quote,
     mayPartiallyFill: false,
-    instructions: [getRaydiumClmmSwapInstruction(instructionAccounts, instructionArgs)],
+    instructions: [swap(instructionAccounts, instructionArgs)],
   };
 }
 

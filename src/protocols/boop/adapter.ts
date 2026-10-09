@@ -18,10 +18,7 @@ import type {
   SwapRequest,
 } from "../../core/types.js";
 import { BOOP_PROGRAM } from "./constants.js";
-import {
-  getBoopBuyTokenInstruction,
-  getBoopSellTokenInstruction,
-} from "./instructions/index.js";
+import { buy_token, sell_token } from "./instructions/index.js";
 export { BOOP_PROGRAM } from "./constants.js";
 const decoder = getAddressDecoder(),
   encoder = getAddressEncoder();
@@ -294,7 +291,7 @@ async function build(
     config: derived.config,
   };
   const instruction = isBuy
-    ? getBoopBuyTokenInstruction(
+    ? buy_token(
         {
           ...common,
           recipientTokenAccount: accounts.output,
@@ -303,7 +300,7 @@ async function build(
         },
         { buyAmount: quote.amountIn, amountOutMin: quote.minimumAmountOut },
       )
-    : getBoopSellTokenInstruction(
+    : sell_token(
         {
           ...common,
           sellerTokenAccount: accounts.input,

@@ -46,7 +46,7 @@ export interface MeteoraDammV1SwapArgs {
  * limits; this function neither derives addresses nor attaches signer objects.
  * @throws Synchronous codec errors for values outside the native integer range.
  */
-export function getMeteoraDammV1SwapInstruction(
+export function swap(
   accounts: MeteoraDammV1SwapAccounts,
   args: MeteoraDammV1SwapArgs,
 ): Instruction {

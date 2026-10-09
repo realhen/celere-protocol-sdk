@@ -42,9 +42,9 @@ import { PUMP_AMM_PROGRAM, PUMP_PROGRAM, PUMP_FEE_PROGRAM } from "./constants.js
 import { quotePump } from "./math.js";
 import { readCurve, readFees, readPumpGlobal, type PumpCurve } from "./state.js";
 import {
-  getPumpAmmMultiHopSwapInstruction,
+  multi_hop_swap,
   type PumpAmmMultiHopSwapHopAccounts,
-} from "./instructions/amm/multi-hop-swap.js";
+} from "./instructions/amm/multi_hop_swap.js";
 
 const bytes = getAddressEncoder();
 const utf8 = new TextEncoder();
@@ -427,7 +427,7 @@ async function build(
       field: "slippageBps",
       message: "Native routes require a nonzero minimum output",
     });
-  const instruction = getPumpAmmMultiHopSwapInstruction(
+  const instruction = multi_hop_swap(
     {
       user: request.owner,
       userInTokenAccount: accounts.input,

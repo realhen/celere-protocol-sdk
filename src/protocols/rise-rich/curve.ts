@@ -18,8 +18,8 @@ import type {
 } from "../../core/types.js";
 import { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants.js";
 import {
-  getRiseRichBuyExactCashInInstruction,
-  getRiseRichSellExactTokenInInstruction,
+  buy_with_exact_cash_in,
+  sell_with_exact_token_in,
 } from "./instructions/index.js";
 export { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants.js";
 const encoder = getAddressEncoder(),
@@ -460,7 +460,7 @@ async function build(
     program: RISE_RICH_PROGRAM,
   };
   const instruction = buy
-    ? getRiseRichBuyExactCashInInstruction(ixAccounts, {
+    ? buy_with_exact_cash_in(ixAccounts, {
         cashIn: amount,
         minTokenOut: quote.minimumAmountOut,
         newShoulderEnd: 0n,
@@ -469,7 +469,7 @@ async function build(
         maxAreaShrinkageToleranceUnits: 100_000_000n,
         minLiqRatio: new Uint8Array(16),
       })
-    : getRiseRichSellExactTokenInInstruction(ixAccounts, {
+    : sell_with_exact_token_in(ixAccounts, {
         tokenIn: amount,
         minCashOut: quote.minimumAmountOut,
       });

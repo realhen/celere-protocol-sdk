@@ -3,14 +3,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner, getAddressDecoder, getAddressEncoder } from "@solana/kit";
 import { buildSwapInstructions } from "../../dist/index.js";
-import {
-  getPumpSweepCreatorFeeInstruction,
-  getPumpSweepProtocolFeeInstruction,
-} from "../../dist/protocols/pump/instructions/bonding-curve/index.js";
-import {
-  getPumpAmmSweepCreatorFeeInstruction,
-  getPumpAmmSweepProtocolFeeInstruction,
-} from "../../dist/protocols/pump/instructions/amm/index.js";
+import * as pump from "../../dist/protocols/pump/instructions/bonding-curve/index.js";
+import * as pumpAmm from "../../dist/protocols/pump/instructions/amm/index.js";
 import { pumpV3Fixture } from "../fixtures/pump-v3.mjs";
 import { pumpAmmQuotesFixture } from "../fixtures/pump-amm-quotes.mjs";
 import {
@@ -125,9 +119,7 @@ test(
           eventAuthority: await pda(PUMP, "__event_authority"),
         };
         const builder =
-          kind === "creator"
-            ? getPumpSweepCreatorFeeInstruction
-            : getPumpSweepProtocolFeeInstruction;
+          kind === "creator" ? pump.sweep_creator_fee : pump.sweep_protocol_fee;
         const before = await data(f.pool),
           offset = kind === "creator" ? 125 : 133,
           fee = before.readBigUInt64LE(offset);
@@ -233,9 +225,7 @@ test(
           eventAuthority: await pda(PUMP_AMM, "__event_authority"),
         };
         const builder =
-          kind === "creator"
-            ? getPumpAmmSweepCreatorFeeInstruction
-            : getPumpAmmSweepProtocolFeeInstruction;
+          kind === "creator" ? pumpAmm.sweep_creator_fee : pumpAmm.sweep_protocol_fee;
         const before = await data(f.pool),
           offset = kind === "creator" ? 279 : 271,
           fee = before.readBigUInt64LE(offset),

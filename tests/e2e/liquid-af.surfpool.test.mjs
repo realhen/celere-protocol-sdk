@@ -240,7 +240,7 @@ test(
       }
       const instructions = exactOut
         ? [
-            raw.getLiquidAfBuyExactOutNativeInstruction(f.instructionAccounts, {
+            raw.buy_exact_out_native(f.instructionAccounts, {
               amountOut: 1_000_001n,
               maximumAmountIn: 10_000_000n,
             }),

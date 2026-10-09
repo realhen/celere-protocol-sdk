@@ -19,9 +19,9 @@ import type {
 } from "../../core/types.js";
 import { LIQUID_AF_PROGRAM } from "./constants.js";
 import {
-  getLiquidAfBuyExactInNativeInstruction,
-  getLiquidAfSellExactInNativeInstruction,
-  getLiquidAfSellExactOutNativeInstruction,
+  buy_exact_in_native,
+  sell_exact_in_native,
+  sell_exact_out_native,
   type LiquidAfNativeSwapAccounts,
 } from "./instructions/index.js";
 import {
@@ -380,7 +380,7 @@ async function build(
     const maximumAmountIn = maximumInput(amountIn, request.slippageBps);
     return {
       instructions: [
-        getLiquidAfSellExactOutNativeInstruction(accounts, {
+        sell_exact_out_native(accounts, {
           amountOut,
           maximumAmountIn,
         }),
@@ -399,8 +399,8 @@ async function build(
   const minimumAmountOut = minimumOutput(amountOut, request.slippageBps);
   const args = { amountIn: request.amount.amountIn, minimumAmountOut };
   const instruction = curve.buy
-    ? getLiquidAfBuyExactInNativeInstruction(accounts, args)
-    : getLiquidAfSellExactInNativeInstruction(accounts, args);
+    ? buy_exact_in_native(accounts, args)
+    : sell_exact_in_native(accounts, args);
   return {
     instructions: [instruction],
     quote: {

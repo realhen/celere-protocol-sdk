@@ -30,11 +30,7 @@ import {
 } from "./amm-state.js";
 
 import { PUMP_PROGRAM } from "./constants.js";
-import {
-  getPumpAmmBuyV2Instruction,
-  getPumpAmmBuyExactQuoteInV2Instruction,
-  getPumpAmmSellV2Instruction,
-} from "./instructions/amm/index.js";
+import { buy_v2, buy_exact_quote_in_v2, sell_v2 } from "./instructions/amm/index.js";
 
 const bytes = getAddressEncoder();
 const utf8 = new TextEncoder();
@@ -258,21 +254,21 @@ async function build(
   if (quote.kind === "exactOut") {
     assertAmount(quote.amountOut, "instructionAmount");
     assertAmount(quote.maximumAmountIn, "instructionLimit");
-    instruction = getPumpAmmBuyV2Instruction(instructionAccounts, {
+    instruction = buy_v2(instructionAccounts, {
       baseAmountOut: quote.amountOut,
       maxQuoteAmountIn: quote.maximumAmountIn,
     });
   } else if (isBuy) {
     assertAmount(quote.amountIn, "instructionAmount");
     assertAmount(quote.minimumAmountOut, "instructionLimit");
-    instruction = getPumpAmmBuyExactQuoteInV2Instruction(instructionAccounts, {
+    instruction = buy_exact_quote_in_v2(instructionAccounts, {
       spendableQuoteIn: quote.amountIn,
       minBaseAmountOut: quote.minimumAmountOut,
     });
   } else {
     assertAmount(quote.amountIn, "instructionAmount");
     assertAmount(quote.minimumAmountOut, "instructionLimit");
-    instruction = getPumpAmmSellV2Instruction(instructionAccounts, {
+    instruction = sell_v2(instructionAccounts, {
       baseAmountIn: quote.amountIn,
       minQuoteAmountOut: quote.minimumAmountOut,
     });

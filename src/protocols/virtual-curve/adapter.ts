@@ -18,7 +18,7 @@ import type {
   SwapRequest,
 } from "../../core/types.js";
 import { VIRTUAL_CURVE_PROGRAM, VIRTUAL_CURVE_AUTHORITY } from "./constants.js";
-import { getVirtualCurveSwap2Instruction } from "./instructions/swap2.js";
+import { swap2 } from "./instructions/swap2.js";
 import { calculateCurveSwap, type CurvePoint } from "./math.js";
 export { VIRTUAL_CURVE_PROGRAM, VIRTUAL_CURVE_AUTHORITY } from "./constants.js";
 const decoder = getAddressDecoder(),
@@ -346,7 +346,7 @@ async function build(
     programAddress: VIRTUAL_CURVE_PROGRAM,
     seeds: ["__event_authority"],
   });
-  const instruction = getVirtualCurveSwap2Instruction(
+  const instruction = swap2(
     {
       config: pool.config,
       pool: request.pool,

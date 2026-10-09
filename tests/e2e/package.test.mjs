@@ -23,6 +23,16 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       packed.files.some((file) => file.path === "dist/protocols/orca/offline-core.js"),
     );
     assert.ok(packed.files.some((file) => file.path === "licenses/ORCA-LICENSE"));
+    const instructionFiles = packed.files.filter(
+      (file) =>
+        file.path.includes("/instructions/") &&
+        file.path.endsWith(".js") &&
+        !["index.js", "accounts.js"].includes(file.path.split("/").at(-1)),
+    );
+    assert.equal(instructionFiles.length, 51);
+    for (const file of instructionFiles)
+      assert.match(file.path.split("/").at(-1), /^[a-z][a-z0-9_]*\.js$/);
+
     assert.ok(
       packed.files.every(
         (file) => !file.path.startsWith("tests/") && !file.path.startsWith("outputs/"),

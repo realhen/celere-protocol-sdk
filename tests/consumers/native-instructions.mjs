@@ -25,25 +25,30 @@ const { entrypoints, cases } = JSON.parse(
 let builderCount = 0;
 for (const entrypoint of entrypoints) {
   const exports = await import(`celere-protocol-sdk/${entrypoint}`);
-  const builders = Object.entries(exports).filter(([name]) =>
-    /^get.+Instruction$/.test(name),
+  const builders = Object.entries(exports).filter(
+    ([, value]) => typeof value === "function",
   );
   assert.ok(builders.length > 0, `${entrypoint} has no native builders`);
-  for (const [, builder] of builders) assert.equal(typeof builder, "function");
+  for (const [name, builder] of builders) {
+    assert.match(
+      name,
+      /^[a-z][a-z0-9_]*$/,
+      `${entrypoint} must expose native instruction names`,
+    );
+    assert.equal(builder.name, name);
+  }
   builderCount += builders.length;
 }
 
 const { compileTransaction } = await import("celere-protocol-sdk/transactions");
-const {
-  getRaydiumCpmmSwapBaseInputInstruction,
-  getRaydiumCpmmSwapBaseOutputInstruction,
-} = await import("celere-protocol-sdk/instructions/raydium-cpmm");
+const { swap_base_input, swap_base_output } =
+  await import("celere-protocol-sdk/instructions/raydium-cpmm");
 
 for (const scenario of cases) {
   const instruction =
     scenario.kind === "exactIn"
-      ? getRaydiumCpmmSwapBaseInputInstruction(scenario.accounts, scenario.args)
-      : getRaydiumCpmmSwapBaseOutputInstruction(scenario.accounts, scenario.args);
+      ? swap_base_input(scenario.accounts, scenario.args)
+      : swap_base_output(scenario.accounts, scenario.args);
   assert.deepEqual(instruction, scenario.expectedInstruction);
   const transaction = compileTransaction({
     instructions: [instruction],
@@ -62,7 +67,7 @@ for (const scenario of cases) {
 
 for (const amountIn of [-1n, 1n << 64n]) {
   assert.throws(() =>
-    getRaydiumCpmmSwapBaseInputInstruction(cases[0].accounts, {
+    swap_base_input(cases[0].accounts, {
       amountIn,
       minimumAmountOut: 0n,
     }),

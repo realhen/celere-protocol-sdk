@@ -52,7 +52,7 @@ const dataEncoder = getStructEncoder([
  * A zero sqrtPriceLimitX64 requires the program to fill the entire specified amount.
  * @throws Synchronously when numeric arguments exceed their codec ranges.
  */
-export function getRaydiumClmmSwapInstruction(
+export function swap(
   accounts: RaydiumClmmSwapAccounts,
   args: RaydiumClmmSwapArgs,
 ): Instruction {

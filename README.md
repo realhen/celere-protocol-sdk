@@ -109,10 +109,10 @@ The protocol-neutral swap API performs discovery, account validation, quoting, a
 
 ```ts
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import { getRaydiumCpmmSwapBaseInputInstruction } from "celere-protocol-sdk/instructions/raydium-cpmm";
+import { swap_base_input } from "celere-protocol-sdk/instructions/raydium-cpmm";
 import { compileTransaction } from "celere-protocol-sdk/transactions";
 
-const swap = getRaydiumCpmmSwapBaseInputInstruction(
+const swap = swap_base_input(
   {
     owner,
     authority,
@@ -141,9 +141,21 @@ const compiled = compileTransaction({
 });
 ```
 
-Each distinct native instruction has its own file. For example, [CPMM swap base input](src/protocols/raydium/instructions/cpmm/swap-base-input.ts) shows the discriminator, named binary fields, byte offsets and endianness, followed by every account in native order with its signer/writable role. [Pump buy](src/protocols/pump/instructions/bonding-curve/buy.ts) also makes the trailing native flags explicit. The adapters call these same builders.
+Each distinct native instruction has its own file, named exactly like its exported function and native ABI entry: `buy_v3.ts` exports `buy_v3`, `sell_v3.ts` exports `sell_v3`, and `swap_base_input.ts` exports `swap_base_input`. Version suffixes are preserved. Pump's separate `buy.ts` and `sell.ts` builders encode the legacy instructions; they never stand in for v3. These native names replace the former `get…Instruction` exports. The high-level swap and route API names are unchanged.
 
-Instruction entrypoints expose `get…Instruction` functions and their readonly account/argument interfaces. Available subpaths are `/instructions/pump`, `/instructions/pump-amm`, `/instructions/raydium-amm-v4`, `/instructions/raydium-cpmm`, `/instructions/raydium-clmm`, `/instructions/raydium-launchlab`, `/instructions/meteora-damm-v1`, `/instructions/meteora-damm-v2`, `/instructions/meteora-dlmm`, `/instructions/moonshot`, `/instructions/vertigo`, `/instructions/orca`, `/instructions/boop`, `/instructions/virtual-curve`, `/instructions/heaven`, `/instructions/rise-rich`, `/instructions/liquid-af`, `/instructions/liquid-af-amm`, `/instructions/metadao`, `/instructions/stable-swap`, and historical `/instructions/sugar`. They do not import quote adapters or Orca's math WASM.
+Use protocol-specific imports to distinguish shared instruction names:
+
+```ts
+import * as pump from "celere-protocol-sdk/instructions/pump";
+import * as pumpAmm from "celere-protocol-sdk/instructions/pump-amm";
+
+const curveBuy = pump.buy_v3(curveAccounts, curveArgs);
+const poolBuy = pumpAmm.buy_v2(poolAccounts, poolArgs);
+```
+
+For example, [CPMM swap base input](src/protocols/raydium/instructions/cpmm/swap_base_input.ts) shows the discriminator, named binary fields, byte offsets and endianness, followed by every account in native order with its signer/writable role. [Pump buy](src/protocols/pump/instructions/bonding-curve/buy.ts) also makes the trailing native flags explicit. The adapters call these same builders.
+
+Instruction entrypoints expose functions named exactly after the native instructions and their readonly account/argument interfaces. Available subpaths are `/instructions/pump`, `/instructions/pump-amm`, `/instructions/raydium-amm-v4`, `/instructions/raydium-cpmm`, `/instructions/raydium-clmm`, `/instructions/raydium-launchlab`, `/instructions/meteora-damm-v1`, `/instructions/meteora-damm-v2`, `/instructions/meteora-dlmm`, `/instructions/moonshot`, `/instructions/vertigo`, `/instructions/orca`, `/instructions/boop`, `/instructions/virtual-curve`, `/instructions/heaven`, `/instructions/rise-rich`, `/instructions/liquid-af`, `/instructions/liquid-af-amm`, `/instructions/metadao`, `/instructions/stable-swap`, and historical `/instructions/sugar`. They do not import quote adapters or Orca's math WASM.
 
 These synchronous functions encode the documented native instruction variant. Callers supply valid account addresses, verify PDAs and program state, and choose atomic amounts and execution bounds. The builders do not quote, discover accounts, create token accounts, or provide the high-level full-fill guarantee. Codec range errors throw synchronously; use the protocol-neutral API for structured validation results. Fixed flags and unsupported optional instruction features are documented in each builder. Account roles describe required signatures but never attach a signer or private key.
 

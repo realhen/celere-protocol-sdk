@@ -46,7 +46,7 @@ export interface VirtualCurveSwap2Args {
  * sentinel; no dynamic trailing accounts are included. Caller validates state and limits.
  * @throws Synchronous codec errors for out-of-range amounts.
  */
-export function getVirtualCurveSwap2Instruction(
+export function swap2(
   accounts: VirtualCurveSwap2Accounts,
   args: VirtualCurveSwap2Args,
 ): Instruction {

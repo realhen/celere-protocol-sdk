@@ -1,6 +1,6 @@
 import {
-  getRiseRichBuyExactCashInInstruction,
-  getRiseRichSellExactTokenInInstruction,
+  buy_with_exact_cash_in,
+  sell_with_exact_token_in,
 } from "../../dist/protocols/rise-rich/instructions/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
@@ -352,7 +352,7 @@ test(
       assert.equal(refused.ok, false);
       assert.equal(refused.error.code, "INVALID_REQUEST");
       const raw = buy
-        ? getRiseRichBuyExactCashInInstruction(f.instructionAccounts, {
+        ? buy_with_exact_cash_in(f.instructionAccounts, {
             cashIn: below,
             minTokenOut: 0n,
             newShoulderEnd: 0n,
@@ -361,7 +361,7 @@ test(
             maxAreaShrinkageToleranceUnits: 100_000_000n,
             minLiqRatio: new Uint8Array(16),
           })
-        : getRiseRichSellExactTokenInInstruction(f.instructionAccounts, {
+        : sell_with_exact_token_in(f.instructionAccounts, {
             tokenIn: below,
             minCashOut: 0n,
           });

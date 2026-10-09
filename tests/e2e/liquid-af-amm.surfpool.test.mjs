@@ -4,7 +4,7 @@ import process from "node:process";
 import test from "node:test";
 import { SYSVAR_CLOCK_ADDRESS } from "@solana/sysvars";
 import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budget";
-import { getLiquidAfAmmBuyExactOutInstruction } from "../../dist/protocols/liquid-af-amm/instructions/index.js";
+import { buy_exact_out } from "../../dist/protocols/liquid-af-amm/instructions/index.js";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import {
   generateKeyPairSigner,
@@ -323,7 +323,7 @@ test(
       });
       assert.equal(result.ok, false);
       assert.equal(result.error.code, "UNSUPPORTED_SWAP_MODE");
-      const instruction = getLiquidAfAmmBuyExactOutInstruction(f.instructionAccounts, {
+      const instruction = buy_exact_out(f.instructionAccounts, {
         amountOut,
         maximumAmountIn: 100_000_000n,
       });

@@ -16,10 +16,7 @@ import type {
   ResolvedTokenAccounts,
   SwapRequest,
 } from "../../core/types.js";
-import {
-  getVertigoBuyInstruction,
-  getVertigoSellInstruction,
-} from "./instructions/index.js";
+import * as instructions from "./instructions/index.js";
 import { VERTIGO_PROGRAM } from "./constants.js";
 export { VERTIGO_PROGRAM } from "./constants.js";
 const encoder = getAddressEncoder();
@@ -249,8 +246,8 @@ async function build(
   };
   const instructionArgs = { amountIn: input, minimumAmountOut };
   const instruction = buy
-    ? getVertigoBuyInstruction(instructionAccounts, instructionArgs)
-    : getVertigoSellInstruction(instructionAccounts, instructionArgs);
+    ? instructions.buy(instructionAccounts, instructionArgs)
+    : instructions.sell(instructionAccounts, instructionArgs);
   return {
     instructions: [instruction],
     quote: {

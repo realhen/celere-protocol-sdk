@@ -52,7 +52,7 @@ export interface MeteoraDlmmSwap2Args {
  * they do not add slice metadata. Caller validates PDAs, traversal and limits.
  * @throws Synchronous codec errors for values outside the native integer range.
  */
-export function getMeteoraDlmmSwap2Instruction(
+export function swap2(
   accounts: MeteoraDlmmSwap2Accounts,
   args: MeteoraDlmmSwap2Args,
 ): Instruction {

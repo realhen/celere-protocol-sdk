@@ -22,7 +22,7 @@ import type {
   SwapRequest,
 } from "../../core/types.js";
 import { METADAO_PROGRAM } from "./constants.js";
-import { getMetadaoSpotSwapInstruction } from "./instructions/index.js";
+import { spot_swap } from "./instructions/index.js";
 export { METADAO_PROGRAM } from "./constants.js";
 
 const addressEncoder = getAddressEncoder();
@@ -250,7 +250,7 @@ async function build(
   const minimumAmountOut = minimumOutput(output, request.slippageBps);
   return {
     instructions: [
-      getMetadaoSpotSwapInstruction(
+      spot_swap(
         {
           dao: request.pool,
           userBaseAccount: buy ? tokenAccounts.output : tokenAccounts.input,

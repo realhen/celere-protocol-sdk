@@ -9,10 +9,7 @@ import {
   signTransaction,
 } from "@solana/kit";
 import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
-import {
-  getBoopBuyTokenInstruction,
-  getBoopSellTokenInstruction,
-} from "../../dist/protocols/boop/instructions/index.js";
+import { buy_token, sell_token } from "../../dist/protocols/boop/instructions/index.js";
 import { boopAdapter } from "../../dist/protocols/boop/adapter.js";
 const { buildSwapInstructions } = createProtocolSdk([boopAdapter]);
 import { boopFixture, BOOP_PROGRAM } from "../fixtures/boop.mjs";
@@ -78,7 +75,7 @@ function raw(f, signer, reverse) {
     config: f.config,
   };
   return reverse
-    ? getBoopSellTokenInstruction(
+    ? sell_token(
         {
           ...accounts,
           sellerTokenAccount: f.userToken,
@@ -87,7 +84,7 @@ function raw(f, signer, reverse) {
         },
         { sellAmount: f.request.amount.amountIn, amountOutMin: 0n },
       )
-    : getBoopBuyTokenInstruction(
+    : buy_token(
         {
           ...accounts,
           recipientTokenAccount: f.userToken,

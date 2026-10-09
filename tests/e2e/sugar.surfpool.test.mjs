@@ -7,7 +7,7 @@ import {
   TOKEN_PROGRAM_ADDRESS,
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
-import { getSugarBuyExactInInstruction } from "../../dist/protocols/sugar/instructions/index.js";
+import { buy_exact_in } from "../../dist/protocols/sugar/instructions/index.js";
 import { SUGAR_PROGRAM } from "../../dist/protocols/sugar/constants.js";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import {
@@ -95,7 +95,7 @@ test(
       programAddress: SUGAR_PROGRAM,
       seeds: [text.encode("__event_authority")],
     });
-    const instruction = getSugarBuyExactInInstruction(
+    const instruction = buy_exact_in(
       {
         state: f.state,
         mint: f.mint,

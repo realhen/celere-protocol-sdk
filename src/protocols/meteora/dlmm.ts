@@ -19,8 +19,8 @@ import type {
 } from "../../core/types.js";
 
 import { METEORA_DLMM_PROGRAM } from "./constants.js";
-import { getMeteoraDlmmSwap2Instruction } from "./instructions/dlmm/swap2.js";
-import { getMeteoraDlmmSwapExactOut2Instruction } from "./instructions/dlmm/swap-exact-out2.js";
+import { swap2 } from "./instructions/dlmm/swap2.js";
+import { swap_exact_out2 } from "./instructions/dlmm/swap_exact_out2.js";
 export { METEORA_DLMM_PROGRAM } from "./constants.js";
 const Q64 = 1n << 64n;
 const FEE_PRECISION = 1_000_000_000n;
@@ -491,11 +491,11 @@ async function build(
   };
   const instruction =
     quote.kind === "exactIn"
-      ? getMeteoraDlmmSwap2Instruction(instructionAccounts, {
+      ? swap2(instructionAccounts, {
           amountIn: quote.amountIn,
           minimumAmountOut: quote.minimumAmountOut,
         })
-      : getMeteoraDlmmSwapExactOut2Instruction(instructionAccounts, {
+      : swap_exact_out2(instructionAccounts, {
           maximumAmountIn: quote.maximumAmountIn,
           amountOut: quote.amountOut,
         });

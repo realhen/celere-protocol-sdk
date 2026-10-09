@@ -18,7 +18,7 @@ import type {
 } from "../../core/types.js";
 
 import { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants.js";
-import { getMeteoraDammV1SwapInstruction } from "./instructions/damm-v1/swap.js";
+import { swap } from "./instructions/damm-v1/swap.js";
 export { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants.js";
 const decoder = getAddressDecoder();
 const encoder = getAddressEncoder();
@@ -416,7 +416,7 @@ async function build(
     invalid(request.pool, "User token accounts cannot alias protocol accounts");
   const reverse = request.inputMint === pool.mintB;
   const quote = quoteInput(request, pool, reverse ? b : a, reverse ? a : b);
-  const instruction = getMeteoraDammV1SwapInstruction(
+  const instruction = swap(
     {
       pool: request.pool,
       userSourceToken: tokenAccounts.input,

@@ -62,10 +62,7 @@ export interface PumpBuyArgs {
  * Callers validate account identities, PDAs, state, amounts and execution limits.
  * @throws Synchronous codec errors if an argument cannot be encoded.
  */
-export function getPumpBuyInstruction(
-  accounts: PumpBuyAccounts,
-  args: PumpBuyArgs,
-): Instruction {
+export function buy(accounts: PumpBuyAccounts, args: PumpBuyArgs): Instruction {
   const data = instructionDataEncoder.encode({
     discriminator: DISCRIMINATOR,
     amount: args.amount,

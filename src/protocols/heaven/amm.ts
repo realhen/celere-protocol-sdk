@@ -22,10 +22,7 @@ import type {
   SwapRequest,
 } from "../../core/types.js";
 import { HEAVEN_PROGRAM } from "./constants.js";
-import {
-  getHeavenBuyInstruction,
-  getHeavenSellInstruction,
-} from "./instructions/index.js";
+import * as instructions from "./instructions/index.js";
 export { HEAVEN_PROGRAM } from "./constants.js";
 
 const addressDecoder = getAddressDecoder();
@@ -272,11 +269,11 @@ async function build(
     protocolConfig: configKey,
   };
   const instruction = buy
-    ? getHeavenBuyInstruction(nativeAccounts, {
+    ? instructions.buy(nativeAccounts, {
         maximumSolSpend: amountIn,
         minimumAmountOut,
       })
-    : getHeavenSellInstruction(nativeAccounts, { amountIn, minimumAmountOut });
+    : instructions.sell(nativeAccounts, { amountIn, minimumAmountOut });
   return {
     instructions: [instruction],
     mayPartiallyFill: false,

@@ -1,2 +1,2 @@
-export * from "./swap-base-input.js";
-export * from "./swap-base-output.js";
+export * from "./swap_base_input.js";
+export * from "./swap_base_output.js";

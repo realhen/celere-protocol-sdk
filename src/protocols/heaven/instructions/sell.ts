@@ -44,10 +44,7 @@ const dataEncoder = getStructEncoder([
  * Total 28 bytes. SOL uses SPL wrapped SOL token accounts.
  * @throws Synchronously if an amount exceeds its codec range.
  */
-export function getHeavenSellInstruction(
-  accounts: HeavenSellAccounts,
-  args: HeavenSellArgs,
-): Instruction {
+export function sell(accounts: HeavenSellAccounts, args: HeavenSellArgs): Instruction {
   return {
     programAddress: HEAVEN_PROGRAM,
     accounts: [

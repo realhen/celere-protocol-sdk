@@ -25,9 +25,9 @@ import type {
   SwapFee,
 } from "../../core/types.js";
 import {
-  getRaydiumLaunchlabBuyExactInInstruction,
-  getRaydiumLaunchlabSellExactInInstruction,
-  getRaydiumLaunchlabSellExactOutInstruction,
+  buy_exact_in,
+  sell_exact_in,
+  sell_exact_out,
 } from "./instructions/launchlab/index.js";
 import { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants.js";
 export { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants.js";
@@ -390,7 +390,7 @@ async function build(
   };
   let instruction: Instruction;
   if (swapQuote.kind === "exactOut") {
-    instruction = getRaydiumLaunchlabSellExactOutInstruction(instructionAccounts, {
+    instruction = sell_exact_out(instructionAccounts, {
       amountOut: swapQuote.amountOut,
       maximumAmountIn: swapQuote.maximumAmountIn,
     });
@@ -400,8 +400,8 @@ async function build(
       minimumAmountOut: swapQuote.minimumAmountOut,
     };
     instruction = buy
-      ? getRaydiumLaunchlabBuyExactInInstruction(instructionAccounts, instructionArgs)
-      : getRaydiumLaunchlabSellExactInInstruction(instructionAccounts, instructionArgs);
+      ? buy_exact_in(instructionAccounts, instructionArgs)
+      : sell_exact_in(instructionAccounts, instructionArgs);
   }
   return {
     instructions: [instruction],

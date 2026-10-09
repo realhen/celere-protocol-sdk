@@ -1,5 +1,5 @@
 import type { Address } from "@solana/kit";
-import { getOrcaSwapV2Instruction } from "./instructions/swap-v2.js";
+import { swap_v2 } from "./instructions/swap_v2.js";
 import type { TickArrayFacade } from "@orca-so/whirlpools-core";
 import {
   WHIRLPOOL_PROGRAM,
@@ -291,7 +291,7 @@ async function build(
   const paddedArrays = [...arrays];
   while (paddedArrays.length < 3) paddedArrays.push(paddedArrays[0]!);
   const supplementalArrays = paddedArrays.slice(3);
-  const instruction = getOrcaSwapV2Instruction(
+  const instruction = swap_v2(
     {
       tokenProgramA: tokenA.tokenProgram,
       tokenProgramB: tokenB.tokenProgram,

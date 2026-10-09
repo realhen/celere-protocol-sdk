@@ -1,10 +1,10 @@
 export {
-  getMeteoraDlmmSwap2Instruction,
+  swap2,
   type MeteoraDlmmSwap2Accounts,
   type MeteoraDlmmSwap2Args,
 } from "./swap2.js";
 export {
-  getMeteoraDlmmSwapExactOut2Instruction,
+  swap_exact_out2,
   type MeteoraDlmmSwapExactOut2Accounts,
   type MeteoraDlmmSwapExactOut2Args,
-} from "./swap-exact-out2.js";
+} from "./swap_exact_out2.js";

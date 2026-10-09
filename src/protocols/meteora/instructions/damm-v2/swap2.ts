@@ -50,7 +50,7 @@ export interface MeteoraDammV2Swap2Args {
  * account is the program-ID sentinel. Caller validates PDAs, state and limits.
  * @throws Synchronous codec errors for values outside the native integer range.
  */
-export function getMeteoraDammV2Swap2Instruction(
+export function swap2(
   accounts: MeteoraDammV2Swap2Accounts,
   args: MeteoraDammV2Swap2Args,
 ): Instruction {

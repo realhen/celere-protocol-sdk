@@ -81,19 +81,19 @@ const wrong: SwapRequest["amount"] = { kind: "exactIn", amountIn: 0.5 };
 void [subset, requirements, compiler, wrong];
 
 import {
-  getRaydiumCpmmSwapBaseInputInstruction,
-  getRaydiumCpmmSwapBaseOutputInstruction,
+  swap_base_input,
+  swap_base_output,
   type RaydiumCpmmSwapBaseInputAccounts,
   type RaydiumCpmmSwapBaseInputArgs,
 } from "celere-protocol-sdk/instructions/raydium-cpmm";
 
 declare const nativeAccounts: RaydiumCpmmSwapBaseInputAccounts;
 const nativeInstructions = [
-  getRaydiumCpmmSwapBaseInputInstruction(nativeAccounts, {
+  swap_base_input(nativeAccounts, {
     amountIn: 1_000_000n,
     minimumAmountOut: 900_000n,
   }),
-  getRaydiumCpmmSwapBaseOutputInstruction(nativeAccounts, {
+  swap_base_output(nativeAccounts, {
     maximumAmountIn: 1_100_000n,
     amountOut: 1_000_000n,
   }),
@@ -117,13 +117,13 @@ import { createRouteSdk, type RouteRequest } from "celere-protocol-sdk/core";
 import { pumpRouteAdapter } from "celere-protocol-sdk/protocols/pump-routes";
 import { buildRouteInstructions, getRouteRequirements } from "celere-protocol-sdk";
 import {
-  getPumpBuyV3Instruction,
-  getPumpSweepCreatorFeeInstruction,
+  buy_v3,
+  sweep_creator_fee,
   type PumpSweepCreatorFeeAccounts,
 } from "celere-protocol-sdk/instructions/pump";
 import {
-  getPumpAmmMultiHopSwapInstruction,
-  getPumpAmmSweepProtocolFeeInstruction,
+  multi_hop_swap,
+  sweep_protocol_fee,
   type PumpAmmSweepProtocolFeeAccounts,
 } from "celere-protocol-sdk/instructions/pump-amm";
 declare const routeRequest: RouteRequest;
@@ -144,8 +144,8 @@ declare const poolSweepAccounts: PumpAmmSweepProtocolFeeAccounts;
 void [
   routeSubset,
   routeRequirements,
-  getPumpBuyV3Instruction,
-  getPumpAmmMultiHopSwapInstruction,
-  getPumpSweepCreatorFeeInstruction(curveSweepAccounts),
-  getPumpAmmSweepProtocolFeeInstruction(poolSweepAccounts),
+  buy_v3,
+  multi_hop_swap,
+  sweep_creator_fee(curveSweepAccounts),
+  sweep_protocol_fee(poolSweepAccounts),
 ];

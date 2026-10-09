@@ -1,10 +1,10 @@
 export {
-  getBoopBuyTokenInstruction,
+  buy_token,
   type BoopBuyTokenAccounts,
   type BoopBuyTokenArgs,
-} from "./buy-token.js";
+} from "./buy_token.js";
 export {
-  getBoopSellTokenInstruction,
+  sell_token,
   type BoopSellTokenAccounts,
   type BoopSellTokenArgs,
-} from "./sell-token.js";
+} from "./sell_token.js";

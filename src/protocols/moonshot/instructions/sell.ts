@@ -57,7 +57,7 @@ export interface MoonshotSellArgs {
  * Callers validate account identities, PDAs, state, amounts and execution limits.
  * @throws Synchronous codec errors if an argument cannot be encoded.
  */
-export function getMoonshotSellInstruction(
+export function sell(
   accounts: MoonshotSellAccounts,
   args: MoonshotSellArgs,
 ): Instruction {

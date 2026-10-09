@@ -1,6 +1,6 @@
 {
   "name": "celere-protocol-sdk",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "description": "Strictly offline Solana swap instruction and unsigned transaction builders",
   "type": "module",
   "license": "MIT",
@@ -203,7 +203,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/build-orca-core.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-orca-core.mjs",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

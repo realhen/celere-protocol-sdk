@@ -27,7 +27,7 @@ import {
   METEORA_DAMM_V2_PROGRAM,
   METEORA_DAMM_V2_POOL_AUTHORITY as POOL_AUTHORITY,
 } from "./constants.js";
-import { getMeteoraDammV2Swap2Instruction } from "./instructions/damm-v2/swap2.js";
+import { swap2 } from "./instructions/damm-v2/swap2.js";
 export { METEORA_DAMM_V2_PROGRAM } from "./constants.js";
 const POOL_DISCRIMINATOR = [241, 154, 109, 4, 17, 177, 109, 188];
 const FEE_DENOMINATOR = 1_000_000_000n;
@@ -352,7 +352,7 @@ async function build(
     programAddress: METEORA_DAMM_V2_PROGRAM,
     seeds: [new TextEncoder().encode("__event_authority")],
   });
-  const instruction = getMeteoraDammV2Swap2Instruction(
+  const instruction = swap2(
     {
       poolAuthority: POOL_AUTHORITY,
       pool: request.pool,

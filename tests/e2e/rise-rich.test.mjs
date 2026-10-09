@@ -1,4 +1,4 @@
-import { getRiseRichBuyExactCashInInstruction } from "../../dist/protocols/rise-rich/instructions/index.js";
+import { buy_with_exact_cash_in } from "../../dist/protocols/rise-rich/instructions/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
@@ -148,7 +148,7 @@ test("Rise raw public builder rejects malformed Decimal argument widths synchron
   for (const field of ["floorIncreaseRatio", "maxNewFloor", "minLiqRatio"]) {
     assert.throws(
       () =>
-        getRiseRichBuyExactCashInInstruction(f.instructionAccounts, {
+        buy_with_exact_cash_in(f.instructionAccounts, {
           ...args,
           [field]: new Uint8Array(15),
         }),
@@ -156,7 +156,7 @@ test("Rise raw public builder rejects malformed Decimal argument widths synchron
     );
     assert.throws(
       () =>
-        getRiseRichBuyExactCashInInstruction(f.instructionAccounts, {
+        buy_with_exact_cash_in(f.instructionAccounts, {
           ...args,
           [field]: new Uint8Array(17),
         }),
