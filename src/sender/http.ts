@@ -1,19 +1,18 @@
 import { HeliusSenderMode, SenderProvider, SubmissionStatus } from "./types.js";
-import type { RouteResult, SenderRoute } from "./types.js";
+import type { RouteResult, SenderRoute, SenderHttpTransport } from "./types.js";
 
-export interface DispatchRoute {
-  readonly id: string;
-  readonly config: SenderRoute;
-}
-export interface Payload {
-  readonly signature: string;
-  readonly bytes: Uint8Array;
-  readonly base64: string;
+import type { ConfiguredRoute } from "./configuration.js";
+import type { SignedPayload } from "./sign-submission.js";
+
+/** Use the runtime's standard HTTP implementation unless the caller supplies a transport. */
+export function sendHttpRequest(url: string, options: RequestInit): Promise<Response> {
+  return fetch(url, options);
 }
 
-function request(
+/** Translate one already-signed transaction into the provider's HTTP request format. */
+function getSubmissionRequest(
   route: SenderRoute,
-  payload: Payload,
+  payload: SignedPayload,
 ): { url: string; init: RequestInit } {
   const url = new URL(route.endpoint);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -68,48 +67,50 @@ function request(
     init: { method: "POST", headers, body, redirect: "error" },
   };
 }
-function object(value: unknown): value is Record<string, unknown> {
+function isResponseObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function responseStatus(value: unknown, signature: string): SubmissionStatus {
+/** Accept only an acknowledgment of our exact signature; unrecognized bodies stay ambiguous. */
+function getSubmissionStatus(value: unknown, signature: string): SubmissionStatus {
   if (
-    object(value) &&
+    isResponseObject(value) &&
     (value.error != null || value.reason != null || value.success === false)
   )
     return SubmissionStatus.Rejected;
-  const returned =
-    typeof value === "string"
-      ? value
-      : object(value)
-        ? (value.signature ?? value.result)
-        : undefined;
-  if (returned === signature) return SubmissionStatus.Accepted;
-  if (object(returned) && returned.signature === signature)
-    return SubmissionStatus.Accepted;
+  let returnedSignature: unknown = value;
+  if (isResponseObject(value)) {
+    returnedSignature = value.signature ?? value.result;
+  }
+  if (isResponseObject(returnedSignature)) {
+    returnedSignature = returnedSignature.signature;
+  }
+  if (returnedSignature === signature) return SubmissionStatus.Accepted;
   // A missing/mismatched signature cannot establish acceptance or safe failure.
   return SubmissionStatus.Unknown;
 }
 /** One bounded attempt. Never retries or exposes raw provider bodies/URLs in observations. */
-export async function dispatch(
-  route: DispatchRoute,
-  payload: Payload,
-  fetcher: typeof globalThis.fetch,
+export async function sendRouteTransaction(
+  route: ConfiguredRoute,
+  payload: SignedPayload,
+  transport: SenderHttpTransport,
   signal?: AbortSignal,
 ): Promise<RouteResult> {
-  const started = performance.now();
-  const base = {
+  const startedAt = performance.now();
+  const routeIdentity = {
     routeId: route.id,
     provider: route.config.provider,
     signature: payload.signature,
     ...(route.config.name === undefined ? {} : { routeName: route.config.name }),
   };
   if (signal?.aborted)
-    return { ...base, status: SubmissionStatus.NotSubmitted, elapsedMs: 0 };
+    return { ...routeIdentity, status: SubmissionStatus.NotSubmitted, elapsedMs: 0 };
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let abort: (() => void) | undefined;
   let httpStatus: number | undefined;
   try {
+    // Race the complete request (including body reading) against cancellation. This
+    // bounds our wait even when an injected transport ignores its abort signal.
     const interruption = new Promise<never>((_, reject) => {
       abort = () => {
         controller.abort();
@@ -119,11 +120,13 @@ export async function dispatch(
       timer = setTimeout(abort, route.config.timeoutMs);
     });
     const operation = (async () => {
-      const { url, init } = request(route.config, payload);
-      const response = await fetcher(url, { ...init, signal: controller.signal });
+      const { url, init } = getSubmissionRequest(route.config, payload);
+      const response = await transport(url, { ...init, signal: controller.signal });
       httpStatus = response.status;
       if (!response.ok) {
         await response.body?.cancel();
+        // Explicit client/rate-limit rejections differ from server failures, which
+        // might happen after forwarding the transaction.
         return [400, 401, 403, 404, 413, 419, 422, 429].includes(response.status)
           ? SubmissionStatus.Rejected
           : SubmissionStatus.Unknown;
@@ -135,20 +138,20 @@ export async function dispatch(
       } catch {
         value = raw.trim();
       }
-      return responseStatus(value, payload.signature);
+      return getSubmissionStatus(value, payload.signature);
     })();
     const status = await Promise.race([operation, interruption]);
     return {
-      ...base,
+      ...routeIdentity,
       status,
-      elapsedMs: performance.now() - started,
+      elapsedMs: performance.now() - startedAt,
       ...(httpStatus === undefined ? {} : { httpStatus }),
     };
   } catch {
     return {
-      ...base,
+      ...routeIdentity,
       status: SubmissionStatus.Unknown,
-      elapsedMs: performance.now() - started,
+      elapsedMs: performance.now() - startedAt,
       ...(httpStatus === undefined ? {} : { httpStatus }),
     };
   } finally {

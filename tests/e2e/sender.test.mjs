@@ -119,6 +119,10 @@ test("consumer fans out every HTTP adapter before responses, batch-signs and sha
       heliusSender({ ...options("helius-swqos"), mode: HeliusSenderMode.SwqosOnly }),
     )
     .build();
+  // Public SDK instances must not expose credential-bearing configuration when inspected.
+  assert.equal(JSON.stringify(base), "{}");
+  assert.equal(JSON.stringify(client), "{}");
+  assert.deepEqual(Reflect.ownKeys(client), []);
   const batches = [];
   const observed = [];
   const submitted = await client.send({

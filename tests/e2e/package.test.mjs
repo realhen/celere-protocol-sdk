@@ -88,7 +88,14 @@ test("packed public package installs offline and exposes usable strict TypeScrip
     // Compile documentation exactly as a consumer sees it in the installed package.
     const installedPackage = join(directory, "node_modules/celere-protocol-sdk");
     const documentationSources = [];
-    for (const [index, file] of instructionFiles.entries()) {
+    const documentedEntryFiles = [
+      ...instructionFiles,
+      ...["client", "client-builder", "providers"].map((name) => ({
+        path: `dist/sender/${name}.js`,
+      })),
+      { path: "dist/nonce/index.js" },
+    ];
+    for (const [index, file] of documentedEntryFiles.entries()) {
       const declarationPath = file.path.replace(/\.js$/, ".d.ts");
       const declaration = await readFile(join(installedPackage, declarationPath), "utf8");
       const snippets = [

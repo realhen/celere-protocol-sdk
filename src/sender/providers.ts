@@ -6,83 +6,15 @@ import {
   SenderErrorCode,
   SenderProvider,
 } from "./types.js";
-import type { RouteOptions, SenderRoute } from "./types.js";
+import type {
+  RouteOptions,
+  SenderRoute,
+  ZeroSlotRouteOptions,
+  HeliusRouteOptions,
+} from "./types.js";
 
-const endpoints: Record<
-  Exclude<SenderProvider, SenderProvider.Rpc>,
-  Partial<Record<Region, string>>
-> = {
-  [SenderProvider.Astralane]: {
-    [Region.Global]: "https://edge.astralane.io/irisb",
-    [Region.Frankfurt]: "http://fr.gateway.astralane.io/irisb",
-    [Region.Amsterdam]: "http://ams.gateway.astralane.io/irisb",
-    [Region.NewYork]: "http://ny.gateway.astralane.io/irisb",
-    [Region.Tokyo]: "http://jp.gateway.astralane.io/irisb",
-    [Region.Singapore]: "http://sg.gateway.astralane.io/irisb",
-    [Region.LosAngeles]: "http://la.gateway.astralane.io/irisb",
-  },
-  [SenderProvider.BlockRazor]: {
-    [Region.Frankfurt]: "https://frankfurt.solana.blockrazor.io/sendTransaction",
-    [Region.NewYork]: "https://newyork.solana.blockrazor.io/sendTransaction",
-    [Region.Tokyo]: "https://tokyo.solana.blockrazor.io/sendTransaction",
-    [Region.Amsterdam]: "http://amsterdam.solana.blockrazor.xyz:443/sendTransaction",
-    [Region.London]: "http://london.solana.blockrazor.xyz:443/sendTransaction",
-    [Region.Singapore]: "http://singapore.solana.blockrazor.xyz:443/sendTransaction",
-    [Region.LosAngeles]: "http://losangeles.solana.blockrazor.xyz:443/sendTransaction",
-    [Region.Toronto]: "http://toronto.solana.blockrazor.xyz:443/sendTransaction",
-  },
-  [SenderProvider.ZeroSlot]: {
-    [Region.Frankfurt]: "https://de.0slot.trade",
-    [Region.Amsterdam]: "https://ams.0slot.trade",
-    [Region.NewYork]: "https://ny.0slot.trade",
-    [Region.Tokyo]: "https://jp.0slot.trade",
-    [Region.LosAngeles]: "https://la.0slot.trade",
-  },
-  [SenderProvider.NextBlock]: {
-    [Region.Frankfurt]: "https://frankfurt.nextblock.io/api/v2/submit",
-    [Region.Amsterdam]: "https://amsterdam.nextblock.io/api/v2/submit",
-    [Region.NewYork]: "https://ny.nextblock.io/api/v2/submit",
-    [Region.London]: "https://london.nextblock.io/api/v2/submit",
-    [Region.Singapore]: "https://singapore.nextblock.io/api/v2/submit",
-    [Region.Tokyo]: "https://tokyo.nextblock.io/api/v2/submit",
-    [Region.SaltLakeCity]: "https://slc.nextblock.io/api/v2/submit",
-    [Region.Dublin]: "https://dublin.nextblock.io/api/v2/submit",
-    [Region.Vilnius]: "https://vilnius.nextblock.io/api/v2/submit",
-  },
-  [SenderProvider.Helius]: {
-    [Region.Global]: "https://sender.helius-rpc.com/fast",
-    [Region.Frankfurt]: "http://fra-sender.helius-rpc.com/fast",
-    [Region.Amsterdam]: "http://ams-sender.helius-rpc.com/fast",
-    [Region.NewYork]: "http://ewr-sender.helius-rpc.com/fast",
-    [Region.London]: "http://lon-sender.helius-rpc.com/fast",
-    [Region.Tokyo]: "http://tyo-sender.helius-rpc.com/fast",
-    [Region.Singapore]: "http://sg-sender.helius-rpc.com/fast",
-    [Region.SaltLakeCity]: "http://slc-sender.helius-rpc.com/fast",
-  },
-};
-// Provider-published recipients; provenance and validation status are documented in README.
-const tips = {
-  [SenderProvider.Astralane]: [
-    "astrazznxsGUhWShqgNtAdfrzP2G83DzcWVJDxwV9bF",
-    "astra4uejePWneqNaJKuFFA8oonqCE1sqF6b45kDMZm",
-  ],
-  [SenderProvider.BlockRazor]: [
-    "FjmZZrFvhnqqb9ThCuMVnENaM3JGVuGWNyCAxRJcFpg9",
-    "6No2i3aawzHsjtThw81iq1EXPJN6rh8eSJCLaYZfKDTG",
-  ],
-  [SenderProvider.ZeroSlot]: [
-    "6fQaVhYZA4w3MBSXjJ81Vf6W1EDYeUPXpgVQ6UQyU1Av",
-    "4HiwLEP2Bzqj3hM2ENxJuzhcPCdsafwiet3oGkMkuQY4",
-  ],
-  [SenderProvider.NextBlock]: [
-    "NextbLoCkVtMGcV47JzewQdvBpLqT9TxQFozQkN98pE",
-    "NexTbLoCkWykbLuB1NkjXgFWkX9oAtcoagQegygXXA2",
-  ],
-  [SenderProvider.Helius]: [
-    "4ACfpUFoaSD9bfPdeu6DBt89gB6ENTeHBXCAi87NhDEE",
-    "D2L6yPZ2FmmmTKPgzaMKdhu6EWZcTpLy1Vhx8uvZe7NZ",
-  ],
-};
+import { PROVIDER_ENDPOINTS, PROVIDER_TIP_ACCOUNTS } from "./provider-registry.js";
+
 /** Validate a URL without including its credentials in any error. */
 export function validateEndpoint(endpoint: string): string {
   try {
@@ -111,10 +43,11 @@ export function validateTimeout(value = 3000): number {
     );
   return value;
 }
-function route(
+/** Resolve provider defaults and copy the route without starting network work. */
+function createProviderRoute(
   provider: Exclude<SenderProvider, SenderProvider.Rpc>,
   options: RouteOptions,
-  minimum: bigint,
+  minimumTipLamports: bigint,
   mode?: HeliusSenderMode,
 ): SenderRoute {
   const region =
@@ -122,7 +55,7 @@ function route(
     (provider === SenderProvider.Helius || provider === SenderProvider.Astralane
       ? Region.Global
       : Region.Frankfurt);
-  if (!(region in endpoints[provider]))
+  if (!(region in PROVIDER_ENDPOINTS[provider]))
     throw new SenderError(
       SenderErrorCode.InvalidConfiguration,
       `Unsupported region for ${provider}`,
@@ -146,50 +79,125 @@ function route(
     );
   return Object.freeze({
     provider,
-    endpoint: validateEndpoint(options.endpoint ?? endpoints[provider][region]!),
+    endpoint: validateEndpoint(options.endpoint ?? PROVIDER_ENDPOINTS[provider][region]!),
     apiKey: options.apiKey,
     timeoutMs: validateTimeout(options.timeoutMs),
-    minimumTipLamports: minimum,
-    tipAccounts: Object.freeze(tips[provider].map((value) => address(value))),
+    minimumTipLamports,
+    tipAccounts: Object.freeze(
+      PROVIDER_TIP_ACCOUNTS[provider].map((value) => address(value)),
+    ),
     ...(options.name === undefined ? {} : { name: options.name }),
     ...(mode === undefined ? {} : { mode }),
   });
 }
-/** Astralane binary Iris lane. Regions share the same per-send tip variant. */
+/**
+ * Configure an Astralane binary Iris submission lane.
+ *
+ * @param options - Provider credentials and optional region, URL, name, and HTTP deadline.
+ * @returns An immutable route using `/irisb`, with a 10,000-lamport minimum tip.
+ * @throws {@link SenderError} synchronously for invalid options or an unsupported region.
+ * @remarks Defaults to the global endpoint. Compatible regional lanes reuse one signed
+ * variant. Constructing a route does not contact the provider or validate the API key remotely.
+ *
+ * @example
+ * ```ts
+ * import { astralane, Region } from "celere-protocol-sdk/sender";
+ * declare const apiKey: string;
+ * const route = astralane({ apiKey, region: Region.Frankfurt });
+ * ```
+ */
 export function astralane(options: RouteOptions): SenderRoute {
-  return route(SenderProvider.Astralane, options, 10_000n);
+  return createProviderRoute(SenderProvider.Astralane, options, 10_000n);
 }
-/** BlockRazor fast mode. Sandwich mitigation is intentionally excluded from nonce fan-out. */
+/**
+ * Configure a BlockRazor HTTP lane in fast mode.
+ *
+ * @param options - Provider credentials and optional region, URL, name, and HTTP deadline.
+ * @returns An immutable route with a 100,000-lamport minimum tip; Frankfurt by default.
+ * @throws {@link SenderError} synchronously for invalid options or an unsupported region.
+ * @remarks Sandwich mitigation is excluded because it is incompatible with nonce fan-out.
+ * Configuration performs no network requests.
+ *
+ * @example
+ * ```ts
+ * import { blockRazor, Region } from "celere-protocol-sdk/sender";
+ * declare const apiKey: string;
+ * const route = blockRazor({ apiKey, region: Region.NewYork });
+ * ```
+ */
 export function blockRazor(options: RouteOptions): SenderRoute {
-  return route(SenderProvider.BlockRazor, options, 100_000n);
+  return createProviderRoute(SenderProvider.BlockRazor, options, 100_000n);
 }
-/** 0slot defaults to the documented entry-tier minimum. Advanced plans can explicitly select their documented floor. */
-export function zeroSlot(
-  options: RouteOptions & { readonly minimumTipLamports?: 100_000n | 1_000_000n },
-): SenderRoute {
+/**
+ * Configure a 0slot HTTP submission lane for the caller's provisioned plan.
+ *
+ * @param options - Provider configuration and optional advanced-plan tip floor.
+ * @returns An immutable route with a 1,000,000-lamport default tip floor; Frankfurt by default.
+ * @throws {@link SenderError} synchronously for invalid options, plan floor, or region.
+ * @remarks Selecting the 100,000-lamport floor requires an eligible provider plan. Actual
+ * transaction tips are supplied per send; this option only selects validation policy.
+ * Configuration performs no network requests.
+ *
+ * @example
+ * ```ts
+ * import { zeroSlot, Region } from "celere-protocol-sdk/sender";
+ * declare const apiKey: string;
+ * const route = zeroSlot({ apiKey, region: Region.Frankfurt });
+ * ```
+ */
+export function zeroSlot(options: ZeroSlotRouteOptions): SenderRoute {
   const minimum = options.minimumTipLamports ?? 1_000_000n;
   if (minimum !== 100_000n && minimum !== 1_000_000n)
     throw new SenderError(
       SenderErrorCode.InvalidConfiguration,
       "Unsupported 0slot plan minimum",
     );
-  return route(SenderProvider.ZeroSlot, options, minimum);
+  return createProviderRoute(SenderProvider.ZeroSlot, options, minimum);
 }
-/** NextBlock HTTP v2 submission; no retries or front-running protection requested. */
+/**
+ * Configure a NextBlock HTTP v2 submission lane.
+ *
+ * @param options - Provider credentials and optional region, URL, name, and HTTP deadline.
+ * @returns An immutable route with a 100,000-lamport minimum tip; Frankfurt by default.
+ * @throws {@link SenderError} synchronously for invalid options or an unsupported region.
+ * @remarks Requests skip preflight and disable provider retries and front-running protection.
+ * Configuration performs no network requests.
+ *
+ * @example
+ * ```ts
+ * import { nextBlock, Region } from "celere-protocol-sdk/sender";
+ * declare const apiKey: string;
+ * const route = nextBlock({ apiKey, region: Region.Amsterdam });
+ * ```
+ */
 export function nextBlock(options: RouteOptions): SenderRoute {
-  return route(SenderProvider.NextBlock, options, 100_000n);
+  return createProviderRoute(SenderProvider.NextBlock, options, 100_000n);
 }
-/** Helius Sender Max or explicitly selected SWQoS-only tier. */
-export function heliusSender(
-  options: RouteOptions & { readonly mode?: HeliusSenderMode },
-): SenderRoute {
+/**
+ * Configure a Helius Sender Max or SWQoS-only HTTP submission lane.
+ *
+ * @param options - Provider configuration and optional Helius tier; Max by default.
+ * @returns An immutable route, using the global endpoint unless a region is supplied.
+ * @throws {@link SenderError} synchronously for invalid options, tier, or region.
+ * @remarks Max requires a 1,000,000-lamport tip and a 5,000-lamport total priority fee.
+ * SWQoS-only requires a 5,000-lamport tip. The sender validates these amounts before signing.
+ * Configuration performs no network requests.
+ *
+ * @example
+ * ```ts
+ * import { heliusSender, HeliusSenderMode } from "celere-protocol-sdk/sender";
+ * declare const apiKey: string;
+ * const route = heliusSender({ apiKey, mode: HeliusSenderMode.Max });
+ * ```
+ */
+export function heliusSender(options: HeliusRouteOptions): SenderRoute {
   const mode = options.mode ?? HeliusSenderMode.Max;
   if (!Object.values(HeliusSenderMode).includes(mode))
     throw new SenderError(
       SenderErrorCode.InvalidConfiguration,
       "Unsupported Helius mode",
     );
-  return route(
+  return createProviderRoute(
     SenderProvider.Helius,
     options,
     mode === HeliusSenderMode.Max ? 1_000_000n : 5_000n,

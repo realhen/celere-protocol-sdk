@@ -61,6 +61,22 @@ Every HTTP attempt has a bounded deadline (`timeoutMs`, default 3000, including 
 
 For external signing, call `sender.prepare(request)`, sign each `prepared.variants[i].transaction` without modifying its message, then call `sender.submitSigned(prepared, signedTransactions)`. Keep the original prepared object and use the same client. Kit partial signers return signatures only; modifying or signing-and-sending wallets require an application adapter. Wallets may prompt for multiple distinct messages. The sender never accepts private keys directly.
 
+### Reading the sender implementation
+
+Start with [SenderClient](src/sender/client.ts) for the public `prepare`, `send`, and `submitSigned` flow, or [the builder](src/sender/client-builder.ts) for fluent configuration. Each public method documents its parameters, return timing, failures, and a typed example; these comments are included in the generated declarations.
+
+| Module                                                 | Responsibility                                                                                            |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| [configuration](src/sender/configuration.ts)           | Validate and copy routes; assign result IDs and the default RPC lane.                                     |
+| [prepare-submission](src/sender/prepare-submission.ts) | Validate fees and compile distinct provider-tip variants.                                                 |
+| [sign-submission](src/sender/sign-submission.ts)       | Batch-sign, verify unchanged messages and signatures, and serialize wire bytes.                           |
+| [submit-submission](src/sender/submit-submission.ts)   | Launch every route and collect independent observations.                                                  |
+| [http](src/sender/http.ts)                             | Encode provider HTTP requests, apply deadlines, and interpret responses.                                  |
+| [providers](src/sender/providers.ts)                   | Documented provider factories backed by the endpoint and tip [registry](src/sender/provider-registry.ts). |
+| [types](src/sender/types.ts)                           | Public configuration, fee units, request types, and result contracts.                                     |
+
+The HTTP boundary accepts a named `SenderHttpTransport`, compatible with Fetch API implementations. By default it calls the runtime's standard `fetch`; injection is available for application-managed pools and proxies. Module-private state keeps credentials and original preparation buffers out of public client/builder objects without exposing JavaScript private-field syntax in their declarations.
+
 ### Nonce ownership and discovery
 
 Provision and fund durable nonce accounts beforehand using the official System Program instructions. One nonce can arbitrate the variants of one logical trade; concurrent independent trades need different available nonce accounts. The caller owns selection, freshness, and safe reuse. Never blindly pick a random account from a shared pool: two sends can choose the same nonce value. Slot duration does not establish availability, and a submitted transaction can remain pending beyond a slot. A failed durable-nonce transaction can also consume its nonce.

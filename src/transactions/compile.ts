@@ -36,8 +36,11 @@ export interface LookupTable {
 
 /** Caller-observed nonce state. Ownership, freshness and exclusive use remain caller responsibilities. */
 export interface DurableNonce {
+  /** Initialized System Program nonce account to advance as the transaction's first instruction. */
   readonly account: Address;
+  /** Address authorized to advance the account; its transaction signature is required. */
   readonly authority: Address;
+  /** Current base58-encoded nonce value read from the account, not the account's address. */
   readonly value: string;
 }
 
