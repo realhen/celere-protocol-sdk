@@ -4,22 +4,22 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { generateKeyPairSigner, createSolanaRpc } from "@solana/kit";
 import {
+  fetchNonce,
   getCreateAccountInstruction,
   getInitializeNonceAccountInstruction,
   getTransferSolInstruction,
   SYSTEM_PROGRAM_ADDRESS,
 } from "@solana-program/system";
-import { SenderClient, zeroSlot } from "../../dist/sender/index.js";
-import { discoverNonceAccounts } from "../../dist/nonce/index.js";
+import { SenderClient, ZeroSlotSender } from "../../dist/sender/index.js";
 import { rpc, submitInstructions } from "../fixtures/pump-helpers.mjs";
 
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 test(
-  "native nonce fan-out executes one transfer and discovers the advanced account",
+  "native nonce fan-out executes one transfer using a caller-supplied nonce",
   { skip: !endpoint, timeout: 60000 },
   async (t) => {
-    const [payer, nonce, authority, recipient, other] = await Promise.all(
-      Array.from({ length: 5 }, () => generateKeyPairSigner()),
+    const [payer, nonce, authority, recipient] = await Promise.all(
+      Array.from({ length: 4 }, () => generateKeyPairSigner()),
     );
     await rpc(endpoint, "requestAirdrop", [payer.address, 1_000_000_000]);
     await rpc(endpoint, "requestAirdrop", [recipient.address, 1_000_000]);
@@ -43,16 +43,13 @@ test(
       [payer, nonce],
     );
     const kitRpc = createSolanaRpc(endpoint);
-    const discovered = await discoverNonceAccounts({
-      rpc: kitRpc,
-      authority: authority.address,
-    });
-    assert.equal(discovered.length, 1);
-    assert.equal(discovered[0].account, nonce.address);
-    assert.deepEqual(
-      await discoverNonceAccounts({ rpc: kitRpc, authority: other.address }),
-      [],
-    );
+    // The application fetches its known account directly; the SDK never discovers nonces.
+    const observedNonce = await fetchNonce(kitRpc, nonce.address);
+    const selectedNonce = {
+      account: nonce.address,
+      authority: observedNonce.data.authority,
+      value: observedNonce.data.blockhash,
+    };
     const before = await rpc(endpoint, "getBalance", [recipient.address]);
     const server = createServer((req, res) => {
       void (async () => {
@@ -79,7 +76,7 @@ test(
     const sender = new SenderClient({
       defaultRpc: { url: endpoint },
       routes: [
-        zeroSlot({
+        new ZeroSlotSender({
           apiKey: "local-fixture",
           endpoint: `http://127.0.0.1:${server.address().port}`,
         }),
@@ -87,7 +84,7 @@ test(
     });
     const submission = await sender.send({
       feePayer: payer.address,
-      nonce: discovered[0],
+      nonce: selectedNonce,
       signers: [payer, authority],
       instructions: [
         getTransferSolInstruction({
@@ -122,11 +119,8 @@ test(
     assert.equal(landed.length, 1);
     const after = await rpc(endpoint, "getBalance", [recipient.address]);
     assert.equal(after.value - before.value, 1_000_000);
-    const refreshed = await discoverNonceAccounts({
-      rpc: kitRpc,
-      authority: authority.address,
-    });
-    assert.notEqual(refreshed[0].value, discovered[0].value);
+    const refreshed = await fetchNonce(kitRpc, nonce.address);
+    assert.notEqual(refreshed.data.blockhash, selectedNonce.value);
     // Replaying every old variant must not repeat the business transfer.
     for (const variant of submission.variants)
       await fetch(endpoint, {

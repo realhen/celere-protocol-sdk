@@ -14,19 +14,27 @@ import {
   SYSTEM_PROGRAM_ADDRESS,
 } from "@solana-program/system";
 import {
-  createSenderClient,
   SenderClient,
-  astralane,
-  blockRazor,
-  zeroSlot,
-  nextBlock,
-  heliusSender,
+  AstralaneSender,
+  BlockRazorSender,
+  ZeroSlotSender,
+  NextBlockSender,
+  HeliusSender,
   AstralaneTier,
   HeliusSenderMode,
   Region,
   SenderProvider,
   SubmissionStatus,
   SenderErrorCode,
+  SenderError,
+  SenderConfigurationError,
+  SenderRequestError,
+  NonceRequiredError,
+  TipTooLowError,
+  PriorityFeeTooLowError,
+  SenderCompilationError,
+  SenderSigningError,
+  SenderAbortedError,
 } from "../../dist/sender/index.js";
 
 async function fixture(t, handler) {
@@ -81,7 +89,21 @@ async function trade() {
 function signature(bytes) {
   return getSignatureFromTransaction(getTransactionDecoder().decode(bytes));
 }
-const code = (value) => (error) => error.code === value;
+const errorClasses = {
+  [SenderErrorCode.InvalidConfiguration]: SenderConfigurationError,
+  [SenderErrorCode.InvalidRequest]: SenderRequestError,
+  [SenderErrorCode.NonceRequired]: NonceRequiredError,
+  [SenderErrorCode.TipTooLow]: TipTooLowError,
+  [SenderErrorCode.PriorityFeeTooLow]: PriorityFeeTooLowError,
+  [SenderErrorCode.CompilationFailed]: SenderCompilationError,
+  [SenderErrorCode.SigningFailed]: SenderSigningError,
+  [SenderErrorCode.Aborted]: SenderAbortedError,
+};
+const code = (value) => (error) => {
+  assert.ok(error instanceof SenderError);
+  assert.ok(error instanceof errorClasses[value]);
+  return error.code === value;
+};
 
 test("consumer fans out every HTTP adapter before responses, batch-signs and shares regional variants", async (t) => {
   const received = [];
@@ -103,25 +125,25 @@ test("consumer fans out every HTTP adapter before responses, batch-signs and sha
     if (received.length === 8) release();
   });
   const { request } = await trade();
-  const base = createSenderClient({ defaultRpc: { url: `${url}/rpc` } });
+  const defaultRpc = { url: `${url}/rpc` };
   const options = (name) => ({
     apiKey: "fixture-secret",
     endpoint: `${url}/${name}`,
     name,
   });
-  const client = base
-    .addRoute(astralane({ ...options("astralane-fr"), region: Region.Frankfurt }))
-    .addRoute(astralane({ ...options("astralane-ny"), region: Region.NewYork }))
-    .addRoute(blockRazor(options("blockrazor")))
-    .addRoute(zeroSlot(options("zeroslot")))
-    .addRoute(nextBlock(options("nextblock")))
-    .addRoute(heliusSender(options("helius-max")))
-    .addRoute(
-      heliusSender({ ...options("helius-swqos"), mode: HeliusSenderMode.SwqosOnly }),
-    )
-    .build();
+  const client = new SenderClient({
+    defaultRpc,
+    routes: [
+      new AstralaneSender({ ...options("astralane-fr"), region: Region.Frankfurt }),
+      new AstralaneSender({ ...options("astralane-ny"), region: Region.NewYork }),
+      new BlockRazorSender(options("blockrazor")),
+      new ZeroSlotSender(options("zeroslot")),
+      new NextBlockSender(options("nextblock")),
+      new HeliusSender(options("helius-max")),
+      new HeliusSender({ ...options("helius-swqos"), mode: HeliusSenderMode.SwqosOnly }),
+    ],
+  });
   // Public SDK instances must not expose credential-bearing configuration when inspected.
-  assert.equal(JSON.stringify(base), "{}");
   assert.equal(JSON.stringify(client), "{}");
   assert.deepEqual(Reflect.ownKeys(client), []);
   const batches = [];
@@ -218,11 +240,11 @@ test("consumer fans out every HTTP adapter before responses, batch-signs and sha
   assert.equal(JSON.stringify(results).includes("fixture-secret"), false);
   const ordinary = { ...request };
   delete ordinary.nonce;
-  const simple = base.build().prepare({
+  const simple = new SenderClient({ defaultRpc }).prepare({
     ...ordinary,
     lifetime: { blockhash: request.nonce.value, lastValidBlockHeight: 1n },
   });
-  assert.equal(simple.variants.length, 1, "builder branches are independent");
+  assert.equal(simple.variants.length, 1, "RPC-only clients have a single variant");
 });
 
 test("consumer gets independent rejection, ambiguous response and bounded timeout observations", async (t) => {
@@ -248,9 +270,9 @@ test("consumer gets independent rejection, ambiguous response and bounded timeou
   const client = new SenderClient({
     defaultRpc: { url },
     routes: [
-      zeroSlot({ apiKey: "secret", endpoint: `${url}/hang`, timeoutMs: 100 }),
-      zeroSlot({ apiKey: "secret", endpoint: `${url}/reject` }),
-      zeroSlot({ apiKey: "secret", endpoint: `${url}/mismatch` }),
+      new ZeroSlotSender({ apiKey: "secret", endpoint: `${url}/hang`, timeoutMs: 100 }),
+      new ZeroSlotSender({ apiKey: "secret", endpoint: `${url}/reject` }),
+      new ZeroSlotSender({ apiKey: "secret", endpoint: `${url}/mismatch` }),
     ],
   });
   const submitted = await client.send(request);
@@ -278,7 +300,7 @@ test("consumer validates nonce and fee policy before invoking wallets or network
       calls++;
       throw new Error();
     },
-    routes: [heliusSender({ apiKey: "test" })],
+    routes: [new HeliusSender({ apiKey: "test" })],
   });
   const { nonce, ...rest } = request;
   await assert.rejects(
@@ -318,9 +340,20 @@ test("consumer validates nonce and fee policy before invoking wallets or network
     }),
     code(SenderErrorCode.SigningFailed),
   );
+  await assert.rejects(
+    client.send({ ...request, fees: { ...request.fees, tipLamports: -1n } }),
+    code(SenderErrorCode.InvalidRequest),
+  );
+  await assert.rejects(
+    client.send({
+      ...request,
+      instructions: [{ programAddress: request.feePayer, data: new Uint8Array(2000) }],
+    }),
+    code(SenderErrorCode.CompilationFailed),
+  );
   assert.equal(calls, 0);
   assert.throws(
-    () => zeroSlot({ apiKey: "test", region: Region.London }),
+    () => new ZeroSlotSender({ apiKey: "test", region: Region.London }),
     code(SenderErrorCode.InvalidConfiguration),
   );
 });
@@ -389,14 +422,14 @@ test("consumer signs and submits across every documented tip recipient", async (
   let fraction = 0;
   t.mock.method(Math, "random", () => fraction);
   // Counts are the independently audited public catalogs, not imported implementation arrays.
-  for (const [factory, count] of [
-    [astralane, 17],
-    [blockRazor, 14],
-    [zeroSlot, 21],
-    [nextBlock, 8],
-    [heliusSender, 10],
+  for (const [Provider, count] of [
+    [AstralaneSender, 17],
+    [BlockRazorSender, 14],
+    [ZeroSlotSender, 21],
+    [NextBlockSender, 8],
+    [HeliusSender, 10],
   ]) {
-    const route = factory({ apiKey: "fixture", endpoint: `${url}/provider` });
+    const route = new Provider({ apiKey: "fixture", endpoint: `${url}/provider` });
     assert.equal(route.tipAccounts.length, count);
     assert.equal(new Set(route.tipAccounts).size, count);
     const client = new SenderClient({
@@ -429,7 +462,7 @@ test("consumer selects an eligible Astralane tier while retaining per-send tip c
   });
   const { request } = await trade();
   assert.throws(
-    () => astralane({ apiKey: "fixture", tier: "invalid" }),
+    () => new AstralaneSender({ apiKey: "fixture", tier: "invalid" }),
     code(SenderErrorCode.InvalidConfiguration),
   );
   for (const [tier, floor] of [
@@ -441,7 +474,7 @@ test("consumer selects an eligible Astralane tier while retaining per-send tip c
   ]) {
     const client = new SenderClient({
       defaultRpc: { url },
-      routes: [astralane({ apiKey: "fixture", endpoint: url, tier })],
+      routes: [new AstralaneSender({ apiKey: "fixture", endpoint: url, tier })],
     });
     const before = submissions;
     await assert.rejects(
@@ -465,4 +498,58 @@ test("consumer selects an eligible Astralane tier while retaining per-send tip c
       ),
     );
   }
+});
+
+test("consumer supplies a provider implementation and configuration failures stay local", async (t) => {
+  const paths = [];
+  const url = await fixture(t, (req, res, body) => {
+    paths.push(req.url);
+    const json = JSON.parse(body);
+    res.end(JSON.stringify({ result: signature(Buffer.from(json.params[0], "base64")) }));
+  });
+  const { request } = await trade();
+  const configured = new ZeroSlotSender({ apiKey: "fixture", endpoint: `${url}/custom` });
+  class ApplicationRoute {
+    provider = configured.provider;
+    tipAccounts = [...configured.tipAccounts];
+    minimumTipLamports = configured.minimumTipLamports;
+    minimumPriorityFeeLamports = configured.minimumPriorityFeeLamports;
+    timeoutMs = configured.timeoutMs;
+    encoder = configured;
+    createRequest(payload) {
+      return this.encoder.createRequest(payload);
+    }
+  }
+  assert.throws(
+    () => new ZeroSlotSender({ apiKey: "fixture", endpoint: "file:///tmp/private" }),
+    code(SenderErrorCode.InvalidConfiguration),
+  );
+  assert.throws(
+    () => new SenderClient({ defaultRpc: { url: "bad-url" } }),
+    code(SenderErrorCode.InvalidConfiguration),
+  );
+  assert.throws(
+    () =>
+      new SenderClient({
+        defaultRpc: { url },
+        routes: [{ ...new ApplicationRoute(), createRequest: undefined }],
+      }),
+    code(SenderErrorCode.InvalidConfiguration),
+  );
+  const custom = new ApplicationRoute();
+  const routes = [custom];
+  const sender = new SenderClient({ defaultRpc: { url: `${url}/rpc` }, routes });
+  // The client retains its own route list and metadata. Application encoder behavior stays caller-owned.
+  routes.length = 0;
+  custom.tipAccounts.length = 0;
+  custom.minimumTipLamports = 99_000_000n;
+  assert.equal(paths.length, 0);
+  const submission = await sender.send(request);
+  assert.ok(
+    (await submission.results).every(
+      (result) => result.status === SubmissionStatus.Accepted,
+    ),
+  );
+  assert.equal(paths.length, 2);
+  assert.ok(paths.some((path) => path.startsWith("/custom")));
 });

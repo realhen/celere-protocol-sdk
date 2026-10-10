@@ -1,4 +1,4 @@
 export * from "./types.js";
+export * from "./errors/index.js";
+export * from "./providers/index.js";
 export { SenderClient } from "./client.js";
-export { SenderClientBuilder, createSenderClient } from "./client-builder.js";
-export { astralane, blockRazor, zeroSlot, nextBlock, heliusSender } from "./providers.js";

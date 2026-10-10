@@ -197,10 +197,6 @@
     "./sender": {
       "types": "./dist/sender/index.d.ts",
       "import": "./dist/sender/index.js"
-    },
-    "./nonce": {
-      "types": "./dist/nonce/index.d.ts",
-      "import": "./dist/nonce/index.js"
     }
   },
   "scripts": {

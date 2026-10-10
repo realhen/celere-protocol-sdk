@@ -1,3 +1,4 @@
+import { SenderRequestError, SenderSigningError } from "./errors/index.js";
 import {
   assertIsTransactionWithinSizeLimit,
   getBase64Decoder,
@@ -7,7 +8,6 @@ import {
   verifySignature,
 } from "@solana/kit";
 import type { Address, Transaction, TransactionPartialSigner } from "@solana/kit";
-import { SenderError, SenderErrorCode } from "./types.js";
 import type { PreparedVariant } from "./types.js";
 import { copyTransaction, haveEqualBytes } from "./transaction.js";
 import type { PreparedTransaction } from "./transaction.js";
@@ -26,10 +26,7 @@ export async function signPreparedTransactions(
   signal?: AbortSignal,
 ): Promise<readonly PreparedTransaction[]> {
   if (!Array.isArray(signersInput))
-    throw new SenderError(
-      SenderErrorCode.InvalidRequest,
-      "Supply transaction partial signers",
-    );
+    throw new SenderRequestError("Supply transaction partial signers");
   const signers: TransactionPartialSigner[] = [...signersInput];
   // Provider tips add no new signers, so every variant has the same required addresses.
   const requiredAddresses = Object.keys(variants[0]!.transaction.signatures);
@@ -44,8 +41,7 @@ export async function signPreparedTransactions(
         typeof signer.signTransactions !== "function",
     )
   )
-    throw new SenderError(
-      SenderErrorCode.SigningFailed,
+    throw new SenderSigningError(
       "Supply exactly the required transaction partial signers",
     );
   const signedTransactions = variants.map((variant) =>
@@ -90,10 +86,7 @@ export async function signPreparedTransactions(
       }),
     );
   } catch {
-    throw new SenderError(
-      SenderErrorCode.SigningFailed,
-      "Signer failed to return the required signatures",
-    );
+    throw new SenderSigningError("Signer failed to return the required signatures");
   }
   return signedTransactions;
 }
@@ -158,8 +151,7 @@ export async function serializeSignedTransactions(
       }),
     );
   } catch {
-    throw new SenderError(
-      SenderErrorCode.SigningFailed,
+    throw new SenderSigningError(
       "Signed variants must preserve the prepared messages and contain valid signatures",
     );
   }

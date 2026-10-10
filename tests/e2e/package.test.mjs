@@ -90,10 +90,16 @@ test("packed public package installs offline and exposes usable strict TypeScrip
     const documentationSources = [];
     const documentedEntryFiles = [
       ...instructionFiles,
-      ...["client", "client-builder", "providers"].map((name) => ({
+      ...[
+        "client",
+        "providers/astralane",
+        "providers/block-razor",
+        "providers/zero-slot",
+        "providers/next-block",
+        "providers/helius",
+      ].map((name) => ({
         path: `dist/sender/${name}.js`,
       })),
-      { path: "dist/nonce/index.js" },
     ];
     for (const [index, file] of documentedEntryFiles.entries()) {
       const declarationPath = file.path.replace(/\.js$/, ".d.ts");

@@ -1,7 +1,11 @@
+import {
+  SenderConfigurationError,
+  SenderRequestError,
+  SenderAbortedError,
+} from "./errors/index.js";
 import type { Transaction } from "@solana/kit";
 import { configureSenderRoutes } from "./configuration.js";
 import type { ConfiguredRoute } from "./configuration.js";
-import { sendHttpRequest } from "./http.js";
 import { prepareTransactionVariants } from "./prepare-submission.js";
 import {
   signPreparedTransactions,
@@ -9,7 +13,6 @@ import {
 } from "./sign-submission.js";
 import { submitTransactionVariants } from "./submit-submission.js";
 import { copyPreparedVariants } from "./transaction.js";
-import { SenderError, SenderErrorCode } from "./types.js";
 import type {
   PrepareRequest,
   PreparedSubmission,
@@ -36,8 +39,7 @@ const clientStates = new WeakMap<SenderClient, SenderClientState>();
 function getClientState(client: SenderClient): SenderClientState {
   const state = clientStates.get(client);
   if (!state)
-    throw new SenderError(
-      SenderErrorCode.InvalidConfiguration,
+    throw new SenderConfigurationError(
       "Sender methods require their original client instance",
     );
   return state;
@@ -52,22 +54,20 @@ function getClientState(client: SenderClient): SenderClientState {
  *
  * @example
  * ```ts
- * import { SenderClient, astralane, Region } from "celere-protocol-sdk/sender";
+ * import { SenderClient, AstralaneSender, Region } from "celere-protocol-sdk/sender";
  *
  * declare const rpcUrl: string;
  * declare const apiKey: string;
  *
  * const sender = new SenderClient({
  *   defaultRpc: { url: rpcUrl },
- *   routes: [astralane({ apiKey, region: Region.Frankfurt })],
+ *   routes: [new AstralaneSender({ apiKey, region: Region.Frankfurt })],
  * });
  * ```
- *
- * @see {@link createSenderClient} for fluent route configuration.
  */
 export class SenderClient {
   /**
-   * Validate and retain a copy of the route configuration without starting network work.
+   * Retain immutable built-in providers or snapshot custom metadata without starting network work.
    *
    * @param options - Default RPC, provider lanes, and optional HTTP transport.
    * @throws {@link SenderError} synchronously if the route configuration is invalid.
@@ -75,7 +75,7 @@ export class SenderClient {
   constructor(options: SenderClientOptions) {
     clientStates.set(this, {
       routes: configureSenderRoutes(options),
-      transport: options.fetch ?? sendHttpRequest,
+      transport: options.fetch ?? ((url, init) => fetch(url, init)),
       // Weak plan keys do not retain unused preparation records indefinitely.
       preparedSubmissions: new WeakMap(),
     });
@@ -138,7 +138,7 @@ export class SenderClient {
    */
   async send(request: SendRequest): Promise<Submission> {
     if (request.signal?.aborted) {
-      throw new SenderError(SenderErrorCode.Aborted, "Send aborted before signing");
+      throw new SenderAbortedError("Send aborted before signing");
     }
     const prepared = this.prepare(request);
     const signed = await signPreparedTransactions(
@@ -186,18 +186,17 @@ export class SenderClient {
       !Array.isArray(transactions) ||
       transactions.length !== variants.length
     ) {
-      throw new SenderError(
-        SenderErrorCode.InvalidRequest,
+      throw new SenderRequestError(
         "Signed transactions must match a plan from this client",
       );
     }
     if (options.signal?.aborted) {
-      throw new SenderError(SenderErrorCode.Aborted, "Send aborted before dispatch");
+      throw new SenderAbortedError("Send aborted before dispatch");
     }
     const payloads = await serializeSignedTransactions(variants, transactions);
     // A wallet or signature verifier may finish after the application has cancelled.
     if (options.signal?.aborted) {
-      throw new SenderError(SenderErrorCode.Aborted, "Send aborted before dispatch");
+      throw new SenderAbortedError("Send aborted before dispatch");
     }
     return submitTransactionVariants(routes, variants, payloads, transport, options);
   }

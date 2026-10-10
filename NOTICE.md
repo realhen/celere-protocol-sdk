@@ -74,7 +74,7 @@ The independently authored LiquidAF curve/AMM builders, decoders, and bigint mat
 
 ## Solana
 
-Solana Kit, `@solana/sysvars`, the official `@solana-program/system`, `token`, `token-2022`, `memo`, and `compute-budget` clients, and their transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives for offline protocol construction and optional caller-requested signing, HTTP submission, and nonce discovery.
+Solana Kit, `@solana/sysvars`, the official `@solana-program/system`, `token`, `token-2022`, `memo`, and `compute-budget` clients, and their transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives for offline protocol construction and optional caller-requested signing, HTTP submission.
 
 No extracted Axiom JavaScript is included in this repository or package.
 

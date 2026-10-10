@@ -8,7 +8,7 @@ Callers select the protocol and native instruction, supply accounts and argument
 
 Optional offline helpers provide account discovery, state validation, quotes, and swap limits from caller-supplied snapshots. Their supported variants and execution guarantees are separate from direct instruction construction.
 
-Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto. The root, protocol builders, and `/transactions` remain strictly offline; `/sender` and `/nonce` perform explicitly requested network operations.
+Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto. The root, protocol builders, and `/transactions` remain strictly offline; `/sender` performs explicitly requested network operations.
 
 ```sh
 npm ci --ignore-scripts
@@ -22,17 +22,20 @@ Import from `celere-protocol-sdk/sender`. Configure once, supply protocol instru
 
 ```ts
 import {
-  createSenderClient,
-  astralane,
-  heliusSender,
+  SenderClient,
+  AstralaneSender,
+  HeliusSender,
   Region,
 } from "celere-protocol-sdk/sender";
 
-const sender = createSenderClient({ defaultRpc: { url: rpcUrl } })
-  .addRoute(astralane({ apiKey: astralaneKey, region: Region.Frankfurt }))
-  .addRoute(astralane({ apiKey: astralaneKey, region: Region.NewYork }))
-  .addRoute(heliusSender({ apiKey: heliusKey, region: Region.Frankfurt }))
-  .build();
+const sender = new SenderClient({
+  defaultRpc: { url: rpcUrl },
+  routes: [
+    new AstralaneSender({ apiKey: astralaneKey, region: Region.Frankfurt }),
+    new AstralaneSender({ apiKey: astralaneKey, region: Region.NewYork }),
+    new HeliusSender({ apiKey: heliusKey, region: Region.Frankfurt }),
+  ],
+});
 
 const submission = await sender.send({
   instructions, // Any protocol's Kit-compatible instructions.
@@ -51,7 +54,7 @@ const signatures = submission.variants.map((variant) => variant.signature);
 const transportResults = await submission.results; // Optional: HTTP results, never confirmation.
 ```
 
-The equivalent class configuration is `new SenderClient({ defaultRpc: { url: rpcUrl }, routes: [astralane(...), heliusSender(...)] })`. Builders are immutable: retain the value returned by `addRoute`/`addRoutes`. Explicit route names are optional; the client assigns unique IDs for results.
+Provider classes implement the shared `SenderRoute` interface. Their options restrict regions to the locations that provider supports. Explicit route names are optional; the client assigns unique IDs for results.
 
 The sender creates one untipped default RPC variant and provider-tipped variants. Regions with identical tip requirements reuse signed bytes and a signature. Every distinct variant uses the same nonce account and value, with the nonce advance instruction first. All required partial signers receive the variants in a batch; signatures are verified before dispatch. All HTTP requests launch concurrently, without waiting for the first acknowledgment. There are no trade-time fee, blockhash, nonce, or simulation reads.
 
@@ -63,54 +66,47 @@ For external signing, call `sender.prepare(request)`, sign each `prepared.varian
 
 ### Reading the sender implementation
 
-Start with [SenderClient](src/sender/client.ts) for the public `prepare`, `send`, and `submitSigned` flow, or [the builder](src/sender/client-builder.ts) for fluent configuration. Each public method documents its parameters, return timing, failures, and a typed example; these comments are included in the generated declarations.
+Start with [SenderClient](src/sender/client.ts) for the public `prepare`, `send`, and `submitSigned` flow. Each public method documents its parameters, return timing, failures, and a typed example; these comments are included in the generated declarations.
 
-| Module                                                 | Responsibility                                                                                            |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| [configuration](src/sender/configuration.ts)           | Validate and copy routes; assign result IDs and the default RPC lane.                                     |
-| [prepare-submission](src/sender/prepare-submission.ts) | Validate fees and compile distinct provider-tip variants.                                                 |
-| [sign-submission](src/sender/sign-submission.ts)       | Batch-sign, verify unchanged messages and signatures, and serialize wire bytes.                           |
-| [submit-submission](src/sender/submit-submission.ts)   | Launch every route and collect independent observations.                                                  |
-| [http](src/sender/http.ts)                             | Encode provider HTTP requests, apply deadlines, and interpret responses.                                  |
-| [providers](src/sender/providers.ts)                   | Documented provider factories backed by the endpoint and tip [registry](src/sender/provider-registry.ts). |
-| [types](src/sender/types.ts)                           | Public configuration, fee units, request types, and result contracts.                                     |
+| Module                                                 | Responsibility                                                                          |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| [configuration](src/sender/configuration.ts)           | Retain validated providers, snapshot custom route metadata, and assign result IDs.      |
+| [prepare-submission](src/sender/prepare-submission.ts) | Validate fees and compile distinct provider-tip variants.                               |
+| [sign-submission](src/sender/sign-submission.ts)       | Batch-sign, verify unchanged messages and signatures, and serialize wire bytes.         |
+| [submit-submission](src/sender/submit-submission.ts)   | Launch every route and collect independent observations.                                |
+| [http](src/sender/http.ts)                             | Apply shared deadlines, cancellation, and acknowledgment interpretation.                |
+| [providers](src/sender/providers/index.ts)             | One class per provider, owning endpoints, recipients, fee floors, and request encoding. |
+| [types](src/sender/types.ts)                           | Public configuration, fee units, request types, and result contracts.                   |
 
-The HTTP boundary accepts a named `SenderHttpTransport`, compatible with Fetch API implementations. By default it calls the runtime's standard `fetch`; injection is available for application-managed pools and proxies. Module-private state keeps credentials and original preparation buffers out of public client/builder objects without exposing JavaScript private-field syntax in their declarations.
+The HTTP boundary accepts a named `SenderHttpTransport`, compatible with Fetch API implementations. By default it calls the runtime's standard `fetch`; injection is available for application-managed pools and proxies. Module-private state keeps credentials and original preparation buffers out of the public client object without exposing JavaScript private-field syntax in their declarations.
 
-### Nonce ownership and discovery
+### Nonce ownership
 
-Provision and fund durable nonce accounts beforehand using the official System Program instructions. One nonce can arbitrate the variants of one logical trade; concurrent independent trades need different available nonce accounts. The caller owns selection, freshness, and safe reuse. Never blindly pick a random account from a shared pool: two sends can choose the same nonce value. Slot duration does not establish availability, and a submitted transaction can remain pending beyond a slot. A failed durable-nonce transaction can also consume its nonce.
+The application provisions and funds nonce accounts, fetches their current values, and supplies `{ account, authority, value }` on each send. This SDK has no nonce discovery API or background nonce service. One nonce can arbitrate the variants of one logical trade; concurrent independent trades need different available nonce accounts.
 
-Optional one-shot discovery uses `getProgramAccounts`, filtered by System Program, account size, and nonce authority:
+The caller owns selection, freshness, and safe reuse. Slot duration does not establish availability: a submitted transaction can remain pending beyond a slot, and a failed durable-nonce transaction can consume its nonce. Confirmation, refreshes, and cross-process coordination belong to the application. A timeout does not free a nonce for a different trade. RPC-only sends may instead supply a recent blockhash lifetime.
 
-```ts
-import { discoverNonceAccounts } from "celere-protocol-sdk/nonce";
+### Validation and errors
 
-const accounts = await discoverNonceAccounts({
-  rpc,
-  authority: wallet.address,
-  commitment: "confirmed",
-});
-// Select a current snapshot your application can exclusively use.
-```
+Internal validators return discriminated success/error values. `prepare` and constructors retain synchronous errors; `send` and `submitSigned` retain promise rejections for failures before dispatch. Catch the common `SenderError` or a specific class such as `SenderConfigurationError`, `NonceRequiredError`, `TipTooLowError`, or `SenderSigningError`. Stable `SenderErrorCode` values remain available. All sender errors live in [errors](src/sender/errors/index.ts).
 
-Discovery returns initialized current-version accounts and their observed slot. It establishes authority, not whether another process has pending transactions using those accounts. No application registry/filter is required if all discovered accounts belong to your execution workload. RPC providers must allow System Program scans; unsupported scans surface as errors. Refresh the chosen account's value after consumption before reusing it. Confirmation, nonce invalidation, and any cross-process coordination remain application concerns. A timeout does not free a nonce for a different trade. RPC-only sends may instead use `lifetime: { blockhash, lastValidBlockHeight }`; multiple distinct variants require a durable nonce.
+Built-in providers validate caller options once during construction. Client construction reuses their immutable configuration; it does not revalidate the provider catalog. Custom endpoint overrides and the default RPC are checked at configuration time. Per-send inputs still require validation before signing. Provider constructors and `SenderClient` perform no network work.
 
 ### Provider configuration
 
 These adapters submit single transactions over HTTP. They do not implement bundles, gRPC or QUIC. `Region` values select documented regional endpoints; unsupported combinations fail rather than falling back to another region. `endpoint` overrides accept full submission URLs for proxies or private deployments. Some provider regional endpoints use HTTP; browser callers must choose HTTPS endpoints with suitable CORS support and avoid exposing server credentials. Existing Kit types, including commitment strings, are preserved; SDK-owned provider/region/status values are enums.
 
-| Adapter        | Per-variant tip floor | Notes                                                                                                                                                      |
-| -------------- | --------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `astralane`    |    1,000,000 lamports | Binary Iris (`/irisb`), Free tier. `AstralaneTier.Vip1`/`Vip2` allow 100,000; `Vip3` allows 10,000. Select only your provisioned tier.                     |
-| `blockRazor`   |      100,000 lamports | Fast mode; sandwich mitigation is incompatible with nonce fan-out.                                                                                         |
-| `zeroSlot`     |    1,000,000 lamports | Advanced-plan callers can explicitly set `minimumTipLamports: 100_000n` in route options. This selects the provider plan floor, not the transaction's tip. |
-| `nextBlock`    |      100,000 lamports | HTTP v2, skip preflight and disable retries requested.                                                                                                     |
-| `heliusSender` |    1,000,000 lamports | Sender Max default; requires at least 5,000 lamports in priority fees. `HeliusSenderMode.SwqosOnly` selects the 5,000-lamport tip tier.                    |
+| Adapter            | Per-variant tip floor | Notes                                                                                                                                                      |
+| ------------------ | --------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AstralaneSender`  |    1,000,000 lamports | Binary Iris (`/irisb`), Free tier. `AstralaneTier.Vip1`/`Vip2` allow 100,000; `Vip3` allows 10,000. Select only your provisioned tier.                     |
+| `BlockRazorSender` |      100,000 lamports | Fast mode; sandwich mitigation is incompatible with nonce fan-out.                                                                                         |
+| `ZeroSlotSender`   |    1,000,000 lamports | Advanced-plan callers can explicitly set `minimumTipLamports: 100_000n` in route options. This selects the provider plan floor, not the transaction's tip. |
+| `NextBlockSender`  |      100,000 lamports | HTTP v2, skip preflight and disable retries requested.                                                                                                     |
+| `HeliusSender`     |    1,000,000 lamports | Sender Max default; requires at least 5,000 lamports in priority fees. `HeliusSenderMode.SwqosOnly` selects the 5,000-lamport tip tier.                    |
 
 Fees are explicit per send. `tipOverrides` uses `SenderProvider` keys and applies to all that provider's regional lanes. Below-floor amounts fail before signing; the SDK never silently raises your fees. Compute-unit limits cover the whole transaction, including setup, nonce and tip instructions. Set priority price from your application's fee estimate; simulate/estimate compute outside the latency-sensitive send call when needed. No automatic fee sampling or CU estimation is implied by these example values. Floors and endpoints follow the references below and may change with provider plans.
 
-The provider registry was checked against official documentation on **2026-10-09**. It includes all public tip accounts listed in these sources, including their additional/recently added sections:
+The provider catalogs were checked against official documentation on **2026-10-09**. It includes all public tip accounts listed in these sources, including their additional/recently added sections:
 
 | Provider   | Tip accounts | Official recipient source                                                                                                                       | SDK endpoint regions                                                                            |
 | ---------- | -----------: | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |

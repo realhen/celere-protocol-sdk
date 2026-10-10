@@ -1,72 +1,9 @@
-import { HeliusSenderMode, SenderProvider, SubmissionStatus } from "./types.js";
-import type { RouteResult, SenderRoute, SenderHttpTransport } from "./types.js";
+import { SubmissionStatus } from "./types.js";
+import type { RouteResult, SenderHttpTransport } from "./types.js";
 
 import type { ConfiguredRoute } from "./configuration.js";
 import type { SignedPayload } from "./sign-submission.js";
 
-/** Use the runtime's standard HTTP implementation unless the caller supplies a transport. */
-export function sendHttpRequest(url: string, options: RequestInit): Promise<Response> {
-  return fetch(url, options);
-}
-
-/** Translate one already-signed transaction into the provider's HTTP request format. */
-function getSubmissionRequest(
-  route: SenderRoute,
-  payload: SignedPayload,
-): { url: string; init: RequestInit } {
-  const url = new URL(route.endpoint);
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  let body: string | Uint8Array<ArrayBuffer>;
-  const rpc = {
-    jsonrpc: "2.0",
-    id: "1",
-    method: "sendTransaction",
-    params: [payload.base64, { encoding: "base64", skipPreflight: true, maxRetries: 0 }],
-  };
-  switch (route.provider) {
-    case SenderProvider.Astralane:
-      url.searchParams.set("api-key", route.apiKey);
-      url.searchParams.set("method", "sendTransaction");
-      headers["Content-Type"] = "application/octet-stream";
-      body = Uint8Array.from(payload.bytes);
-      break;
-    case SenderProvider.BlockRazor:
-      headers.apikey = route.apiKey;
-      body = JSON.stringify({
-        transaction: payload.base64,
-        mode: "fast",
-        revertProtection: false,
-      });
-      break;
-    case SenderProvider.NextBlock:
-      headers.Authorization = route.apiKey;
-      body = JSON.stringify({
-        transaction: { content: payload.base64 },
-        skipPreFlight: true,
-        frontRunningProtection: false,
-        disableRetries: true,
-      });
-      break;
-    case SenderProvider.Helius:
-      url.searchParams.set("api-key", route.apiKey);
-      if (route.mode === HeliusSenderMode.SwqosOnly)
-        url.searchParams.set("swqos_only", "true");
-      else url.searchParams.delete("swqos_only");
-      body = JSON.stringify(rpc);
-      break;
-    case SenderProvider.ZeroSlot:
-      url.searchParams.set("api-key", route.apiKey);
-      body = JSON.stringify(rpc);
-      break;
-    case SenderProvider.Rpc:
-      body = JSON.stringify(rpc);
-      break;
-  }
-  return {
-    url: url.toString(),
-    init: { method: "POST", headers, body, redirect: "error" },
-  };
-}
 function isResponseObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -120,7 +57,7 @@ export async function sendRouteTransaction(
       timer = setTimeout(abort, route.config.timeoutMs);
     });
     const operation = (async () => {
-      const { url, init } = getSubmissionRequest(route.config, payload);
+      const { url, init } = route.config.createRequest(payload);
       const response = await transport(url, { ...init, signal: controller.signal });
       httpStatus = response.status;
       if (!response.ok) {

@@ -67,40 +67,7 @@ export enum SubmissionStatus {
   /** Cancellation was observed before this route attempted its HTTP request. */
   NotSubmitted = "not-submitted",
 }
-/** Stable error codes for preparation/configuration/signing failures, before any dispatch. */
-export enum SenderErrorCode {
-  /** Invalid client, route, endpoint, or provider options. */
-  InvalidConfiguration = "INVALID_CONFIGURATION",
-  /** Malformed preparation inputs or a plan not owned by this client. */
-  InvalidRequest = "INVALID_REQUEST",
-  /** Distinct transaction variants were requested without a shared durable nonce. */
-  NonceRequired = "NONCE_REQUIRED",
-  /** The per-send tip is below a configured provider's minimum. */
-  TipTooLow = "TIP_TOO_LOW",
-  /** The total priority fee is below a configured provider's minimum. */
-  PriorityFeeTooLow = "PRIORITY_FEE_TOO_LOW",
-  /** The offline compiler rejected the transaction, for example because it exceeds packet size. */
-  CompilationFailed = "COMPILATION_FAILED",
-  /** A signer failed, a message changed, or required signatures were missing or invalid. */
-  SigningFailed = "SIGNING_FAILED",
-  /** Cancellation was observed before HTTP dispatch. */
-  Aborted = "ABORTED",
-}
-/** Structured failure. Messages never include provider credentials or remote response bodies. */
-export class SenderError extends Error {
-  /**
-   * @param code - Stable failure category suitable for application branching.
-   * @param message - Human-readable explanation without credentials or provider bodies.
-   */
-  constructor(
-    readonly code: SenderErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = "SenderError";
-  }
-}
-/** Shared configuration accepted by provider route factories. Creating a route performs no I/O. */
+/** Shared configuration accepted by provider classes. Creating a route performs no I/O. */
 export interface RouteOptions {
   /** Optional application label, unique within a client; echoed in route results. */
   readonly name?: string;
@@ -114,53 +81,48 @@ export interface RouteOptions {
   readonly timeoutMs?: number;
 }
 
-/** Configuration for {@link astralane}, including the caller's current provider fee tier. */
-export interface AstralaneRouteOptions extends RouteOptions {
-  /**
-   * Provisioned fee tier; defaults to {@link AstralaneTier.Free}. Only changes minimum-tip
-   * validation. Actual tips are chosen per send in {@link SenderFees}; eligibility is caller-owned.
-   */
-  readonly tier?: AstralaneTier;
+/** Serialized, verified transaction supplied to a provider's request encoder. */
+export interface SenderTransactionPayload {
+  /** Signed wire bytes; treat as readonly. */
+  readonly bytes: Uint8Array;
+  /** Base64 representation of the same signed bytes. */
+  readonly base64: string;
+  /** Locally verified fee-payer signature. */
+  readonly signature: string;
 }
 
-/** Configuration for {@link zeroSlot}, including the caller's provisioned provider plan. */
-export interface ZeroSlotRouteOptions extends RouteOptions {
-  /**
-   * Minimum allowed tip for this provider plan: 1,000,000 lamports by default, or 100,000
-   * for an advanced plan. This validates sends; actual tips still come from {@link SenderFees}.
-   */
-  readonly minimumTipLamports?: 100_000n | 1_000_000n;
-}
-
-/** Configuration for {@link heliusSender}. */
-export interface HeliusRouteOptions extends RouteOptions {
-  /** Helius submission tier. Defaults to {@link HeliusSenderMode.Max}. */
-  readonly mode?: HeliusSenderMode;
+/** A provider-encoded HTTP submission. URLs and headers may contain credentials. */
+export interface SenderHttpRequest {
+  /** Complete submission URL with authentication parameters, if required. */
+  readonly url: string;
+  /** POST body, headers and redirect policy; the shared transport adds cancellation. */
+  readonly init: RequestInit;
 }
 
 /**
- * Immutable provider lane returned by a route factory.
- *
- * Prefer the factories to constructing this structure directly: they supply the provider's
- * endpoint, authentication convention, tip recipients, and minimum tip. Contains credentials.
+ * Common contract implemented by provider classes. Construction configures one regional lane.
+ * Custom implementations are trusted application code: createRequest must encode the supplied
+ * payload unchanged and must not submit it itself. The client owns concurrent HTTP dispatch.
  */
 export interface SenderRoute {
-  /** Provider whose HTTP request format and tip policy apply to this lane. */
+  /** Provider identity used in observations and per-send tip overrides. */
   readonly provider: SenderProvider;
-  /** Optional application label echoed as {@link RouteResult.routeName}. */
+  /** Optional application label, unique within a client. */
   readonly name?: string;
-  /** Complete submission URL, including any caller-supplied query parameters. */
-  readonly endpoint: string;
-  /** Credential attached according to this provider's HTTP authentication format. */
-  readonly apiKey: string;
-  /** Maximum duration of each HTTP attempt, in milliseconds. */
+  /** HTTP deadline in milliseconds, including response-body reading. */
   readonly timeoutMs: number;
-  /** Minimum tip in lamports; amounts below this fail before signing. */
+  /** Minimum allowed per-send tip in lamports. */
   readonly minimumTipLamports: bigint;
-  /** Provider-approved SOL recipients. A recipient is selected once per compatible provider group. */
+  /** Minimum total priority fee in lamports, not micro-lamports per compute unit. */
+  readonly minimumPriorityFeeLamports: bigint;
+  /** Provider-approved SOL recipients; regional lanes share one selected recipient. */
   readonly tipAccounts: readonly Address[];
-  /** Submission tier for Helius routes; absent for other providers. */
-  readonly mode?: HeliusSenderMode;
+  /**
+   * Encode a signed payload without performing I/O. Called once per route during dispatch.
+   * @param payload - Verified transaction bytes, base64 and expected signature.
+   * @returns Credential-bearing HTTP request; callers must not log it.
+   */
+  createRequest(payload: SenderTransactionPayload): SenderHttpRequest;
 }
 
 /** Per-send amounts. All monetary values are atomic bigint values. No automatic fee sampling. */
@@ -312,7 +274,7 @@ export type SenderHttpTransport = (
   options: RequestInit,
 ) => Promise<Response>;
 
-/** Configuration shared by the direct client constructor and fluent builder. */
+/** Configuration for the reusable sender client. */
 export interface SenderClientOptions {
   /** Mandatory RPC route; provider lanes supplement it rather than replace it. */
   readonly defaultRpc: RpcRouteOptions;

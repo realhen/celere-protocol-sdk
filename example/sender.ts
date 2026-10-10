@@ -1,12 +1,12 @@
 import type { Instruction, TransactionPartialSigner } from "@solana/kit";
 import type { DurableNonce } from "celere-protocol-sdk/transactions";
 import {
-  createSenderClient,
-  astralane,
-  blockRazor,
-  zeroSlot,
-  nextBlock,
-  heliusSender,
+  SenderClient,
+  AstralaneSender,
+  BlockRazorSender,
+  ZeroSlotSender,
+  NextBlockSender,
+  HeliusSender,
   Region,
   SenderProvider,
 } from "celere-protocol-sdk/sender";
@@ -20,14 +20,17 @@ export function configureSender(config: {
   nextBlockKey: string;
   heliusKey: string;
 }) {
-  return createSenderClient({ defaultRpc: { url: config.rpcUrl } })
-    .addRoute(astralane({ apiKey: config.astralaneKey, region: Region.Frankfurt }))
-    .addRoute(astralane({ apiKey: config.astralaneKey, region: Region.NewYork }))
-    .addRoute(blockRazor({ apiKey: config.blockRazorKey, region: Region.Frankfurt }))
-    .addRoute(zeroSlot({ apiKey: config.zeroSlotKey, region: Region.Frankfurt }))
-    .addRoute(nextBlock({ apiKey: config.nextBlockKey, region: Region.Frankfurt }))
-    .addRoute(heliusSender({ apiKey: config.heliusKey, region: Region.Frankfurt }))
-    .build();
+  return new SenderClient({
+    defaultRpc: { url: config.rpcUrl },
+    routes: [
+      new AstralaneSender({ apiKey: config.astralaneKey, region: Region.Frankfurt }),
+      new AstralaneSender({ apiKey: config.astralaneKey, region: Region.NewYork }),
+      new BlockRazorSender({ apiKey: config.blockRazorKey, region: Region.Frankfurt }),
+      new ZeroSlotSender({ apiKey: config.zeroSlotKey, region: Region.Frankfurt }),
+      new NextBlockSender({ apiKey: config.nextBlockKey, region: Region.Frankfurt }),
+      new HeliusSender({ apiKey: config.heliusKey, region: Region.Frankfurt }),
+    ],
+  });
 }
 
 /** Instructions can come from any native protocol builder, or any Kit-compatible source. */
