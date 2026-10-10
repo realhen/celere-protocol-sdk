@@ -77,7 +77,7 @@ Start with [SenderClient](src/sender/client.ts) for the public `prepare`, `send`
 | [types](src/sender/types.ts)               | Public configuration, fee units, request types, and result contracts.                                                                             |
 | [errors](src/sender/errors/index.ts)       | Typed configuration, preparation, signing, and cancellation failures.                                                                             |
 
-The HTTP boundary accepts a named `SenderHttpTransport`, compatible with Fetch API implementations. By default it calls the runtime's standard `fetch`; injection is available for application-managed pools and proxies. Module-private state keeps credentials and original preparation buffers out of the public client object without exposing JavaScript private-field syntax in their declarations.
+The HTTP boundary accepts a named `SenderHttpTransport`, compatible with Fetch API implementations. By default it calls the runtime's standard `fetch`; injection is available for application-managed pools and proxies. JavaScript private fields (`#routes`, `#transport`, and `#preparedSubmissions`) keep the client's configuration and original preparation buffers inaccessible through public properties. The preparation map uses weak keys so unused plans can be garbage-collected.
 
 ### Nonce ownership
 

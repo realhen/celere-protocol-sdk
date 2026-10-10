@@ -30,27 +30,6 @@ import type {
   SubmitSignedOptions,
 } from "./types.js";
 
-/** Configuration and preparation records retained for one client. */
-interface SenderClientState {
-  readonly routes: readonly ConfiguredRoute[];
-  readonly transport: SenderHttpTransport;
-  readonly preparedSubmissions: WeakMap<PreparedSubmission, readonly PreparedVariant[]>;
-}
-
-// Keep credentials and original message buffers outside the public client object. A
-// module-private WeakMap preserves runtime privacy without JavaScript #field syntax,
-// and releases state when the application no longer retains its client.
-const clientStates = new WeakMap<SenderClient, SenderClientState>();
-
-function getClientState(client: SenderClient): SenderClientState {
-  const state = clientStates.get(client);
-  if (!state)
-    throw new SenderConfigurationError(
-      "Sender methods require their original client instance",
-    );
-  return state;
-}
-
 /**
  * Prepares, signs, and concurrently submits transactions through configured routes.
  *
@@ -72,6 +51,16 @@ function getClientState(client: SenderClient): SenderClientState {
  * ```
  */
 export class SenderClient {
+  /** Immutable route configuration, including provider credentials, stays private at runtime. */
+  readonly #routes: readonly ConfiguredRoute[];
+  /** HTTP implementation selected when this client is constructed. */
+  readonly #transport: SenderHttpTransport;
+  /** Original message buffers; weak keys let unused preparation records be garbage-collected. */
+  readonly #preparedSubmissions = new WeakMap<
+    PreparedSubmission,
+    readonly PreparedVariant[]
+  >();
+
   /**
    * Retain immutable built-in providers or snapshot custom metadata without starting network work.
    *
@@ -80,12 +69,8 @@ export class SenderClient {
    * route names, an invalid default RPC URL, or an invalid custom transport.
    */
   constructor(options: SenderClientOptions) {
-    clientStates.set(this, {
-      routes: configureSenderRoutes(options),
-      transport: options.fetch ?? ((url, init) => fetch(url, init)),
-      // Weak plan keys do not retain unused preparation records indefinitely.
-      preparedSubmissions: new WeakMap(),
-    });
+    this.#routes = configureSenderRoutes(options);
+    this.#transport = options.fetch ?? ((url, init) => fetch(url, init));
   }
 
   /**
@@ -117,12 +102,13 @@ export class SenderClient {
    * ```
    */
   prepare(request: PrepareRequest): PreparedSubmission {
-    const { routes, preparedSubmissions } = getClientState(this);
-    const validation = validatePreparationRequest(request, routes);
+    const validation = validatePreparationRequest(request, this.#routes);
     if (!validation.ok) throw validation.error;
-    const variants = copyPreparedVariants(prepareTransactionVariants(request, routes));
+    const variants = copyPreparedVariants(
+      prepareTransactionVariants(request, this.#routes),
+    );
     const prepared = Object.freeze({ variants: copyPreparedVariants(variants) });
-    preparedSubmissions.set(prepared, variants);
+    this.#preparedSubmissions.set(prepared, variants);
     return prepared;
   }
 
@@ -198,8 +184,7 @@ export class SenderClient {
     transactions: readonly Transaction[],
     options: SubmitSignedOptions = {},
   ): Promise<Submission> {
-    const { routes, transport, preparedSubmissions } = getClientState(this);
-    const variants = preparedSubmissions.get(prepared);
+    const variants = this.#preparedSubmissions.get(prepared);
     if (
       !variants ||
       !Array.isArray(transactions) ||
@@ -218,12 +203,12 @@ export class SenderClient {
       throw new SenderAbortedError("Send aborted before dispatch");
     }
     // Launch every route before returning; only the results promise waits for HTTP responses.
-    const results = routes.map((route) => {
+    const results = this.#routes.map((route) => {
       const index = variants.findIndex((variant) => variant.routeIds.includes(route.id));
       return sendRouteTransaction(
         route,
         payloads[index]!,
-        transport,
+        this.#transport,
         options.signal,
       ).then((result) => {
         const onRouteResult = options.onRouteResult;
