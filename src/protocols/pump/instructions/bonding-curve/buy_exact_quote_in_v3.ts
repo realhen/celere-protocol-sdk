@@ -8,7 +8,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { PUMP_PROGRAM } from "../../constants.js";
+import { PUMP_PROGRAM } from "../../constants";
 
 /** Identifies Pump’s native `buy_exact_quote_in_v3` instruction. */
 const DISCRIMINATOR = new Uint8Array([225, 247, 80, 30, 213, 179, 132, 136]);

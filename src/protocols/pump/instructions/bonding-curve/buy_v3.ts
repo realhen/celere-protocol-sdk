@@ -8,7 +8,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { PUMP_PROGRAM } from "../../constants.js";
+import { PUMP_PROGRAM } from "../../constants";
 
 /** Identifies Pump bonding curve’s native `buy_v3` instruction. */
 const DISCRIMINATOR = new Uint8Array([7, 5, 29, 196, 245, 23, 101, 80]);

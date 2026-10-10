@@ -11,7 +11,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { HEAVEN_PROGRAM, HEAVEN_ORACLE_PROGRAM, HEAVEN_SOL_PRICE } from "../constants.js";
+import { HEAVEN_PROGRAM, HEAVEN_ORACLE_PROGRAM, HEAVEN_SOL_PRICE } from "../constants";
 
 /** Accounts required by Heaven’s native `sell` instruction. */
 export interface HeavenSellAccounts {

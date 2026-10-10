@@ -13,38 +13,33 @@ import {
   readMint,
   readTokenAccount,
   WRAPPED_SOL_MINT,
-} from "../../accounts/tokens.js";
-import { minimumOutput } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { minimumOutput } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   RouteAdapter,
   RouteHop,
   RouteHopQuote,
   RouteRequest,
   ProtocolRoute,
-} from "../../core/route-types.js";
+} from "../../core/route-types";
 import type {
   AccountRequirement,
   ResolvedTokenAccounts,
   SwapFee,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
-import { quotePumpAmm } from "./amm-math.js";
-import {
-  readAmmFees,
-  readAmmGlobal,
-  readAmmPool,
-  type PumpAmmPool,
-} from "./amm-state.js";
-import { PUMP_AMM_PROGRAM, PUMP_PROGRAM, PUMP_FEE_PROGRAM } from "./constants.js";
-import { quotePump } from "./math.js";
-import { readCurve, readFees, readPumpGlobal, type PumpCurve } from "./state.js";
+} from "../../core/types";
+import { quotePumpAmm } from "./amm-math";
+import { readAmmFees, readAmmGlobal, readAmmPool, type PumpAmmPool } from "./amm-state";
+import { PUMP_AMM_PROGRAM, PUMP_PROGRAM, PUMP_FEE_PROGRAM } from "./constants";
+import { quotePump } from "./math";
+import { readCurve, readFees, readPumpGlobal, type PumpCurve } from "./state";
 import {
   multi_hop_swap,
   type PumpAmmMultiHopSwapHopAccounts,
-} from "./instructions/amm/multi_hop_swap.js";
+} from "./instructions/amm/multi_hop_swap";
 
 const bytes = getAddressEncoder();
 const utf8 = new TextEncoder();

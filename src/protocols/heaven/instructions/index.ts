@@ -1,2 +1,2 @@
-export * from "./buy.js";
-export * from "./sell.js";
+export * from "./buy";
+export * from "./sell";

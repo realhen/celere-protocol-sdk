@@ -9,7 +9,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { METEORA_DLMM_PROGRAM } from "../../constants.js";
+import { METEORA_DLMM_PROGRAM } from "../../constants";
 
 /** Identifies Meteora DLMM’s native `swap2` instruction. */
 const discriminator = Uint8Array.of(65, 75, 63, 76, 235, 91, 91, 136);

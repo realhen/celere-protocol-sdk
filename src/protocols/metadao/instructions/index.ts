@@ -1,1 +1,1 @@
-export * from "./spot_swap.js";
+export * from "./spot_swap";

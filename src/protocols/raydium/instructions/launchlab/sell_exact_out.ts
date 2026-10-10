@@ -8,7 +8,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { RAYDIUM_LAUNCHLAB_PROGRAM } from "../../constants.js";
+import { RAYDIUM_LAUNCHLAB_PROGRAM } from "../../constants";
 
 /** Accounts required by Raydium LaunchLab’s native `sell_exact_out` instruction. */
 export interface RaydiumLaunchlabSellExactOutAccounts {

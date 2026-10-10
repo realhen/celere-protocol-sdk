@@ -1,4 +1,4 @@
-import * as core from "./offline-core.js";
+import * as core from "./offline-core";
 
 /**
  * Initialize the official Orca math core from embedded package bytes on first use.

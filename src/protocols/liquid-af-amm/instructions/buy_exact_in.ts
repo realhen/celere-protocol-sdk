@@ -14,9 +14,9 @@ import {
 import {
   LIQUID_AF_STATE_PROGRAM,
   LIQUID_AF_EVENTS_PROGRAM,
-} from "../../liquid-af/constants.js";
-import { LIQUID_AF_AMM_PROGRAM } from "../constants.js";
-import type { LiquidAfAmmSwapAccounts } from "./accounts.js";
+} from "../../liquid-af/constants";
+import { LIQUID_AF_AMM_PROGRAM } from "../constants";
+import type { LiquidAfAmmSwapAccounts } from "./accounts";
 
 /**
  * Native arguments for {@link buy_exact_in}.

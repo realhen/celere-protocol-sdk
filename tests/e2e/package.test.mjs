@@ -41,6 +41,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         (file) => !file.path.startsWith("tests/") && !file.path.startsWith("outputs/"),
       ),
     );
+    const sourceManifest = JSON.parse(await readFile("package.json", "utf8"));
     await writeFile(
       join(directory, "package.json"),
       JSON.stringify({
@@ -49,13 +50,13 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         type: "module",
         dependencies: {
           "celere-protocol-sdk": `file:${join(directory, packed.filename)}`,
+          "@types/node": sourceManifest.devDependencies["@types/node"],
         },
       }),
     );
     const consumerManifest = JSON.parse(
       await readFile(join(directory, "package.json"), "utf8"),
     );
-    const sourceManifest = JSON.parse(await readFile("package.json", "utf8"));
     const sourceLock = JSON.parse(await readFile("package-lock.json", "utf8"));
     const productionPackages = Object.fromEntries(
       Object.entries(sourceLock.packages).filter(
@@ -69,6 +70,16 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       packages: {
         "": { name: consumerManifest.name, dependencies: consumerManifest.dependencies },
         ...productionPackages,
+        // Kit's declarations reference Node types; the consumer supplies these just
+        // as a Node application would, without adding them to the SDK runtime deps.
+        "node_modules/@types/node": {
+          ...sourceLock.packages["node_modules/@types/node"],
+          dev: false,
+        },
+        "node_modules/@types/node/node_modules/undici-types": {
+          ...sourceLock.packages["node_modules/@types/node/node_modules/undici-types"],
+          dev: false,
+        },
         "node_modules/celere-protocol-sdk": {
           version: sourceManifest.version,
           resolved: consumerManifest.dependencies["celere-protocol-sdk"],
@@ -88,7 +99,21 @@ test("packed public package installs offline and exposes usable strict TypeScrip
     // Compile documentation exactly as a consumer sees it in the installed package.
     const installedPackage = join(directory, "node_modules/celere-protocol-sdk");
     const documentationSources = [];
-    for (const [index, file] of instructionFiles.entries()) {
+    const documentedEntryFiles = [
+      ...instructionFiles,
+      ...[
+        "client",
+        "errors/sender-error",
+        "providers/astralane",
+        "providers/block-razor",
+        "providers/zero-slot",
+        "providers/next-block",
+        "providers/helius",
+      ].map((name) => ({
+        path: `dist/sender/${name}.js`,
+      })),
+    ];
+    for (const [index, file] of documentedEntryFiles.entries()) {
       const declarationPath = file.path.replace(/\.js$/, ".d.ts");
       const declaration = await readFile(join(installedPackage, declarationPath), "utf8");
       const snippets = [
@@ -104,10 +129,31 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         documentationSources.push(examplePath);
       }
     }
+    // Published guides and source maps must work from the installed tarball, not just this checkout.
+    const guide = await readFile(join(installedPackage, "docs/sender.md"), "utf8");
+    for (const [index, snippet] of [
+      ...guide.matchAll(/```ts\r?\n([\s\S]*?)```/g),
+    ].entries()) {
+      const path = join(directory, `sender-guide-${index}.ts`);
+      await writeFile(path, snippet[1]);
+      documentationSources.push(path);
+    }
+    const declarationMaps = packed.files.filter((file) =>
+      file.path.endsWith(".d.ts.map"),
+    );
+    for (const file of declarationMaps) {
+      const map = JSON.parse(await readFile(join(installedPackage, file.path), "utf8"));
+      for (const source of map.sources) {
+        await readFile(
+          resolve(installedPackage, file.path, "..", map.sourceRoot ?? "", source),
+          "utf8",
+        );
+      }
+    }
     const protocolExamples = packed.files.filter(
       (file) => file.path.startsWith("example/") && file.path.endsWith(".ts"),
     );
-    assert.equal(protocolExamples.length, 20);
+    assert.equal(protocolExamples.length, 21);
     documentationSources.push(
       ...protocolExamples.map((file) => join(installedPackage, file.path)),
     );
@@ -117,7 +163,6 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         resolve("node_modules/typescript/bin/tsc"),
         "--strict",
         "--noEmit",
-        "--skipLibCheck",
         "--noUncheckedIndexedAccess",
         "--exactOptionalPropertyTypes",
         "--verbatimModuleSyntax",
@@ -141,7 +186,6 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         resolve("node_modules/typescript/bin/tsc"),
         "--strict",
         "--noEmit",
-        "--skipLibCheck",
         "--target",
         "ES2022",
         "--module",
@@ -152,6 +196,42 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       ],
       { cwd: directory, stdio: "pipe" },
     );
+    execFileSync(
+      process.execPath,
+      [
+        resolve("node_modules/typescript/bin/tsc"),
+        "--strict",
+        "--noEmit",
+        "--target",
+        "ES2022",
+        "--module",
+        "ESNext",
+        "--moduleResolution",
+        "Bundler",
+        join(directory, "consumer.ts"),
+      ],
+      { cwd: directory, stdio: "pipe" },
+    );
+    await writeFile(
+      join(directory, "sender-identity.mjs"),
+      `
+      import assert from 'node:assert/strict';
+      globalThis.fetch = () => { throw new Error('Import or construction attempted network access'); };
+      const root = await import('celere-protocol-sdk');
+      const sender = await import('celere-protocol-sdk/sender');
+      for (const name of Object.keys(sender)) assert.equal(root[name], sender[name], name);
+      const client = new root.SenderClient({defaultRpc: {url: 'https://rpc.example'}});
+      assert.ok(client instanceof sender.SenderClient);
+      assert.ok(new root.SenderConfigurationError('example') instanceof sender.SenderError);
+      for (const entrypoint of ${JSON.stringify(Object.keys(sourceManifest.exports))}) {
+        await import(entrypoint === '.' ? 'celere-protocol-sdk' : 'celere-protocol-sdk/' + entrypoint.slice(2));
+      }
+    `,
+    );
+    execFileSync(process.execPath, ["sender-identity.mjs"], {
+      cwd: directory,
+      stdio: "pipe",
+    });
     const output = execFileSync(
       process.execPath,
       [
@@ -240,6 +320,11 @@ test("packed public package installs offline and exposes usable strict TypeScrip
     assert.equal(nativeResult.entrypoints, 20);
     assert.equal(nativeResult.cases, 4);
     assert.ok(nativeResult.builderCount >= 51);
+  } catch (error) {
+    // Preserve compiler and package-manager diagnostics when a child process fails.
+    if (error.stdout?.length) console.error(error.stdout.toString());
+    if (error.stderr?.length) console.error(error.stderr.toString());
+    throw error;
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -11,10 +11,10 @@ import {
   type Address,
   type ReadonlyUint8Array,
 } from "@solana/kit";
-import { readMint, readTokenAccount } from "../../accounts/tokens.js";
-import { maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { readMint, readTokenAccount } from "../../accounts/tokens";
+import { maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -23,7 +23,7 @@ import type {
   SnapshotAccount,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
+} from "../../core/types";
 import {
   CLMM_MAX_SQRT_PRICE,
   CLMM_MAX_TICK,
@@ -31,10 +31,10 @@ import {
   CLMM_MIN_TICK,
   clmmSqrtPriceAtTick,
   clmmSwapStep,
-} from "./clmm-math.js";
-import { swap } from "./instructions/clmm/index.js";
-import { RAYDIUM_CLMM_PROGRAM } from "./constants.js";
-export { RAYDIUM_CLMM_PROGRAM } from "./constants.js";
+} from "./clmm-math";
+import { swap } from "./instructions/clmm/index";
+import { RAYDIUM_CLMM_PROGRAM } from "./constants";
+export { RAYDIUM_CLMM_PROGRAM } from "./constants";
 const addressDecoder = getAddressDecoder();
 const addressEncoder = getAddressEncoder();
 const textEncoder = new TextEncoder();

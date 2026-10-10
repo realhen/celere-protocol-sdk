@@ -10,10 +10,10 @@ import {
   readTokenAccount,
   TOKEN_2022_PROGRAM,
   TOKEN_PROGRAM,
-} from "../../accounts/tokens.js";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -21,14 +21,14 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
+} from "../../core/types";
 
 import {
   METEORA_DAMM_V2_PROGRAM,
   METEORA_DAMM_V2_POOL_AUTHORITY as POOL_AUTHORITY,
-} from "./constants.js";
-import { swap2 } from "./instructions/damm-v2/swap2.js";
-export { METEORA_DAMM_V2_PROGRAM } from "./constants.js";
+} from "./constants";
+import { swap2 } from "./instructions/damm-v2/swap2";
+export { METEORA_DAMM_V2_PROGRAM } from "./constants";
 const POOL_DISCRIMINATOR = [241, 154, 109, 4, 17, 177, 109, 188];
 const FEE_DENOMINATOR = 1_000_000_000n;
 const Q128 = 1n << 128n;

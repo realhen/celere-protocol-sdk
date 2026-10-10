@@ -1,15 +1,15 @@
 import { AccountRole, type Address } from "@solana/kit";
-import { planTokenAccounts, tokenRequirements } from "../accounts/plan.js";
-import { BuildFailure, fail, failureResult, type Result } from "./errors.js";
-import { validateRequest } from "./sdk.js";
-import { missingAccounts, requireAccount } from "./snapshot.js";
+import { planTokenAccounts, tokenRequirements } from "../accounts/plan";
+import { BuildFailure, fail, failureResult, type Result } from "./errors";
+import { validateRequest } from "./sdk";
+import { missingAccounts, requireAccount } from "./snapshot";
 import type {
   RouteAdapter,
   RouteBuild,
   RouteRequest,
   RouteRequirements,
-} from "./route-types.js";
-import type { AccountRequirement, ProtocolAdapter, SwapRequest } from "./types.js";
+} from "./route-types";
+import type { AccountRequirement, ProtocolAdapter, SwapRequest } from "./types";
 
 function validateRoute(request: RouteRequest): void {
   if (!request || !Array.isArray(request.hops) || request.hops.length < 2)

@@ -5,10 +5,10 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/kit";
-import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens.js";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -16,11 +16,11 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
-import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants.js";
-import { swap2 } from "./instructions/swap2.js";
-import { calculateCurveSwap, type CurvePoint } from "./math.js";
-export { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants.js";
+} from "../../core/types";
+import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants";
+import { swap2 } from "./instructions/swap2";
+import { calculateCurveSwap, type CurvePoint } from "./math";
+export { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants";
 const decoder = getAddressDecoder(),
   encoder = getAddressEncoder();
 const FEE_DENOMINATOR = 1_000_000_000n;

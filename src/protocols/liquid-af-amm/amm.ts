@@ -7,17 +7,17 @@ import {
   associatedTokenAddress,
   readMint,
   readTokenAccount,
-} from "../../accounts/tokens.js";
-import { U64_MAX, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { U64_MAX, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
+} from "../../core/types";
 import {
   deriveLiquidAddress,
   invalidLiquidAccount,
@@ -27,15 +27,15 @@ import {
   readLiquidSolPrice,
   unsupportedLiquidFeature,
   validateLiquidSharedState,
-} from "../liquid-af/shared-state.js";
-import { LIQUID_AF_AMM_PROGRAM } from "./constants.js";
+} from "../liquid-af/shared-state";
+import { LIQUID_AF_AMM_PROGRAM } from "./constants";
 import {
   buy_exact_in,
   sell_exact_in,
   sell_exact_out,
   type LiquidAfAmmSwapAccounts,
-} from "./instructions/index.js";
-export { LIQUID_AF_AMM_PROGRAM } from "./constants.js";
+} from "./instructions/index";
+export { LIQUID_AF_AMM_PROGRAM } from "./constants";
 
 const USDC_MINT = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 interface Pool {

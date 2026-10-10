@@ -7,7 +7,7 @@ import type {
   SwapBuild,
   SwapQuote,
   SwapRequest,
-} from "./types.js";
+} from "./types";
 
 /** One caller-selected venue and its direction. Route selection remains caller-owned. */
 export interface RouteHop {

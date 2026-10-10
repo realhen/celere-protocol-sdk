@@ -12,8 +12,8 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { WRAPPED_SOL_MINT } from "../../../accounts/tokens.js";
-import { BOOP_PROGRAM } from "../constants.js";
+import { WRAPPED_SOL_MINT } from "../../../accounts/tokens";
+import { BOOP_PROGRAM } from "../constants";
 /** Identifies Boop’s native `buy_token` instruction. */
 const DISCRIMINATOR = new Uint8Array([138, 127, 14, 91, 38, 87, 115, 105]);
 /** Encodes the native `buy_token` arguments and instruction discriminator. */

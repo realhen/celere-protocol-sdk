@@ -8,7 +8,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { SUGAR_PROGRAM } from "../constants.js";
+import { SUGAR_PROGRAM } from "../constants";
 
 /** Identifies Sugar’s native `sell_exact_in` instruction. */
 const DISCRIMINATOR = new Uint8Array([149, 39, 222, 155, 211, 124, 152, 26]);

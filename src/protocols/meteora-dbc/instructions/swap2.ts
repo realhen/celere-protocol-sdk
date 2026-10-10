@@ -9,7 +9,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "../constants.js";
+import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "../constants";
 /** Identifies Meteora DBC’s native `swap2` instruction. */
 const discriminator = Uint8Array.of(65, 75, 63, 76, 235, 91, 91, 136);
 /** Encodes the native `swap2` arguments and instruction discriminator. */

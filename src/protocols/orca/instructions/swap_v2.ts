@@ -13,7 +13,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { WHIRLPOOL_PROGRAM } from "../constants.js";
+import { WHIRLPOOL_PROGRAM } from "../constants";
 
 /** Identifies Orca Whirlpool’s native `swap_v2` instruction. */
 const discriminator = Uint8Array.of(43, 4, 237, 11, 26, 201, 30, 98);

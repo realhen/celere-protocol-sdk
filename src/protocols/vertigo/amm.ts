@@ -5,20 +5,20 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/kit";
-import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens.js";
-import { minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
+import { minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
-import * as instructions from "./instructions/index.js";
-import { VERTIGO_PROGRAM } from "./constants.js";
-export { VERTIGO_PROGRAM } from "./constants.js";
+} from "../../core/types";
+import * as instructions from "./instructions/index";
+import { VERTIGO_PROGRAM } from "./constants";
+export { VERTIGO_PROGRAM } from "./constants";
 const encoder = getAddressEncoder();
 const decoder = getAddressDecoder();
 const U128_MAX = (1n << 128n) - 1n;

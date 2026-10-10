@@ -15,15 +15,10 @@ import {
   readMint,
   readTokenAccount,
   WRAPPED_SOL_MINT,
-} from "../../accounts/tokens.js";
-import {
-  assertAmount,
-  maximumInput,
-  minimumOutput,
-  U64_MAX,
-} from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { assertAmount, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -31,11 +26,11 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
+} from "../../core/types";
 
-import { MOONSHOT_PROGRAM } from "./constants.js";
-import * as instructions from "./instructions/index.js";
-export { MOONSHOT_PROGRAM } from "./constants.js";
+import { MOONSHOT_PROGRAM } from "./constants";
+import * as instructions from "./instructions/index";
+export { MOONSHOT_PROGRAM } from "./constants";
 const encoder = getAddressEncoder();
 const decoder = getAddressDecoder();
 const text = new TextEncoder();

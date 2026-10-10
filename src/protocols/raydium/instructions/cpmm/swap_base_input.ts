@@ -7,7 +7,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { RAYDIUM_CPMM_PROGRAM } from "../../constants.js";
+import { RAYDIUM_CPMM_PROGRAM } from "../../constants";
 
 /** Accounts required by Raydium CPMM’s native `swap_base_input` instruction. */
 export interface RaydiumCpmmSwapBaseInputAccounts {

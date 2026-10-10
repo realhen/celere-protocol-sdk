@@ -4,6 +4,7 @@ import {
   AccountRole,
   address,
   getAddressDecoder,
+  generateKeyPairSigner,
   getCompiledTransactionMessageDecoder,
 } from "@solana/kit";
 import { compileTransaction } from "../../dist/index.js";
@@ -118,4 +119,43 @@ test("compiler returns request errors for account-index overflow and malformed J
     assert.equal(failed.ok, false);
     assert.equal(failed.error.code, "INVALID_REQUEST");
   }
+});
+
+test("durable nonce stays static when present in an ALT without renumbering other lookups", async () => {
+  const payer = (await generateKeyPairSigner()).address;
+  const recipient = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+  const result = requireValue(
+    compileTransaction({
+      feePayer: payer,
+      lifetime: { account: owner, authority: payer, value: program },
+      instructions: [
+        {
+          programAddress: program,
+          accounts: [{ address: recipient, role: AccountRole.WRITABLE }],
+          data: new Uint8Array([1]),
+        },
+      ],
+      computeBudget: { units: 100_000, microLamports: 1n },
+      lookupTables: [{ address: program, addresses: [owner, recipient] }],
+    }),
+  );
+  const message = getCompiledTransactionMessageDecoder().decode(
+    result.transaction.messageBytes,
+  );
+  const nonceIndex = message.instructions[0].accountIndices[0];
+  assert.ok(nonceIndex < message.staticAccounts.length);
+  assert.equal(message.staticAccounts[nonceIndex], owner);
+  assert.deepEqual([...message.addressTableLookups[0].writableIndexes], [1]);
+  assert.equal(message.lifetimeToken, program);
+  const duplicate = compileTransaction({
+    feePayer: payer,
+    lifetime: { account: owner, authority: payer, value: program },
+    instructions: [
+      {
+        programAddress: address("11111111111111111111111111111111"),
+        data: new Uint8Array([4, 0, 0, 0]),
+      },
+    ],
+  });
+  assert.equal(duplicate.error.code, "INVALID_REQUEST");
 });

@@ -1,12 +1,12 @@
 import { SYSTEM_PROGRAM_ADDRESS as SYSTEM_PROGRAM } from "@solana-program/system";
-import { WRAPPED_SOL_MINT as NATIVE_SOL_MINT } from "../../accounts/tokens.js";
+import { WRAPPED_SOL_MINT as NATIVE_SOL_MINT } from "../../accounts/tokens";
 import { getAddressDecoder, type Address } from "@solana/kit";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
-import type { AccountSnapshot, SnapshotAccount } from "../../core/types.js";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
+import type { AccountSnapshot, SnapshotAccount } from "../../core/types";
 
-import { PUMP_PROGRAM, PUMP_FEE_PROGRAM } from "./constants.js";
-import { readPumpFeeSchedule } from "./fees.js";
+import { PUMP_PROGRAM, PUMP_FEE_PROGRAM } from "./constants";
+import { readPumpFeeSchedule } from "./fees";
 export { PUMP_PROGRAM, PUMP_FEE_PROGRAM };
 export { SYSTEM_PROGRAM, NATIVE_SOL_MINT };
 const addressDecoder = getAddressDecoder();

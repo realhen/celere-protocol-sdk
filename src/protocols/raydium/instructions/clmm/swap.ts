@@ -10,7 +10,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { RAYDIUM_CLMM_PROGRAM } from "../../constants.js";
+import { RAYDIUM_CLMM_PROGRAM } from "../../constants";
 
 /** Accounts required by Raydium CLMM’s native `swap` instruction. */
 export interface RaydiumClmmSwapAccounts {

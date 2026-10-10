@@ -8,9 +8,9 @@ import {
 import { TOKEN_2022_PROGRAM_ADDRESS as TOKEN_2022_PROGRAM } from "@solana-program/token-2022";
 import { address, getAddressDecoder, AccountRole } from "@solana/kit";
 import type { Address, Instruction } from "@solana/kit";
-import { fail } from "../core/errors.js";
-import { requireAccount } from "../core/snapshot.js";
-import type { AccountSnapshot, SnapshotAccount } from "../core/types.js";
+import { fail } from "../core/errors";
+import { requireAccount } from "../core/snapshot";
+import type { AccountSnapshot, SnapshotAccount } from "../core/types";
 
 export { TOKEN_PROGRAM, TOKEN_2022_PROGRAM };
 /**

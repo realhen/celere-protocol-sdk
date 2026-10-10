@@ -1,6 +1,6 @@
 import type { Address } from "@solana/kit";
-import { fail } from "./errors.js";
-import type { AccountRequirement, AccountSnapshot, SnapshotAccount } from "./types.js";
+import { fail } from "./errors";
+import type { AccountRequirement, AccountSnapshot, SnapshotAccount } from "./types";
 
 /** Read supplied state only. Absence, unknown state, and unexpected owners fail explicitly. */
 export function requireAccount(

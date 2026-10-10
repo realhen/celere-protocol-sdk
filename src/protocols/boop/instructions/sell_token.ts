@@ -12,7 +12,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { BOOP_PROGRAM } from "../constants.js";
+import { BOOP_PROGRAM } from "../constants";
 /** Identifies Boop’s native `sell_token` instruction. */
 const DISCRIMINATOR = new Uint8Array([109, 61, 40, 187, 230, 176, 135, 174]);
 /** Encodes the native `sell_token` arguments and instruction discriminator. */

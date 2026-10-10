@@ -5,10 +5,10 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/kit";
-import { readMint, readTokenAccount } from "../../accounts/tokens.js";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { readMint, readTokenAccount } from "../../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -18,10 +18,10 @@ import type {
   SwapFee,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
-import { swap_base_input, swap_base_output } from "./instructions/cpmm/index.js";
-import { RAYDIUM_CPMM_PROGRAM } from "./constants.js";
-export { RAYDIUM_CPMM_PROGRAM } from "./constants.js";
+} from "../../core/types";
+import { swap_base_input, swap_base_output } from "./instructions/cpmm/index";
+import { RAYDIUM_CPMM_PROGRAM } from "./constants";
+export { RAYDIUM_CPMM_PROGRAM } from "./constants";
 
 const FEE_DENOMINATOR = 1_000_000n;
 const POOL_DISCRIMINATOR = [247, 237, 227, 245, 215, 195, 222, 70];

@@ -1,6 +1,6 @@
 /** Bigint adaptation of Meteora's MIT DBC SDK curve math; see NOTICE.md. */
-import { ceilDiv, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
+import { ceilDiv, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
 const Q128 = 1n << 128n;
 const U128_MAX = Q128 - 1n;
 /** Piecewise curve upper boundary in Q64.64 and its raw u128 liquidity. */

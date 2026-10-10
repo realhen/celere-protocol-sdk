@@ -6,20 +6,20 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/kit";
-import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens.js";
-import { minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
+import { minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
-import { BOOP_PROGRAM } from "./constants.js";
-import { buy_token, sell_token } from "./instructions/index.js";
-export { BOOP_PROGRAM } from "./constants.js";
+} from "../../core/types";
+import { BOOP_PROGRAM } from "./constants";
+import { buy_token, sell_token } from "./instructions/index";
+export { BOOP_PROGRAM } from "./constants";
 const decoder = getAddressDecoder(),
   encoder = getAddressEncoder();
 const INITIAL_TOKEN_SUPPLY = 1_000_000_000_000_000_000n;

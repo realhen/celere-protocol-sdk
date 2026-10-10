@@ -6,24 +6,24 @@ import {
   associatedTokenAddress,
   readMint,
   readTokenAccount,
-} from "../../accounts/tokens.js";
-import { U64_MAX, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { U64_MAX, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
-import { LIQUID_AF_PROGRAM } from "./constants.js";
+} from "../../core/types";
+import { LIQUID_AF_PROGRAM } from "./constants";
 import {
   buy_exact_in_native,
   sell_exact_in_native,
   sell_exact_out_native,
   type LiquidAfNativeSwapAccounts,
-} from "./instructions/index.js";
+} from "./instructions/index";
 import {
   deriveLiquidAddress,
   invalidLiquidAccount,
@@ -33,8 +33,8 @@ import {
   readLiquidSolPrice,
   unsupportedLiquidFeature,
   validateLiquidSharedState,
-} from "./shared-state.js";
-export { LIQUID_AF_PROGRAM } from "./constants.js";
+} from "./shared-state";
+export { LIQUID_AF_PROGRAM } from "./constants";
 
 interface Curve {
   readonly creator: Address;

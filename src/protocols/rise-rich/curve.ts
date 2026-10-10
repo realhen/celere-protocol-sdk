@@ -5,23 +5,20 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/kit";
-import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens.js";
-import { assertAmount, ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
+import { assertAmount, ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
-import { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants.js";
-import {
-  buy_with_exact_cash_in,
-  sell_with_exact_token_in,
-} from "./instructions/index.js";
-export { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants.js";
+} from "../../core/types";
+import { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants";
+import { buy_with_exact_cash_in, sell_with_exact_token_in } from "./instructions/index";
+export { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants";
 const encoder = getAddressEncoder(),
   decoder = getAddressDecoder(),
   text = new TextEncoder();
