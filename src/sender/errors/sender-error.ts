@@ -1,4 +1,4 @@
-import type { SenderErrorCode } from "./codes.js";
+import type { SenderErrorCode } from "./codes";
 
 /**
  * Common base for preparation, configuration, and signing failures before HTTP dispatch.

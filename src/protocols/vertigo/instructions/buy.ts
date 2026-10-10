@@ -9,7 +9,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { VERTIGO_PROGRAM } from "../constants.js";
+import { VERTIGO_PROGRAM } from "../constants";
 
 /** Accounts required by Vertigo’s native `buy` instruction. */
 export interface VertigoBuyAccounts {

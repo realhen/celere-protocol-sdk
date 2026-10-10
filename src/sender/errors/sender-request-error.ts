@@ -1,5 +1,5 @@
-import { SenderErrorCode } from "./codes.js";
-import { SenderError } from "./sender-error.js";
+import { SenderErrorCode } from "./codes";
+import { SenderError } from "./sender-error";
 
 /**
  * Raised when send inputs are malformed or signed transactions do not match a preparation

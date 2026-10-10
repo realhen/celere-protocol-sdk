@@ -1,8 +1,8 @@
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { address, type Address } from "@solana/kit";
-import { WRAPPED_SOL_MINT, TOKEN_2022_NATIVE_MINT } from "../../accounts/tokens.js";
-import { fail } from "../../core/errors.js";
-import type { SnapshotAccount } from "../../core/types.js";
+import { WRAPPED_SOL_MINT, TOKEN_2022_NATIVE_MINT } from "../../accounts/tokens";
+import { fail } from "../../core/errors";
+import type { SnapshotAccount } from "../../core/types";
 const USDC_MINT = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
 /** Native fee schedule rates in basis points before creator overrides and route assignment. */

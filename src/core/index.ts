@@ -1,7 +1,7 @@
-export { createProtocolSdk } from "./sdk.js";
-export type { ProtocolSdk } from "./sdk.js";
-export { basisPoints } from "./amounts.js";
-export type { BuildError, Result } from "./errors.js";
+export { createProtocolSdk } from "./sdk";
+export type { ProtocolSdk } from "./sdk";
+export { basisPoints } from "./amounts";
+export type { BuildError, Result } from "./errors";
 export type {
   AccountSnapshot,
   SnapshotAccount,
@@ -16,12 +16,12 @@ export type {
   ProtocolId,
   ProtocolSwap,
   ResolvedTokenAccounts,
-} from "./types.js";
+} from "./types";
 export { address } from "@solana/kit";
 export type { Address, Instruction } from "@solana/kit";
 
-export { createRouteSdk } from "./routes.js";
-export type { RouteSdk } from "./routes.js";
+export { createRouteSdk } from "./routes";
+export type { RouteSdk } from "./routes";
 export type {
   RouteHop,
   RouteRequest,
@@ -30,4 +30,4 @@ export type {
   RouteBuild,
   ProtocolRoute,
   RouteAdapter,
-} from "./route-types.js";
+} from "./route-types";

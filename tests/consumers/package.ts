@@ -166,3 +166,19 @@ new ZeroSlotSender({ apiKey: "example", region: Region.London });
 new AstralaneSender({ apiKey: "example", region: Region.Dublin });
 const senderError: SenderError = new SenderConfigurationError("Invalid endpoint");
 void [sender, senderError];
+
+// Root convenience imports and focused imports must share nominal class types.
+import {
+  SenderClient as RootSenderClient,
+  SenderConfigurationError as RootSenderConfigurationError,
+  type SendRequest as RootSendRequest,
+} from "celere-protocol-sdk";
+import type { SendRequest } from "celere-protocol-sdk/sender";
+const rootClient: RootSenderClient = sender;
+const focusedClient: SenderClient = new RootSenderClient({
+  defaultRpc: { url: "https://rpc.example" },
+});
+const sharedError: SenderError = new RootSenderConfigurationError("example");
+declare const rootRequest: RootSendRequest;
+const focusedRequest: SendRequest = rootRequest;
+void [rootClient, focusedClient, sharedError, focusedRequest];

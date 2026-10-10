@@ -8,7 +8,7 @@ Callers select the protocol and native instruction, supply accounts and argument
 
 Optional offline helpers provide account discovery, state validation, quotes, and swap limits from caller-supplied snapshots. Their supported variants and execution guarantees are separate from direct instruction construction.
 
-Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto. The root, protocol builders, and `/transactions` remain strictly offline; `/sender` performs explicitly requested network operations.
+Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto. Protocol builders and `/transactions` remain strictly offline. Root imports and client construction perform no I/O; sender methods perform explicitly requested signing and network operations. The root exports the sender API for convenience, and `/sender` remains available as a focused import.
 
 ```sh
 npm ci --ignore-scripts
@@ -377,6 +377,16 @@ Heaven qualifies standard classic-token pools with constant quote-denominated pr
 LiquidAF curve and AMM reject referrals and cashback spending; cashback earning is supported. AMM quotes must be USDC or WSOL, with classic or basic Token-2022 base tokens. Tiered fees require a caller-supplied verified SOL/USD oracle observation no more than 30 seconds old, including USDC pools. Native AMM fee splitting computes the LP share before waiving it for exact-input buys and exact-output sells; exact-input sells retain it. The public adapter rejects exact-output buys because the native program can succeed one base-token atom short. Raw builders expose this native limitation in their contracts.
 
 Sugar's deployment at slot `450795393` contains an entrypoint that returns `Custom(1)` immediately. The Surfpool E2E verifies a correctly encoded instruction fails in two compute units with unchanged pool state. Historical `/instructions/sugar` builders preserve the published interface for inspection; they cannot make the currently disabled program execute. `PROTOCOL_COVERAGE` describes optional adapter status and deployed execution limitations; it does not gate raw instruction construction.
+
+## Package build and imports
+
+TypeScript source uses extensionless relative imports. The ESM build processes all modules together with shared chunks, so root and focused entrypoints use the same classes and error constructors. Solana dependencies remain external package imports. Source-level module outputs are retained alongside public entrypoints for declaration alignment and native validation; only the paths in `package.json` exports form the supported API.
+
+The build embeds Orca's WASM before bundling, emits readable JavaScript and source maps, and generates per-module declarations with TSDoc and declaration maps. Declaration imports are resolved to explicit `.js` paths for native Node ESM consumers. The package includes source files for editor navigation. Installed-package checks validate declarations without `skipLibCheck` under both NodeNext and Bundler resolution, all public runtime entrypoints, and root/subpath class identity.
+
+```ts
+import { buildSwapInstructions, SenderClient, HeliusSender } from "celere-protocol-sdk";
+```
 
 ## Smaller browser bundles
 

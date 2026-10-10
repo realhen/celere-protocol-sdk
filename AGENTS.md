@@ -1,7 +1,7 @@
 # Development contracts
 
 - Name public protocol identities, subpaths, and modules after the native protocol. Do not introduce trading-terminal aliases or activity-based availability policies. Direct instruction builders must remain independent of optional quote and execution-policy helpers.
-- Keep protocol builders, the root export, and transaction compilation strictly offline. The optional `/sender` entrypoint may perform explicit caller-requested signing/submission. Applications supply nonce snapshots; nonce discovery is outside this SDK. They must not own wallets, background subscriptions, confirmation, recovery, or persistent storage.
+- Keep protocol builders and transaction compilation strictly offline. Root imports and client construction perform no I/O. The sender is available through both the root and `/sender` entrypoints and may perform explicit caller-requested signing/submission. Applications supply nonce snapshots; nonce discovery is outside this SDK. They must not own wallets, background subscriptions, confirmation, recovery, or persistent storage.
 - Protocol decoding, account discovery, quoting, fee handling, and native instruction construction belong in protocol adapters.
 - Use atomic bigint amounts and explicit chain context. Exact output requires native on-chain exact-output execution; never substitute inverse exact-input sizing.
 - Keep the high-level swap API protocol-neutral, strongly typed, and compatible with browser workers. Expose raw native instruction builders through dedicated instruction subpaths. Do not expose third-party SDK runtime objects.

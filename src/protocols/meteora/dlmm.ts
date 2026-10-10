@@ -5,10 +5,10 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/kit";
-import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens.js";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -16,12 +16,12 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
+} from "../../core/types";
 
-import { METEORA_DLMM_PROGRAM } from "./constants.js";
-import { swap2 } from "./instructions/dlmm/swap2.js";
-import { swap_exact_out2 } from "./instructions/dlmm/swap_exact_out2.js";
-export { METEORA_DLMM_PROGRAM } from "./constants.js";
+import { METEORA_DLMM_PROGRAM } from "./constants";
+import { swap2 } from "./instructions/dlmm/swap2";
+import { swap_exact_out2 } from "./instructions/dlmm/swap_exact_out2";
+export { METEORA_DLMM_PROGRAM } from "./constants";
 const Q64 = 1n << 64n;
 const FEE_PRECISION = 1_000_000_000n;
 const encodeAddress = getAddressEncoder();

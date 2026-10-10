@@ -1,11 +1,11 @@
 import { address } from "@solana/kit";
-import { Region, SenderProvider } from "./route.js";
-import type { RouteOptions, SenderRoute } from "./route.js";
-import type { SenderTransactionPayload } from "../transaction.js";
-import type { SenderHttpRequest } from "../transport.js";
-import { configureProvider, registerProvider } from "./configuration.js";
-import { SenderConfigurationError } from "../errors/index.js";
-import { createRpcRequest } from "./rpc.js";
+import { Region, SenderProvider } from "./route";
+import type { RouteOptions, SenderRoute } from "./route";
+import type { SenderTransactionPayload } from "../transaction";
+import type { SenderHttpRequest } from "../transport";
+import { configureProvider, registerProvider } from "./configuration";
+import { SenderConfigurationError } from "../errors/index";
+import { createRpcRequest } from "./rpc";
 
 /** Helius product tier; each has its own minimum tip. */
 export enum HeliusSenderMode {

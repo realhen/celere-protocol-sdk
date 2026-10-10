@@ -7,7 +7,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { RISE_RICH_PROGRAM } from "../constants.js";
+import { RISE_RICH_PROGRAM } from "../constants";
 /** Identifies Rise Rich’s native `sell_with_exact_token_in` instruction. */
 const DISCRIMINATOR = new Uint8Array([27, 141, 98, 109, 197, 168, 104, 84]);
 /** Encodes the native `sell_with_exact_token_in` arguments and instruction discriminator. */

@@ -12,10 +12,10 @@ import {
   readTokenAccount,
   TOKEN_PROGRAM,
   TOKEN_2022_PROGRAM,
-} from "../../accounts/tokens.js";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   ProtocolAdapter,
   ProtocolSwap,
@@ -23,14 +23,14 @@ import type {
   ResolvedTokenAccounts,
   SnapshotAccount,
   SwapFee,
-} from "../../core/types.js";
+} from "../../core/types";
 import {
   buy_exact_in,
   sell_exact_in,
   sell_exact_out,
-} from "./instructions/launchlab/index.js";
-import { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants.js";
-export { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants.js";
+} from "./instructions/launchlab/index";
+import { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants";
+export { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants";
 const encoder = getAddressEncoder();
 const decoder = getAddressDecoder();
 const textEncoder = new TextEncoder();

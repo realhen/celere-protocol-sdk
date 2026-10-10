@@ -1,5 +1,5 @@
 import type { Address } from "@solana/kit";
-import type { AccountRequirement, ProtocolId } from "./types.js";
+import type { AccountRequirement, ProtocolId } from "./types";
 
 /** Expected failures are stable discriminated values, suitable for worker messages. */
 export type BuildError =

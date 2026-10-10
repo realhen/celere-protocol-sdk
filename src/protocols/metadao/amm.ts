@@ -10,20 +10,20 @@ import {
   associatedTokenAddress,
   readMint,
   readTokenAccount,
-} from "../../accounts/tokens.js";
-import { minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
-import { METADAO_PROGRAM } from "./constants.js";
-import { spot_swap } from "./instructions/index.js";
-export { METADAO_PROGRAM } from "./constants.js";
+} from "../../core/types";
+import { METADAO_PROGRAM } from "./constants";
+import { spot_swap } from "./instructions/index";
+export { METADAO_PROGRAM } from "./constants";
 
 const addressEncoder = getAddressEncoder();
 const addressDecoder = getAddressDecoder();

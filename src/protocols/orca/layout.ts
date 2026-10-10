@@ -5,11 +5,11 @@ import {
   type Address,
 } from "@solana/kit";
 import type { TickArrayFacade, WhirlpoolFacade } from "@orca-so/whirlpools-core";
-import { fail } from "../../core/errors.js";
-import type { SnapshotAccount } from "../../core/types.js";
+import { fail } from "../../core/errors";
+import type { SnapshotAccount } from "../../core/types";
 
-import { WHIRLPOOL_PROGRAM } from "./constants.js";
-export { WHIRLPOOL_PROGRAM } from "./constants.js";
+import { WHIRLPOOL_PROGRAM } from "./constants";
+export { WHIRLPOOL_PROGRAM } from "./constants";
 const POOL_DISCRIMINATOR = Uint8Array.of(63, 149, 209, 12, 225, 128, 99, 9);
 const FIXED_TICK_DISCRIMINATOR = Uint8Array.of(69, 97, 189, 190, 110, 7, 66, 187);
 const DYNAMIC_TICK_DISCRIMINATOR = Uint8Array.of(17, 216, 246, 142, 225, 199, 218, 56);

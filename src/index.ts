@@ -1,25 +1,25 @@
-import { createRouteSdk } from "./core/routes.js";
-import { pumpRouteAdapter } from "./protocols/pump/route.js";
-import { createProtocolSdk } from "./core/sdk.js";
-import { boopAdapter } from "./protocols/boop/adapter.js";
-import { heavenAdapter } from "./protocols/heaven/amm.js";
-import { liquidAfAmmAdapter } from "./protocols/liquid-af-amm/amm.js";
-import { liquidAfAdapter } from "./protocols/liquid-af/curve.js";
-import { metadaoAdapter } from "./protocols/metadao/amm.js";
-import { meteoraDammV1Adapter } from "./protocols/meteora/damm-v1.js";
-import { meteoraDammV2Adapter } from "./protocols/meteora/damm-v2.js";
-import { meteoraDlmmAdapter } from "./protocols/meteora/dlmm.js";
-import { moonshotAdapter } from "./protocols/moonshot/curve.js";
-import { orcaWhirlpoolAdapter } from "./protocols/orca/whirlpool.js";
-import { pumpAmmAdapter } from "./protocols/pump/amm.js";
-import { pumpAdapter } from "./protocols/pump/bonding-curve.js";
-import { raydiumAmmV4Adapter } from "./protocols/raydium/amm-v4.js";
-import { raydiumClmmAdapter } from "./protocols/raydium/clmm.js";
-import { raydiumCpmmAdapter } from "./protocols/raydium/cpmm.js";
-import { raydiumLaunchlabAdapter } from "./protocols/raydium/launchlab.js";
-import { riseRichAdapter } from "./protocols/rise-rich/curve.js";
-import { vertigoAdapter } from "./protocols/vertigo/amm.js";
-import { meteoraDbcAdapter } from "./protocols/meteora-dbc/adapter.js";
+import { createRouteSdk } from "./core/routes";
+import { pumpRouteAdapter } from "./protocols/pump/route";
+import { createProtocolSdk } from "./core/sdk";
+import { boopAdapter } from "./protocols/boop/adapter";
+import { heavenAdapter } from "./protocols/heaven/amm";
+import { liquidAfAmmAdapter } from "./protocols/liquid-af-amm/amm";
+import { liquidAfAdapter } from "./protocols/liquid-af/curve";
+import { metadaoAdapter } from "./protocols/metadao/amm";
+import { meteoraDammV1Adapter } from "./protocols/meteora/damm-v1";
+import { meteoraDammV2Adapter } from "./protocols/meteora/damm-v2";
+import { meteoraDlmmAdapter } from "./protocols/meteora/dlmm";
+import { moonshotAdapter } from "./protocols/moonshot/curve";
+import { orcaWhirlpoolAdapter } from "./protocols/orca/whirlpool";
+import { pumpAmmAdapter } from "./protocols/pump/amm";
+import { pumpAdapter } from "./protocols/pump/bonding-curve";
+import { raydiumAmmV4Adapter } from "./protocols/raydium/amm-v4";
+import { raydiumClmmAdapter } from "./protocols/raydium/clmm";
+import { raydiumCpmmAdapter } from "./protocols/raydium/cpmm";
+import { raydiumLaunchlabAdapter } from "./protocols/raydium/launchlab";
+import { riseRichAdapter } from "./protocols/rise-rich/curve";
+import { vertigoAdapter } from "./protocols/vertigo/amm";
+import { meteoraDbcAdapter } from "./protocols/meteora-dbc/adapter";
 
 const sdk = createProtocolSdk([
   pumpAdapter,
@@ -54,6 +54,8 @@ export const buildRouteInstructions = routeSdk.buildRouteInstructions;
 export const getSwapRequirements = sdk.getSwapRequirements;
 /** Build native swap instructions from caller-owned immutable account snapshots. */
 export const buildSwapInstructions = sdk.buildSwapInstructions;
-export * from "./core/index.js";
-export * from "./transactions/index.js";
-export { PROTOCOL_COVERAGE, type ProtocolCoverage } from "./protocols/coverage.js";
+export * from "./core/index";
+export * from "./transactions/index";
+export { PROTOCOL_COVERAGE, type ProtocolCoverage } from "./protocols/coverage";
+
+export * from "./sender/index";

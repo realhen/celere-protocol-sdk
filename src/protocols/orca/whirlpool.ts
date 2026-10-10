@@ -1,5 +1,5 @@
 import type { Address } from "@solana/kit";
-import { swap_v2 } from "./instructions/swap_v2.js";
+import { swap_v2 } from "./instructions/swap_v2";
 import type { TickArrayFacade } from "@orca-so/whirlpools-core";
 import {
   WHIRLPOOL_PROGRAM,
@@ -9,10 +9,10 @@ import {
   tickArrayAddress,
   oracleAddress,
   type Pool,
-} from "./layout.js";
-import { readMint, readTokenAccount } from "../../accounts/tokens.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "./layout";
+import { readMint, readTokenAccount } from "../../accounts/tokens";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -20,8 +20,8 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
-import { orcaCore } from "./core.js";
+} from "../../core/types";
+import { orcaCore } from "./core";
 
 const TICK_ARRAY_SIZE = 88;
 const MIN_TICK = -443636;

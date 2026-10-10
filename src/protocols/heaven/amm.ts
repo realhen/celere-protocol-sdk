@@ -10,20 +10,20 @@ import {
   readMint,
   readTokenAccount,
   WRAPPED_SOL_MINT,
-} from "../../accounts/tokens.js";
-import { assertAmount, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { assertAmount, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
-import { HEAVEN_PROGRAM } from "./constants.js";
-import * as instructions from "./instructions/index.js";
-export { HEAVEN_PROGRAM } from "./constants.js";
+} from "../../core/types";
+import { HEAVEN_PROGRAM } from "./constants";
+import * as instructions from "./instructions/index";
+export { HEAVEN_PROGRAM } from "./constants";
 
 const addressDecoder = getAddressDecoder();
 const addressEncoder = getAddressEncoder();

@@ -1,4 +1,4 @@
-import { fail } from "./errors.js";
+import { fail } from "./errors";
 
 /** Maximum integer encodable in a native SPL-token amount. */
 export const U64_MAX = (1n << 64n) - 1n;

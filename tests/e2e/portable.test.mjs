@@ -183,13 +183,13 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
   }
 });
 
-test("optional sender entrypoint bundle for a browser worker without Node shims", async () => {
+test("root sender exports bundle for a browser worker without Node shims", async () => {
   const directory = await mkdtemp(join(tmpdir(), "celere-sender-browser-"));
   try {
     const browserPath = join(directory, "browser.mjs");
     await build({
       stdin: {
-        contents: `export * from './dist/sender/index.js'; export { generateKeyPairSigner, getBase64Encoder, getTransactionDecoder, getSignatureFromTransaction } from '@solana/kit';`,
+        contents: `export { SenderClient, ZeroSlotSender } from './dist/index.js'; export { generateKeyPairSigner, getBase64Encoder, getTransactionDecoder, getSignatureFromTransaction } from '@solana/kit';`,
         resolveDir: process.cwd(),
       },
       outfile: browserPath,

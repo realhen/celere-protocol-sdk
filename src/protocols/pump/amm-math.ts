@@ -1,13 +1,8 @@
-import {
-  assertAmount,
-  ceilDiv,
-  maximumInput,
-  minimumOutput,
-} from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import type { SwapQuote, SwapRequest } from "../../core/types.js";
+import { assertAmount, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import type { SwapQuote, SwapRequest } from "../../core/types";
 import type { Address } from "@solana/kit";
-import { AMM_QUOTE_MINT, type PumpAmmFeeRates } from "./amm-state.js";
+import { AMM_QUOTE_MINT, type PumpAmmFeeRates } from "./amm-state";
 
 function insufficientLiquidity(): never {
   fail({

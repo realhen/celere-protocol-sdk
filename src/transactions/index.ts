@@ -1,8 +1,8 @@
-export { compileTransaction } from "./compile.js";
+export { compileTransaction } from "./compile";
 export type {
   CompileTransactionRequest,
   CompiledTransaction,
   LookupTable,
   DurableNonce,
   BlockhashLifetime,
-} from "./compile.js";
+} from "./compile";

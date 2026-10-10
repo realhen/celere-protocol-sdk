@@ -9,17 +9,17 @@ import {
   createAssociatedTokenInstruction,
   readMint,
   readTokenAccount,
-} from "../../accounts/tokens.js";
-import { assertAmount } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
+} from "../../accounts/tokens";
+import { assertAmount } from "../../core/amounts";
+import { fail } from "../../core/errors";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
-import { quotePumpAmm } from "./amm-math.js";
+} from "../../core/types";
+import { quotePumpAmm } from "./amm-math";
 import {
   AMM_FEE_PROGRAM,
   AMM_SYSTEM_PROGRAM,
@@ -27,10 +27,10 @@ import {
   readAmmFees,
   readAmmGlobal,
   readAmmPool,
-} from "./amm-state.js";
+} from "./amm-state";
 
-import { PUMP_PROGRAM } from "./constants.js";
-import { buy_v2, buy_exact_quote_in_v2, sell_v2 } from "./instructions/amm/index.js";
+import { PUMP_PROGRAM } from "./constants";
+import { buy_v2, buy_exact_quote_in_v2, sell_v2 } from "./instructions/amm/index";
 
 const bytes = getAddressEncoder();
 const utf8 = new TextEncoder();

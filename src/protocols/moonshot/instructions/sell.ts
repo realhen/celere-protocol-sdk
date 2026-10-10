@@ -8,7 +8,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { MOONSHOT_PROGRAM } from "../constants.js";
+import { MOONSHOT_PROGRAM } from "../constants";
 
 /** Identifies Moonshot / Moonit’s native `sell` instruction. */
 const DISCRIMINATOR = new Uint8Array([51, 230, 133, 164, 1, 127, 131, 173]);

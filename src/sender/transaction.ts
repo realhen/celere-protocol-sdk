@@ -16,22 +16,18 @@ import type {
   TransactionWithLifetime,
 } from "@solana/kit";
 import { getTransferSolInstruction } from "@solana-program/system";
-import { compileTransaction } from "../transactions/index.js";
+import { compileTransaction } from "../transactions/index";
 import {
   NonceRequiredError,
   SenderCompilationError,
   SenderRequestError,
   SenderSigningError,
   TipTooLowError,
-} from "./errors/index.js";
-import type { ConfiguredRoute } from "./providers/configuration.js";
-import { SenderProvider } from "./providers/route.js";
-import type { SenderRoute } from "./providers/route.js";
-import type {
-  BlockhashLifetime,
-  DurableNonce,
-  LookupTable,
-} from "../transactions/index.js";
+} from "./errors/index";
+import type { ConfiguredRoute } from "./providers/configuration";
+import { SenderProvider } from "./providers/route";
+import type { SenderRoute } from "./providers/route";
+import type { BlockhashLifetime, DurableNonce, LookupTable } from "../transactions/index";
 
 /** Per-send amounts. All monetary values are atomic bigint values. No automatic fee sampling. */
 export interface SenderFees {

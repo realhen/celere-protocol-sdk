@@ -3,7 +3,7 @@ import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,
 } from "@solana-program/compute-budget";
-import { isValidAddress as isAddress } from "../core/addresses.js";
+import { isValidAddress as isAddress } from "../core/addresses";
 import {
   appendTransactionMessageInstructions,
   blockhash,
@@ -24,9 +24,9 @@ import type {
   Nonce,
 } from "@solana/kit";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
-import { U64_MAX } from "../core/amounts.js";
-import { fail, failureResult } from "../core/errors.js";
-import type { Result } from "../core/errors.js";
+import { U64_MAX } from "../core/amounts";
+import { fail, failureResult } from "../core/errors";
+import type { Result } from "../core/errors";
 
 /** Caller-supplied v0 lookup contents. Active/extension-slot checks remain the data provider's responsibility. */
 export interface LookupTable {

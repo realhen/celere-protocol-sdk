@@ -1,9 +1,9 @@
 /** Modified offline adaptation of raydium-io/raydium-amm (Apache-2.0); see NOTICE.md. */
 import { getAddressDecoder, getProgramDerivedAddress, type Address } from "@solana/kit";
-import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens.js";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -11,10 +11,10 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types.js";
-import { swap_base_in_v2, swap_base_out_v2 } from "./instructions/amm-v4/index.js";
-import { RAYDIUM_AMM_V4_PROGRAM } from "./constants.js";
-export { RAYDIUM_AMM_V4_PROGRAM } from "./constants.js";
+} from "../../core/types";
+import { swap_base_in_v2, swap_base_out_v2 } from "./instructions/amm-v4/index";
+import { RAYDIUM_AMM_V4_PROGRAM } from "./constants";
+export { RAYDIUM_AMM_V4_PROGRAM } from "./constants";
 
 const decoder = getAddressDecoder();
 const U128_MAX = (1n << 128n) - 1n;

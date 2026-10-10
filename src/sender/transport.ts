@@ -1,7 +1,7 @@
-import { SubmissionStatus } from "./submission.js";
-import type { RouteResult } from "./submission.js";
-import type { ConfiguredRoute } from "./providers/configuration.js";
-import type { SignedPayload } from "./transaction.js";
+import { SubmissionStatus } from "./submission";
+import type { RouteResult } from "./submission";
+import type { ConfiguredRoute } from "./providers/configuration";
+import type { SignedPayload } from "./transaction";
 
 /** A provider-encoded HTTP submission. URLs and headers may contain credentials. */
 export interface SenderHttpRequest {

@@ -1,12 +1,7 @@
-import {
-  assertAmount,
-  ceilDiv,
-  maximumInput,
-  minimumOutput,
-} from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import type { SwapFee, SwapQuote, SwapRequest } from "../../core/types.js";
-import type { PumpCurve, PumpFees } from "./state.js";
+import { assertAmount, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import type { SwapFee, SwapQuote, SwapRequest } from "../../core/types";
+import type { PumpCurve, PumpFees } from "./state";
 
 /** Caller-observed inventory and global charge needed to price synthetic migration. */
 export interface PumpQuoteOptions {

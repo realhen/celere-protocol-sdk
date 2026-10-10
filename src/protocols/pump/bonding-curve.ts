@@ -10,24 +10,24 @@ import {
   createAssociatedTokenInstruction,
   TOKEN_PROGRAM,
   associatedTokenAddress,
-} from "../../accounts/tokens.js";
-import { assertAmount } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+} from "../../accounts/tokens";
+import { assertAmount } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
-import { quotePump } from "./math.js";
+} from "../../core/types";
+import { quotePump } from "./math";
 import {
   buy_exact_sol_in,
   buy_v3,
   buy_exact_quote_in_v3,
   sell_v3,
-} from "./instructions/bonding-curve/index.js";
+} from "./instructions/bonding-curve/index";
 import {
   NATIVE_SOL_MINT,
   PUMP_FEE_PROGRAM,
@@ -37,7 +37,7 @@ import {
   readFees,
   readRecipients,
   readPumpGlobal,
-} from "./state.js";
+} from "./state";
 
 const addressEncoder = getAddressEncoder();
 const utf8 = new TextEncoder();

@@ -7,7 +7,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { RAYDIUM_AMM_V4_PROGRAM } from "../../constants.js";
+import { RAYDIUM_AMM_V4_PROGRAM } from "../../constants";
 
 /** Accounts required by Raydium AMM v4’s native `swap_base_in_v2` instruction. */
 export interface RaydiumAmmV4SwapBaseInV2Accounts {

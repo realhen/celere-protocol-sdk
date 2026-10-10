@@ -202,7 +202,7 @@
     }
   },
   "scripts": {
-    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-orca-core.mjs",
+    "build": "node scripts/clean-dist.mjs && node scripts/build-orca-core.mjs && node scripts/build-sdk.mjs",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

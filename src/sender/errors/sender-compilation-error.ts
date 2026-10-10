@@ -1,5 +1,5 @@
-import { SenderErrorCode } from "./codes.js";
-import { SenderError } from "./sender-error.js";
+import { SenderErrorCode } from "./codes";
+import { SenderError } from "./sender-error";
 
 /**
  * Raised when the offline compiler cannot build a transaction variant, including oversized

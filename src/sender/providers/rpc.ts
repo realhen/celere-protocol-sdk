@@ -1,8 +1,8 @@
-import { SenderProvider } from "./route.js";
-import type { SenderRoute } from "./route.js";
-import type { SenderTransactionPayload } from "../transaction.js";
-import type { SenderHttpRequest } from "../transport.js";
-import { validateEndpoint, validateTimeout } from "./configuration.js";
+import { SenderProvider } from "./route";
+import type { SenderRoute } from "./route";
+import type { SenderTransactionPayload } from "../transaction";
+import type { SenderHttpRequest } from "../transport";
+import { validateEndpoint, validateTimeout } from "./configuration";
 
 /** Default RPC route, always submitted alongside the configured provider routes. */
 export interface RpcRouteOptions {

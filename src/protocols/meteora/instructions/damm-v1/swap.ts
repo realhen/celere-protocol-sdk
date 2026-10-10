@@ -8,7 +8,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "../../constants.js";
+import { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "../../constants";
 
 /** Identifies Meteora DAMM v1’s native `swap` instruction. */
 const discriminator = Uint8Array.of(248, 198, 158, 145, 225, 117, 135, 200);

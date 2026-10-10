@@ -9,7 +9,7 @@ import {
   HeliusSender,
   Region,
   SenderProvider,
-} from "celere-protocol-sdk/sender";
+} from "celere-protocol-sdk";
 
 /** Call once with your own endpoints and credentials. Construction does no I/O. */
 export function configureSender(config: {

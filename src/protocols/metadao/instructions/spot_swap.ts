@@ -9,7 +9,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { METADAO_PROGRAM } from "../constants.js";
+import { METADAO_PROGRAM } from "../constants";
 
 /** Accounts required by MetaDAO’s native `spot_swap` instruction. */
 export interface MetadaoSpotSwapAccounts {

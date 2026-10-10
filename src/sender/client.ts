@@ -3,30 +3,26 @@ import {
   SenderRequestError,
   SenderAbortedError,
   PriorityFeeTooLowError,
-} from "./errors/index.js";
+} from "./errors/index";
 import type { Transaction } from "@solana/kit";
-import { U64_MAX } from "../core/amounts.js";
-import { isValidAddress } from "../core/addresses.js";
-import { isConfiguredProvider, validateTimeout } from "./providers/configuration.js";
-import type { ConfiguredRoute, ValidationResult } from "./providers/configuration.js";
-import { RpcSender } from "./providers/rpc.js";
-import { sendRouteTransaction } from "./transport.js";
+import { U64_MAX } from "../core/amounts";
+import { isValidAddress } from "../core/addresses";
+import { isConfiguredProvider, validateTimeout } from "./providers/configuration";
+import type { ConfiguredRoute, ValidationResult } from "./providers/configuration";
+import { RpcSender } from "./providers/rpc";
+import { sendRouteTransaction } from "./transport";
 import {
   copyPreparedVariants,
   prepareTransactionVariants,
   signPreparedTransactions,
   serializeSignedTransactions,
-} from "./transaction.js";
-import { SenderProvider } from "./providers/route.js";
-import type {
-  PrepareRequest,
-  PreparedSubmission,
-  PreparedVariant,
-} from "./transaction.js";
-import type { SendRequest, SubmitSignedOptions, Submission } from "./submission.js";
-import type { SenderHttpTransport } from "./transport.js";
-import type { SenderRoute } from "./providers/route.js";
-import type { RpcRouteOptions } from "./providers/rpc.js";
+} from "./transaction";
+import { SenderProvider } from "./providers/route";
+import type { PrepareRequest, PreparedSubmission, PreparedVariant } from "./transaction";
+import type { SendRequest, SubmitSignedOptions, Submission } from "./submission";
+import type { SenderHttpTransport } from "./transport";
+import type { SenderRoute } from "./providers/route";
+import type { RpcRouteOptions } from "./providers/rpc";
 
 /** Configuration for the reusable sender client. */
 export interface SenderClientOptions {

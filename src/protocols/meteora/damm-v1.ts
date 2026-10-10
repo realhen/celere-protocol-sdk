@@ -5,21 +5,21 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/kit";
-import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens.js";
-import { ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts.js";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
+import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
+import { ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types.js";
+} from "../../core/types";
 
-import { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants.js";
-import { swap } from "./instructions/damm-v1/swap.js";
-export { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants.js";
+import { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants";
+import { swap } from "./instructions/damm-v1/swap";
+export { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants";
 const decoder = getAddressDecoder();
 const encoder = getAddressEncoder();
 const utf8 = new TextEncoder();

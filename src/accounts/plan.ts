@@ -1,17 +1,17 @@
 import type { Instruction } from "@solana/kit";
-import { fail } from "../core/errors.js";
+import { fail } from "../core/errors";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../core/types.js";
+} from "../core/types";
 import {
   associatedTokenAddress,
   createAssociatedTokenInstruction,
   readMint,
   readTokenAccount,
-} from "./tokens.js";
+} from "./tokens";
 
 /** Discover common mint and token-account inputs without fetching them. */
 export async function tokenRequirements(

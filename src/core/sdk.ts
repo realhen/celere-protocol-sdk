@@ -1,18 +1,18 @@
-import { isValidAddress as isAddress } from "./addresses.js";
+import { isValidAddress as isAddress } from "./addresses";
 import { AccountRole } from "@solana/kit";
 import type { Address } from "@solana/kit";
-import { planTokenAccounts, tokenRequirements } from "../accounts/plan.js";
-import { assertAmount, basisPoints } from "./amounts.js";
-import { BuildFailure, fail, failureResult } from "./errors.js";
-import type { Result } from "./errors.js";
-import { missingAccounts, requireAccount } from "./snapshot.js";
+import { planTokenAccounts, tokenRequirements } from "../accounts/plan";
+import { assertAmount, basisPoints } from "./amounts";
+import { BuildFailure, fail, failureResult } from "./errors";
+import type { Result } from "./errors";
+import { missingAccounts, requireAccount } from "./snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   SwapBuild,
   SwapRequest,
   SwapRequirements,
-} from "./types.js";
+} from "./types";
 
 /** Validate caller intent and immutable observation metadata without performing I/O. */
 export function validateRequest(request: SwapRequest): void {

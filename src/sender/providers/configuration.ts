@@ -1,6 +1,6 @@
-import { SenderConfigurationError } from "../errors/index.js";
-import type { Region, RouteOptions, SenderRoute } from "./route.js";
-import type { SenderError } from "../errors/index.js";
+import { SenderConfigurationError } from "../errors/index";
+import type { Region, RouteOptions, SenderRoute } from "./route";
+import type { SenderError } from "../errors/index";
 
 /** Internal validation result. Public methods preserve their documented throw/reject boundary. */
 export type ValidationResult<T> =

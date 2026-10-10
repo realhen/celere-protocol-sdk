@@ -8,7 +8,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { PUMP_PROGRAM } from "../../constants.js";
+import { PUMP_PROGRAM } from "../../constants";
 
 /** Accounts required by Pump bonding curve’s native `sweep_protocol_fee` instruction. */
 export interface PumpSweepProtocolFeeAccounts {

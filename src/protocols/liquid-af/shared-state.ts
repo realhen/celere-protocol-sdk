@@ -4,14 +4,14 @@ import {
   getProgramDerivedAddress,
   type Address,
 } from "@solana/kit";
-import { fail } from "../../core/errors.js";
-import { requireAccount } from "../../core/snapshot.js";
-import type { ProtocolId, SnapshotAccount, SwapRequest } from "../../core/types.js";
+import { fail } from "../../core/errors";
+import { requireAccount } from "../../core/snapshot";
+import type { ProtocolId, SnapshotAccount, SwapRequest } from "../../core/types";
 import {
   LIQUID_AF_FEES_PROGRAM,
   LIQUID_AF_STATE_PROGRAM,
   LIQUID_AF_PYTH_RECEIVER_PROGRAM,
-} from "./constants.js";
+} from "./constants";
 
 const addressEncoder = getAddressEncoder();
 const addressDecoder = getAddressDecoder();

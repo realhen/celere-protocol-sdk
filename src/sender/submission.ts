@@ -1,6 +1,6 @@
 import type { TransactionPartialSigner } from "@solana/kit";
-import type { PrepareRequest } from "./transaction.js";
-import type { SenderProvider } from "./providers/route.js";
+import type { PrepareRequest } from "./transaction";
+import type { SenderProvider } from "./providers/route";
 
 /** Submission observations only: none of these indicate on-chain execution. */
 export enum SubmissionStatus {

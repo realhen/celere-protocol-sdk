@@ -1,9 +1,9 @@
 import { address } from "@solana/kit";
-import { Region, SenderProvider } from "./route.js";
-import type { RouteOptions, SenderRoute } from "./route.js";
-import type { SenderTransactionPayload } from "../transaction.js";
-import type { SenderHttpRequest } from "../transport.js";
-import { configureProvider, registerProvider } from "./configuration.js";
+import { Region, SenderProvider } from "./route";
+import type { RouteOptions, SenderRoute } from "./route";
+import type { SenderTransactionPayload } from "../transaction";
+import type { SenderHttpRequest } from "../transport";
+import { configureProvider, registerProvider } from "./configuration";
 
 /** Supported binary/HTTP locations. See README for alternate datacenters and coverage limits. */
 const ENDPOINTS = {
