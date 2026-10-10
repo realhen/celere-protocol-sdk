@@ -52,7 +52,6 @@ export async function sendTrade(
       computeUnitPriceMicroLamports: 50_000n,
       tipLamports: 1_000_000n,
       tipOverrides: {
-        [SenderProvider.Astralane]: 10_000n,
         [SenderProvider.BlockRazor]: 100_000n,
         [SenderProvider.NextBlock]: 100_000n,
       },

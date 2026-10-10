@@ -38,6 +38,17 @@ export enum Region {
   Vilnius = "vilnius",
   Toronto = "toronto",
 }
+/** Astralane's provisioned fee tier. Selecting a tier does not upgrade the provider account. */
+export enum AstralaneTier {
+  /** Free tier: minimum tip 1,000,000 lamports. */
+  Free = "free",
+  /** VIP 1: minimum tip 100,000 lamports. */
+  Vip1 = "vip-1",
+  /** VIP 2: minimum tip 100,000 lamports. */
+  Vip2 = "vip-2",
+  /** VIP 3: minimum tip 10,000 lamports. */
+  Vip3 = "vip-3",
+}
 /** Helius product tier; each has its own minimum tip. */
 export enum HeliusSenderMode {
   /** Sender Max: minimum tip 1,000,000 lamports and priority fee 5,000 lamports. */
@@ -101,6 +112,15 @@ export interface RouteOptions {
   readonly endpoint?: string;
   /** HTTP deadline in milliseconds, including response-body reading. Integer 1–60,000; default 3,000. */
   readonly timeoutMs?: number;
+}
+
+/** Configuration for {@link astralane}, including the caller's current provider fee tier. */
+export interface AstralaneRouteOptions extends RouteOptions {
+  /**
+   * Provisioned fee tier; defaults to {@link AstralaneTier.Free}. Only changes minimum-tip
+   * validation. Actual tips are chosen per send in {@link SenderFees}; eligibility is caller-owned.
+   */
+  readonly tier?: AstralaneTier;
 }
 
 /** Configuration for {@link zeroSlot}, including the caller's provisioned provider plan. */

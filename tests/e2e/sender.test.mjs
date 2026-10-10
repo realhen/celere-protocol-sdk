@@ -21,6 +21,7 @@ import {
   zeroSlot,
   nextBlock,
   heliusSender,
+  AstralaneTier,
   HeliusSenderMode,
   Region,
   SenderProvider,
@@ -130,7 +131,6 @@ test("consumer fans out every HTTP adapter before responses, batch-signs and sha
     fees: {
       ...request.fees,
       tipOverrides: {
-        [SenderProvider.Astralane]: 10_000n,
         [SenderProvider.BlockRazor]: 100_000n,
         [SenderProvider.NextBlock]: 100_000n,
       },
@@ -357,4 +357,112 @@ test("consumer externally signs a prepared plan; altered messages and signatures
   assert.equal(submitted.variants[0].signature, getSignatureFromTransaction(signed[0]));
   assert.equal((await submitted.results)[0].status, SubmissionStatus.Accepted);
   assert.equal(calls, 1);
+});
+
+test("consumer signs and submits across every documented tip recipient", async (t) => {
+  const observedRecipients = new Set();
+  const url = await fixture(t, (req, res, body) => {
+    const binary = req.headers["content-type"] === "application/octet-stream";
+    const json = binary ? undefined : JSON.parse(body);
+    const bytes = binary
+      ? body
+      : Buffer.from(
+          json.params?.[0] ?? json.transaction?.content ?? json.transaction,
+          "base64",
+        );
+    const tx = getTransactionDecoder().decode(bytes);
+    const message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
+    if (req.url.startsWith("/provider")) {
+      const transfer = message.instructions.at(-1);
+      assert.equal(
+        message.staticAccounts[transfer.programAddressIndex],
+        SYSTEM_PROGRAM_ADDRESS,
+      );
+      const data = new DataView(transfer.data.buffer, transfer.data.byteOffset);
+      assert.equal(data.getUint32(0, true), 2, "tip is a native SOL transfer");
+      assert.equal(data.getBigUint64(4, true), 1_000_000n);
+      observedRecipients.add(message.staticAccounts[transfer.accountIndices[1]]);
+    }
+    res.end(JSON.stringify({ signature: signature(bytes) }));
+  });
+  const { request } = await trade();
+  let fraction = 0;
+  t.mock.method(Math, "random", () => fraction);
+  // Counts are the independently audited public catalogs, not imported implementation arrays.
+  for (const [factory, count] of [
+    [astralane, 17],
+    [blockRazor, 14],
+    [zeroSlot, 21],
+    [nextBlock, 8],
+    [heliusSender, 10],
+  ]) {
+    const route = factory({ apiKey: "fixture", endpoint: `${url}/provider` });
+    assert.equal(route.tipAccounts.length, count);
+    assert.equal(new Set(route.tipAccounts).size, count);
+    const client = new SenderClient({
+      defaultRpc: { url: `${url}/rpc` },
+      routes: [route],
+    });
+    for (let index = 0; index < count; index++) {
+      fraction = (index + 0.5) / count;
+      const submission = await client.send(request);
+      assert.ok(
+        (await submission.results).every(
+          (result) => result.status === SubmissionStatus.Accepted,
+        ),
+      );
+      assert.ok(observedRecipients.has(route.tipAccounts[index]));
+    }
+  }
+  assert.equal(observedRecipients.size, 70);
+});
+
+test("consumer selects an eligible Astralane tier while retaining per-send tip control", async (t) => {
+  let submissions = 0;
+  const url = await fixture(t, (req, res, body) => {
+    submissions++;
+    const bytes =
+      req.headers["content-type"] === "application/octet-stream"
+        ? body
+        : Buffer.from(JSON.parse(body).params[0], "base64");
+    res.end(JSON.stringify({ signature: signature(bytes) }));
+  });
+  const { request } = await trade();
+  assert.throws(
+    () => astralane({ apiKey: "fixture", tier: "invalid" }),
+    code(SenderErrorCode.InvalidConfiguration),
+  );
+  for (const [tier, floor] of [
+    [undefined, 1_000_000n],
+    [AstralaneTier.Free, 1_000_000n],
+    [AstralaneTier.Vip1, 100_000n],
+    [AstralaneTier.Vip2, 100_000n],
+    [AstralaneTier.Vip3, 10_000n],
+  ]) {
+    const client = new SenderClient({
+      defaultRpc: { url },
+      routes: [astralane({ apiKey: "fixture", endpoint: url, tier })],
+    });
+    const before = submissions;
+    await assert.rejects(
+      client.send({
+        ...request,
+        fees: {
+          ...request.fees,
+          tipOverrides: { [SenderProvider.Astralane]: floor - 1n },
+        },
+      }),
+      code(SenderErrorCode.TipTooLow),
+    );
+    assert.equal(submissions, before, "below-floor sends do not reach HTTP");
+    const submission = await client.send({
+      ...request,
+      fees: { ...request.fees, tipOverrides: { [SenderProvider.Astralane]: floor } },
+    });
+    assert.ok(
+      (await submission.results).every(
+        (result) => result.status === SubmissionStatus.Accepted,
+      ),
+    );
+  }
 });

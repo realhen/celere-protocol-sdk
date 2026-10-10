@@ -102,7 +102,7 @@ These adapters submit single transactions over HTTP. They do not implement bundl
 
 | Adapter        | Per-variant tip floor | Notes                                                                                                                                                      |
 | -------------- | --------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `astralane`    |       10,000 lamports | Binary Iris (`/irisb`) wire format; regional variants share bytes.                                                                                         |
+| `astralane`    |    1,000,000 lamports | Binary Iris (`/irisb`), Free tier. `AstralaneTier.Vip1`/`Vip2` allow 100,000; `Vip3` allows 10,000. Select only your provisioned tier.                     |
 | `blockRazor`   |      100,000 lamports | Fast mode; sandwich mitigation is incompatible with nonce fan-out.                                                                                         |
 | `zeroSlot`     |    1,000,000 lamports | Advanced-plan callers can explicitly set `minimumTipLamports: 100_000n` in route options. This selects the provider plan floor, not the transaction's tip. |
 | `nextBlock`    |      100,000 lamports | HTTP v2, skip preflight and disable retries requested.                                                                                                     |
@@ -110,7 +110,29 @@ These adapters submit single transactions over HTTP. They do not implement bundl
 
 Fees are explicit per send. `tipOverrides` uses `SenderProvider` keys and applies to all that provider's regional lanes. Below-floor amounts fail before signing; the SDK never silently raises your fees. Compute-unit limits cover the whole transaction, including setup, nonce and tip instructions. Set priority price from your application's fee estimate; simulate/estimate compute outside the latency-sensitive send call when needed. No automatic fee sampling or CU estimation is implied by these example values. Floors and endpoints follow the references below and may change with provider plans.
 
-Provider references: [Astralane](https://astralane.gitbook.io/docs/low-latency/quickstart), [BlockRazor](https://docs.blockrazor.io/transaction-submission/transaction-sending/solana/send-transaction), [0slot](https://0slot.trade/docs.php), [NextBlock](https://nextblock.io), [Helius Max](https://www.helius.dev/docs/sending-transactions/sender-max). Binary Iris request shape and endpoints were cross-checked against the pinned [fnzero sender implementation](https://github.com/0xfnzero/sol-trade-sdk-nodejs/tree/56a4105360b5de50d19adf5b3dffbc1124634a86/src/swqos). Tests cover real loopback HTTP contracts and local Surfpool execution; they do not establish live provider acceptance or landing performance.
+The provider registry was checked against official documentation on **2026-10-09**. It includes all public tip accounts listed in these sources, including their additional/recently added sections:
+
+| Provider   | Tip accounts | Official recipient source                                                                                                                       | SDK endpoint regions                                                                            |
+| ---------- | -----------: | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Astralane  |           17 | [Endpoints and configs](https://astralane.gitbook.io/docs/low-latency/endpoints-and-configs)                                                    | Global, Frankfurt, Amsterdam, New York, Tokyo, Singapore, Los Angeles                           |
+| BlockRazor |           14 | [Official JavaScript example](https://docs.blockrazor.io/transaction-submission/transaction-sending/solana/send-transaction/request-example/js) | Frankfurt, New York, Tokyo, Amsterdam, London, Singapore, Los Angeles, Toronto                  |
+| 0slot      |           21 | [Quickstart and additional tip accounts](https://0slot.trade/docs.php)                                                                          | Frankfurt, Amsterdam, New York, Tokyo, Los Angeles                                              |
+| NextBlock  |            8 | [Quickstart](https://docs.nextblock.io/getting-started/quickstart)                                                                              | Frankfurt, Amsterdam, New York, London, Singapore, Tokyo, Salt Lake City, Dublin, Vilnius       |
+| Helius     |           10 | [Sender Max](https://www.helius.dev/docs/sending-transactions/sender-max)                                                                       | Global, Frankfurt, Amsterdam, New York metro (Newark), London, Tokyo, Singapore, Salt Lake City |
+
+Recipient selection is random per provider group, per preparation. Compatible regional lanes retain the same recipient and signed bytes. Including the complete lists spreads tip-account write locks across sends; it does not guarantee contention-free execution.
+
+Fee policies follow [Astralane's tier table](https://astralane.gitbook.io/docs/low-latency/send-txn-fee-tiers), [BlockRazor's sending API](https://docs.blockrazor.io/transaction-submission/transaction-sending/solana/send-transaction), 0slot's plan table, [NextBlock's tip-floor example](https://docs.nextblock.io/api/examples/python/tip-floor-stream), and Helius Sender Max. Tier eligibility remains caller-owned; the SDK does not query accounts or automatically change fees.
+
+Endpoint coverage is explicit:
+
+- Astralane's official catalog publishes `/iris` URLs for additional London, Limburg, and Lithuania locations and secondary Frankfurt/Amsterdam servers. This adapter uses binary `/irisb`; only the binary locations corroborated by fnzero's current client are built in. Additional binary locations need provider verification before adding defaults. Do not pass a JSON `/iris` URL to the binary adapter.
+- [BlockRazor's endpoint catalog](https://docs.blockrazor.io/transaction-submission/transaction-sending/solana/endpoint) also offers Frankfurt Allnodes/Cherry Servers and Amsterdam Cherry Servers. Select these using a full `endpoint` override, for example `http://frankfurt-allnodes.solana.blockrazor.xyz:443/sendTransaction`. The built-in defaults choose one endpoint per region; HTTPS is published for Frankfurt, New York, and Tokyo.
+- NextBlock, 0slot, and Helius include every HTTP region in the linked catalogs. The SDK’s existing `Region.NewYork` option selects Helius’s Newark endpoint.
+
+Both fnzero's [providers.ts](https://github.com/0xfnzero/sol-trade-sdk-nodejs/blob/56a4105360b5de50d19adf5b3dffbc1124634a86/src/swqos/providers.ts) and [clients.ts](https://github.com/0xfnzero/sol-trade-sdk-nodejs/blob/56a4105360b5de50d19adf5b3dffbc1124634a86/src/swqos/clients.ts) were reviewed. The latter provides the binary Iris request shape. Its 0slot list contains only five of the 21 officially documented accounts; its Astralane London/Dublin/Salt Lake City aliases route to other cities. Those aliases are intentionally not exposed as supported regions. Provider acknowledgments without the expected signature remain `Unknown`, even where a reference client treats a generic success response as accepted.
+
+Tests cover real loopback HTTP contracts, all 70 recipients through signed submissions, and local Surfpool execution. They do not establish live provider acceptance or landing performance.
 
 ## Native instruction builders
 

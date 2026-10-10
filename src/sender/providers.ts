@@ -1,5 +1,6 @@
 import { address } from "@solana/kit";
 import {
+  AstralaneTier,
   HeliusSenderMode,
   Region,
   SenderError,
@@ -7,6 +8,7 @@ import {
   SenderProvider,
 } from "./types.js";
 import type {
+  AstralaneRouteOptions,
   RouteOptions,
   SenderRoute,
   ZeroSlotRouteOptions,
@@ -93,11 +95,12 @@ function createProviderRoute(
 /**
  * Configure an Astralane binary Iris submission lane.
  *
- * @param options - Provider credentials and optional region, URL, name, and HTTP deadline.
- * @returns An immutable route using `/irisb`, with a 10,000-lamport minimum tip.
+ * @param options - Provider credentials, fee tier, and optional region, URL, name, and deadline.
+ * @returns An immutable route using `/irisb`, with a 1,000,000-lamport Free-tier minimum tip.
  * @throws {@link SenderError} synchronously for invalid options or an unsupported region.
  * @remarks Defaults to the global endpoint. Compatible regional lanes reuse one signed
- * variant. Constructing a route does not contact the provider or validate the API key remotely.
+ * variant. VIP 1/2 allow 100,000 lamports; VIP 3 allows 10,000. Select only a tier your key
+ * is eligible for. Constructing a route does not contact the provider or validate the API key remotely.
  *
  * @example
  * ```ts
@@ -106,8 +109,20 @@ function createProviderRoute(
  * const route = astralane({ apiKey, region: Region.Frankfurt });
  * ```
  */
-export function astralane(options: RouteOptions): SenderRoute {
-  return createProviderRoute(SenderProvider.Astralane, options, 10_000n);
+export function astralane(options: AstralaneRouteOptions): SenderRoute {
+  const tier = options.tier ?? AstralaneTier.Free;
+  const minimums: Record<AstralaneTier, bigint> = {
+    [AstralaneTier.Free]: 1_000_000n,
+    [AstralaneTier.Vip1]: 100_000n,
+    [AstralaneTier.Vip2]: 100_000n,
+    [AstralaneTier.Vip3]: 10_000n,
+  };
+  if (!Object.values(AstralaneTier).includes(tier))
+    throw new SenderError(
+      SenderErrorCode.InvalidConfiguration,
+      "Unsupported Astralane fee tier",
+    );
+  return createProviderRoute(SenderProvider.Astralane, options, minimums[tier]);
 }
 /**
  * Configure a BlockRazor HTTP lane in fast mode.
