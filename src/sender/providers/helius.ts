@@ -20,7 +20,7 @@ const ENDPOINTS = {
   [Region.Tokyo]: "http://tyo-sender.helius-rpc.com/fast",
   [Region.Singapore]: "http://sg-sender.helius-rpc.com/fast",
   [Region.SaltLakeCity]: "http://slc-sender.helius-rpc.com/fast",
-} as const;
+} as const satisfies Record<HeliusRegion, string>;
 
 /** Public recipients audited 2026-10-09. @see https://www.helius.dev/docs/sending-transactions/sender-max */
 const TIP_ACCOUNTS = Object.freeze(
@@ -38,11 +38,26 @@ const TIP_ACCOUNTS = Object.freeze(
   ].map((value) => address(value)),
 );
 
+/** Locations supported by {@link HeliusSender}; unsupported combinations fail at configuration time. */
+export type HeliusRegion =
+  | Region.Global
+  | Region.Frankfurt
+  | Region.Amsterdam
+  | Region.NewYork
+  | Region.London
+  | Region.Tokyo
+  | Region.Singapore
+  | Region.SaltLakeCity;
+
 /** Options for one {@link HeliusSender} lane. Construction performs no network work. */
 export interface HeliusSenderOptions extends Omit<RouteOptions, "region"> {
   /** Supported location; defaults to {@link Region.Global}. */
-  readonly region?: keyof typeof ENDPOINTS;
-  /** Max by default; SWQoS-only has a lower tip floor and no additional priority-fee floor. */
+  readonly region?: HeliusRegion;
+  /**
+   * Submission product; defaults to {@link HeliusSenderMode.Max}.
+   * Max requires a 1,000,000-lamport tip and 5,000-lamport total priority fee.
+   * SWQoS-only requires a 5,000-lamport tip and adds `swqos_only=true` to requests.
+   */
   readonly mode?: HeliusSenderMode;
 }
 
@@ -50,8 +65,19 @@ export interface HeliusSenderOptions extends Omit<RouteOptions, "region"> {
  * Helius Max requires a 1,000,000-lamport tip and 5,000-lamport total priority fee. SWQoS-only
  * requires a 5,000-lamport tip.
  *
- * Credentials are retained by this instance; do not log provider objects or encoded requests.
- * Regional instances with compatible tip requirements share signed bytes in SenderClient.
+ * @remarks
+ * Creates an immutable configuration for one regional lane. Defaults to `Region.Global`
+ * and a 3,000 ms HTTP deadline. Construction opens no connections, performs no API-key
+ * verification, and does not warm a connection pool. Reuse the instance between sends.
+ *
+ * Pass this instance in `SenderClientOptions.routes`. The client chooses a tip recipient,
+ * compiles and signs the variant, then dispatches it alongside the default RPC. Compatible
+ * regional lanes share the recipient and signed bytes. Set actual transaction tips in
+ * `SenderFees`; the provider's minimum is a validation floor, never an automatic fee increase.
+ *
+ * Credentials are retained by this instance. Its TypeScript-private fields are not a
+ * runtime secret vault; do not log provider objects or requests returned by `createRequest`.
+ * Browser callers must choose an HTTPS endpoint with suitable CORS support.
  *
  * @example
  * ```ts
@@ -76,8 +102,14 @@ export class HeliusSender implements SenderRoute {
   private readonly url: string;
 
   /**
-   * @param options - Credentials, supported region, and optional endpoint/deadline overrides.
-   * @throws {@link SenderConfigurationError} for invalid caller configuration.
+   * Configure one Helius lane without performing I/O.
+   *
+   * @param options - API key and optional region, complete submission URL, label, and deadline.
+   * Provider-specific fee options select an eligible plan; they do not purchase or upgrade it.
+   * @throws {@link SenderConfigurationError} synchronously for empty/invalid credentials,
+   * an unsupported region or plan, an invalid custom HTTP(S) URL, or a deadline outside
+   * 1–60,000 milliseconds. Remote authentication failures surface only after submission.
+   * @see HeliusSenderOptions
    */
   constructor(options: HeliusSenderOptions) {
     const configuration = configureProvider(options, ENDPOINTS, Region.Global);
@@ -99,9 +131,15 @@ export class HeliusSender implements SenderRoute {
   }
 
   /**
-   * Encode a verified transaction without performing I/O.
-   * @param payload - Signed bytes and their base64 representation.
-   * @returns A credential-bearing POST request for the shared HTTP transport.
+   * Encode one signed transaction for this provider's HTTP API.
+   *
+   * @param payload - Matching wire bytes, base64 encoding, and fee-payer signature. The
+   * sender supplies these after verifying all required signatures.
+   * @returns A new credential-bearing POST request. No HTTP request has been launched.
+   * @remarks This is the provider integration boundary, normally called by SenderClient.
+   * It does not validate signatures, check tips, retry, or confirm execution. Applications
+   * should call `SenderClient.send` or `submitSigned` instead of dispatching this request.
+   * The supplied payload is left unchanged; each call allocates its own request body.
    */
   createRequest(payload: SenderTransactionPayload): SenderHttpRequest {
     return createRpcRequest(this.url, payload);

@@ -70,7 +70,8 @@ export class SenderClient {
    * Retain immutable built-in providers or snapshot custom metadata without starting network work.
    *
    * @param options - Default RPC, provider lanes, and optional HTTP transport.
-   * @throws {@link SenderError} synchronously if the route configuration is invalid.
+   * @throws {@link SenderConfigurationError} synchronously for invalid routes, duplicate
+   * route names, an invalid default RPC URL, or an invalid custom transport.
    */
   constructor(options: SenderClientOptions) {
     clientStates.set(this, {
@@ -89,7 +90,10 @@ export class SenderClient {
    *
    * @param request - Instructions, payer, fees, lookup contents, and one explicit lifetime.
    * @returns A plan belonging to this client. Keep this exact object for {@link submitSigned}.
-   * @throws {@link SenderError} synchronously if fees, lifetime, or compilation are invalid.
+   * @throws {@link SenderRequestError} for malformed inputs or conflicting tip recipients.
+   * @throws {@link NonceRequiredError} when distinct variants lack a shared durable nonce.
+   * @throws {@link TipTooLowError} or {@link PriorityFeeTooLowError} for below-floor fees.
+   * @throws {@link SenderCompilationError} if offline message compilation fails.
    * @remarks No RPC reads or signatures are requested. The caller owns nonce freshness and
    * exclusive use. Preparing a transaction does not establish that it can execute.
    *
@@ -118,8 +122,10 @@ export class SenderClient {
    * @param request - Preparation inputs, every required Kit partial signer, and send options.
    * @returns Local signatures and a separate promise for all HTTP results. Resolves after
    * requests are launched, without waiting for provider responses or chain confirmation.
-   * @throws Rejects with {@link SenderError} if preparation, signing, verification, or
-   * pre-dispatch cancellation fails. No route has been submitted when this method rejects.
+   * @throws Rejects with the preparation errors documented on {@link prepare}.
+   * @throws {@link SenderSigningError} if a signer fails, signatures are invalid, or messages change.
+   * @throws {@link SenderAbortedError} when the client observes cancellation before dispatch.
+   * No route has been submitted when this method rejects.
    * @remarks Route failures appear in {@link Submission.results} independently. A provider
    * acknowledgment is not evidence that the transaction executed on chain.
    *
@@ -157,8 +163,11 @@ export class SenderClient {
    * Messages must be unchanged and all required signatures must be present and valid.
    * @param options - Optional cancellation signal and per-route result callback.
    * @returns The same dispatch and observation contract as {@link send}.
-   * @throws Rejects with {@link SenderError} before dispatch if the plan belongs to another
-   * client, messages/signatures are invalid, or cancellation has already occurred.
+   * @throws {@link SenderRequestError} if the plan belongs to another client or variant counts differ.
+   * @throws {@link SenderSigningError} if messages change or signatures are missing/invalid.
+   * @throws {@link SenderAbortedError} if cancellation is observed before dispatch.
+   * @remarks Every failure above rejects before any route is dispatched. Reusing a prepared
+   * plan does not refresh its nonce or reserve it; the application owns nonce availability.
    *
    * @example
    * ```ts

@@ -92,6 +92,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       ...instructionFiles,
       ...[
         "client",
+        "errors/sender-error",
         "providers/astralane",
         "providers/block-razor",
         "providers/zero-slot",
@@ -115,6 +116,27 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         );
         await writeFile(examplePath, snippet[1].replace(/^\s*\* ?/gm, ""));
         documentationSources.push(examplePath);
+      }
+    }
+    // Published guides and source maps must work from the installed tarball, not just this checkout.
+    const guide = await readFile(join(installedPackage, "docs/sender.md"), "utf8");
+    for (const [index, snippet] of [
+      ...guide.matchAll(/```ts\r?\n([\s\S]*?)```/g),
+    ].entries()) {
+      const path = join(directory, `sender-guide-${index}.ts`);
+      await writeFile(path, snippet[1]);
+      documentationSources.push(path);
+    }
+    const declarationMaps = packed.files.filter((file) =>
+      file.path.endsWith(".d.ts.map"),
+    );
+    for (const file of declarationMaps) {
+      const map = JSON.parse(await readFile(join(installedPackage, file.path), "utf8"));
+      for (const source of map.sources) {
+        await readFile(
+          resolve(installedPackage, file.path, "..", map.sourceRoot ?? "", source),
+          "utf8",
+        );
       }
     }
     const protocolExamples = packed.files.filter(

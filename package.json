@@ -15,7 +15,9 @@
     "LICENSE",
     "NOTICE.md",
     "licenses",
-    "example"
+    "example",
+    "src",
+    "docs"
   ],
   "sideEffects": false,
   "engines": {

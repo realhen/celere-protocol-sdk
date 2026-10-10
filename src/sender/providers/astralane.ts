@@ -18,7 +18,7 @@ const ENDPOINTS = {
   [Region.Tokyo]: "http://jp.gateway.astralane.io/irisb",
   [Region.Singapore]: "http://sg.gateway.astralane.io/irisb",
   [Region.LosAngeles]: "http://la.gateway.astralane.io/irisb",
-} as const;
+} as const satisfies Record<AstralaneRegion, string>;
 
 /** Public recipients audited 2026-10-09. @see https://astralane.gitbook.io/docs/low-latency/endpoints-and-configs */
 const TIP_ACCOUNTS = Object.freeze(
@@ -43,11 +43,25 @@ const TIP_ACCOUNTS = Object.freeze(
   ].map((value) => address(value)),
 );
 
+/** Locations supported by {@link AstralaneSender}; unsupported combinations fail at configuration time. */
+export type AstralaneRegion =
+  | Region.Global
+  | Region.Frankfurt
+  | Region.Amsterdam
+  | Region.NewYork
+  | Region.Tokyo
+  | Region.Singapore
+  | Region.LosAngeles;
+
 /** Options for one {@link AstralaneSender} lane. Construction performs no network work. */
 export interface AstralaneSenderOptions extends Omit<RouteOptions, "region"> {
   /** Supported location; defaults to {@link Region.Global}. */
-  readonly region?: keyof typeof ENDPOINTS;
-  /** Provisioned tier; Free by default. Actual tips remain per-send values. */
+  readonly region?: AstralaneRegion;
+  /**
+   * Current provider tier; defaults to {@link AstralaneTier.Free} (1,000,000 lamports).
+   * VIP 1/2 permit 100,000 and VIP 3 permits 10,000. Eligibility and later tier changes
+   * are caller-owned. This selects validation policy; actual tips remain per-send values.
+   */
   readonly tier?: AstralaneTier;
 }
 
@@ -55,8 +69,19 @@ export interface AstralaneSenderOptions extends Omit<RouteOptions, "region"> {
  * Binary Iris lane. Free requires 1,000,000 lamports; VIP 1/2 require 100,000; VIP 3 requires
  * 10,000. Only select your eligible tier.
  *
- * Credentials are retained by this instance; do not log provider objects or encoded requests.
- * Regional instances with compatible tip requirements share signed bytes in SenderClient.
+ * @remarks
+ * Creates an immutable configuration for one regional lane. Defaults to `Region.Global`
+ * and a 3,000 ms HTTP deadline. Construction opens no connections, performs no API-key
+ * verification, and does not warm a connection pool. Reuse the instance between sends.
+ *
+ * Pass this instance in `SenderClientOptions.routes`. The client chooses a tip recipient,
+ * compiles and signs the variant, then dispatches it alongside the default RPC. Compatible
+ * regional lanes share the recipient and signed bytes. Set actual transaction tips in
+ * `SenderFees`; the provider's minimum is a validation floor, never an automatic fee increase.
+ *
+ * Credentials are retained by this instance. Its TypeScript-private fields are not a
+ * runtime secret vault; do not log provider objects or requests returned by `createRequest`.
+ * Browser callers must choose an HTTPS endpoint with suitable CORS support.
  *
  * @example
  * ```ts
@@ -81,8 +106,14 @@ export class AstralaneSender implements SenderRoute {
   private readonly url: string;
 
   /**
-   * @param options - Credentials, supported region, and optional endpoint/deadline overrides.
-   * @throws {@link SenderConfigurationError} for invalid caller configuration.
+   * Configure one Astralane lane without performing I/O.
+   *
+   * @param options - API key and optional region, complete submission URL, label, and deadline.
+   * Provider-specific fee options select an eligible plan; they do not purchase or upgrade it.
+   * @throws {@link SenderConfigurationError} synchronously for empty/invalid credentials,
+   * an unsupported region or plan, an invalid custom HTTP(S) URL, or a deadline outside
+   * 1–60,000 milliseconds. Remote authentication failures surface only after submission.
+   * @see AstralaneSenderOptions
    */
   constructor(options: AstralaneSenderOptions) {
     const configuration = configureProvider(options, ENDPOINTS, Region.Global);
@@ -109,9 +140,15 @@ export class AstralaneSender implements SenderRoute {
   }
 
   /**
-   * Encode a verified transaction without performing I/O.
-   * @param payload - Signed bytes and their base64 representation.
-   * @returns A credential-bearing POST request for the shared HTTP transport.
+   * Encode one signed transaction for this provider's HTTP API.
+   *
+   * @param payload - Matching wire bytes, base64 encoding, and fee-payer signature. The
+   * sender supplies these after verifying all required signatures.
+   * @returns A new credential-bearing POST request. No HTTP request has been launched.
+   * @remarks This is the provider integration boundary, normally called by SenderClient.
+   * It does not validate signatures, check tips, retry, or confirm execution. Applications
+   * should call `SenderClient.send` or `submitSigned` instead of dispatching this request.
+   * The supplied payload is left unchanged; each call allocates its own request body.
    */
   createRequest(payload: SenderTransactionPayload): SenderHttpRequest {
     return {

@@ -18,7 +18,7 @@ const ENDPOINTS = {
   [Region.Singapore]: "http://singapore.solana.blockrazor.xyz:443/sendTransaction",
   [Region.LosAngeles]: "http://losangeles.solana.blockrazor.xyz:443/sendTransaction",
   [Region.Toronto]: "http://toronto.solana.blockrazor.xyz:443/sendTransaction",
-} as const;
+} as const satisfies Record<BlockRazorRegion, string>;
 
 /** Public recipients audited 2026-10-09. @see https://docs.blockrazor.io/transaction-submission/transaction-sending/solana/send-transaction/request-example/js */
 const TIP_ACCOUNTS = Object.freeze(
@@ -40,18 +40,40 @@ const TIP_ACCOUNTS = Object.freeze(
   ].map((value) => address(value)),
 );
 
+/** Locations supported by {@link BlockRazorSender}; unsupported combinations fail at configuration time. */
+export type BlockRazorRegion =
+  | Region.Frankfurt
+  | Region.NewYork
+  | Region.Tokyo
+  | Region.Amsterdam
+  | Region.London
+  | Region.Singapore
+  | Region.LosAngeles
+  | Region.Toronto;
+
 /** Options for one {@link BlockRazorSender} lane. Construction performs no network work. */
 export interface BlockRazorSenderOptions extends Omit<RouteOptions, "region"> {
   /** Supported location; defaults to {@link Region.Frankfurt}. */
-  readonly region?: keyof typeof ENDPOINTS;
+  readonly region?: BlockRazorRegion;
 }
 
 /**
  * Fast-mode HTTP lane with a 100,000-lamport floor. Sandwich mitigation is excluded because it
  * is incompatible with durable nonces.
  *
- * Credentials are retained by this instance; do not log provider objects or encoded requests.
- * Regional instances with compatible tip requirements share signed bytes in SenderClient.
+ * @remarks
+ * Creates an immutable configuration for one regional lane. Defaults to `Region.Frankfurt`
+ * and a 3,000 ms HTTP deadline. Construction opens no connections, performs no API-key
+ * verification, and does not warm a connection pool. Reuse the instance between sends.
+ *
+ * Pass this instance in `SenderClientOptions.routes`. The client chooses a tip recipient,
+ * compiles and signs the variant, then dispatches it alongside the default RPC. Compatible
+ * regional lanes share the recipient and signed bytes. Set actual transaction tips in
+ * `SenderFees`; the provider's minimum is a validation floor, never an automatic fee increase.
+ *
+ * Credentials are retained by this instance. Its TypeScript-private fields are not a
+ * runtime secret vault; do not log provider objects or requests returned by `createRequest`.
+ * Browser callers must choose an HTTPS endpoint with suitable CORS support.
  *
  * @example
  * ```ts
@@ -77,8 +99,14 @@ export class BlockRazorSender implements SenderRoute {
   private readonly apiKey: string;
 
   /**
-   * @param options - Credentials, supported region, and optional endpoint/deadline overrides.
-   * @throws {@link SenderConfigurationError} for invalid caller configuration.
+   * Configure one BlockRazor lane without performing I/O.
+   *
+   * @param options - API key and optional region, complete submission URL, label, and deadline.
+   * Provider-specific fee options select an eligible plan; they do not purchase or upgrade it.
+   * @throws {@link SenderConfigurationError} synchronously for empty/invalid credentials,
+   * an unsupported region or plan, an invalid custom HTTP(S) URL, or a deadline outside
+   * 1–60,000 milliseconds. Remote authentication failures surface only after submission.
+   * @see BlockRazorSenderOptions
    */
   constructor(options: BlockRazorSenderOptions) {
     const configuration = configureProvider(options, ENDPOINTS, Region.Frankfurt);
@@ -96,9 +124,15 @@ export class BlockRazorSender implements SenderRoute {
   }
 
   /**
-   * Encode a verified transaction without performing I/O.
-   * @param payload - Signed bytes and their base64 representation.
-   * @returns A credential-bearing POST request for the shared HTTP transport.
+   * Encode one signed transaction for this provider's HTTP API.
+   *
+   * @param payload - Matching wire bytes, base64 encoding, and fee-payer signature. The
+   * sender supplies these after verifying all required signatures.
+   * @returns A new credential-bearing POST request. No HTTP request has been launched.
+   * @remarks This is the provider integration boundary, normally called by SenderClient.
+   * It does not validate signatures, check tips, retry, or confirm execution. Applications
+   * should call `SenderClient.send` or `submitSigned` instead of dispatching this request.
+   * The supplied payload is left unchanged; each call allocates its own request body.
    */
   createRequest(payload: SenderTransactionPayload): SenderHttpRequest {
     return {

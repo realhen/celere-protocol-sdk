@@ -18,7 +18,7 @@ npm pack
 
 ## Concurrent sender
 
-Import from `celere-protocol-sdk/sender`. Configure once, supply protocol instructions, signer(s), nonce, and fees per transaction. See [the complete typed example](example/sender.ts) for all five providers and regional lanes.
+Import from `celere-protocol-sdk/sender`. Configure once, supply protocol instructions, signer(s), nonce, and fees per transaction. Start with the [sender guide](docs/sender.md) for configuration, fees, signing, errors, and transport behavior. See [the complete typed example](example/sender.ts) for all five providers and regional lanes.
 
 ```ts
 import {
