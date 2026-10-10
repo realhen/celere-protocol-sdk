@@ -88,7 +88,21 @@ test("packed public package installs offline and exposes usable strict TypeScrip
     // Compile documentation exactly as a consumer sees it in the installed package.
     const installedPackage = join(directory, "node_modules/celere-protocol-sdk");
     const documentationSources = [];
-    for (const [index, file] of instructionFiles.entries()) {
+    const documentedEntryFiles = [
+      ...instructionFiles,
+      ...[
+        "client",
+        "errors/sender-error",
+        "providers/astralane",
+        "providers/block-razor",
+        "providers/zero-slot",
+        "providers/next-block",
+        "providers/helius",
+      ].map((name) => ({
+        path: `dist/sender/${name}.js`,
+      })),
+    ];
+    for (const [index, file] of documentedEntryFiles.entries()) {
       const declarationPath = file.path.replace(/\.js$/, ".d.ts");
       const declaration = await readFile(join(installedPackage, declarationPath), "utf8");
       const snippets = [
@@ -104,10 +118,31 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         documentationSources.push(examplePath);
       }
     }
+    // Published guides and source maps must work from the installed tarball, not just this checkout.
+    const guide = await readFile(join(installedPackage, "docs/sender.md"), "utf8");
+    for (const [index, snippet] of [
+      ...guide.matchAll(/```ts\r?\n([\s\S]*?)```/g),
+    ].entries()) {
+      const path = join(directory, `sender-guide-${index}.ts`);
+      await writeFile(path, snippet[1]);
+      documentationSources.push(path);
+    }
+    const declarationMaps = packed.files.filter((file) =>
+      file.path.endsWith(".d.ts.map"),
+    );
+    for (const file of declarationMaps) {
+      const map = JSON.parse(await readFile(join(installedPackage, file.path), "utf8"));
+      for (const source of map.sources) {
+        await readFile(
+          resolve(installedPackage, file.path, "..", map.sourceRoot ?? "", source),
+          "utf8",
+        );
+      }
+    }
     const protocolExamples = packed.files.filter(
       (file) => file.path.startsWith("example/") && file.path.endsWith(".ts"),
     );
-    assert.equal(protocolExamples.length, 20);
+    assert.equal(protocolExamples.length, 21);
     documentationSources.push(
       ...protocolExamples.map((file) => join(installedPackage, file.path)),
     );

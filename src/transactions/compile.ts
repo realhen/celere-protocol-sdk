@@ -13,13 +13,17 @@ import {
   getTransactionEncoder,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
+  setTransactionMessageLifetimeUsingDurableNonce,
 } from "@solana/kit";
 import type {
   Address,
   Instruction,
   Transaction,
   TransactionWithBlockhashLifetime,
+  TransactionWithLifetime,
+  Nonce,
 } from "@solana/kit";
+import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { U64_MAX } from "../core/amounts.js";
 import { fail, failureResult } from "../core/errors.js";
 import type { Result } from "../core/errors.js";
@@ -30,21 +34,36 @@ export interface LookupTable {
   readonly addresses: readonly Address[];
 }
 
+/** Caller-observed nonce state. Ownership, freshness and exclusive use remain caller responsibilities. */
+export interface DurableNonce {
+  /** Initialized System Program nonce account to advance as the transaction's first instruction. */
+  readonly account: Address;
+  /** Address authorized to advance the account; its transaction signature is required. */
+  readonly authority: Address;
+  /** Current base58-encoded nonce value read from the account, not the account's address. */
+  readonly value: string;
+}
+
+/** Recent blockhash and its observed expiration height. */
+export interface BlockhashLifetime {
+  readonly blockhash: string;
+  readonly lastValidBlockHeight: bigint;
+}
+
 /** Every network-derived input is explicit; compiling never samples fees or fetches a blockhash. */
 export interface CompileTransactionRequest {
   readonly instructions: readonly Instruction[];
   readonly feePayer: Address;
-  readonly lifetime: {
-    readonly blockhash: string;
-    readonly lastValidBlockHeight: bigint;
-  };
+  readonly lifetime: BlockhashLifetime | DurableNonce;
   readonly lookupTables?: readonly LookupTable[];
   readonly computeBudget?: { readonly units: number; readonly microLamports?: bigint };
 }
 
 /** Unsigned wire bytes include zeroed signature slots and can be signed externally. */
-export interface CompiledTransaction {
-  readonly transaction: Transaction & TransactionWithBlockhashLifetime;
+export interface CompiledTransaction<
+  TLifetime extends TransactionWithLifetime = TransactionWithLifetime,
+> {
+  readonly transaction: Transaction & TLifetime;
   readonly wireBytes: Uint8Array;
   readonly requiredSigners: readonly Address[];
   readonly byteLength: number;
@@ -88,6 +107,12 @@ function computeInstructions(
  * A separate fee payer and additional instruction signers are supported. No keys are accepted.
  */
 export function compileTransaction(
+  request: CompileTransactionRequest & { readonly lifetime: BlockhashLifetime },
+): Result<CompiledTransaction<TransactionWithBlockhashLifetime>>;
+export function compileTransaction(
+  request: CompileTransactionRequest,
+): Result<CompiledTransaction>;
+export function compileTransaction(
   request: CompileTransactionRequest,
 ): Result<CompiledTransaction> {
   try {
@@ -100,7 +125,7 @@ export function compileTransaction(
     if (!request.lifetime || typeof request.lifetime !== "object")
       fail({
         code: "INVALID_REQUEST",
-        message: "A blockhash lifetime is required",
+        message: "A blockhash or durable nonce lifetime is required",
         field: "lifetime",
       });
     if (!Array.isArray(request.instructions))
@@ -111,10 +136,28 @@ export function compileTransaction(
       });
     if (!isAddress(request.feePayer))
       fail({ code: "INVALID_REQUEST", message: "Invalid fee payer", field: "feePayer" });
+    const durable = "account" in request.lifetime;
     if (
-      !isAddress(request.lifetime.blockhash) ||
-      typeof request.lifetime.lastValidBlockHeight !== "bigint" ||
-      request.lifetime.lastValidBlockHeight < 0n
+      durable &&
+      (!isAddress(request.lifetime.account) ||
+        !isAddress(request.lifetime.authority) ||
+        !isAddress(request.lifetime.value) ||
+        request.lifetime.account === request.lifetime.authority ||
+        request.lifetime.account === request.feePayer ||
+        request.lifetime.account === SYSTEM_PROGRAM_ADDRESS ||
+        "blockhash" in request.lifetime ||
+        "lastValidBlockHeight" in request.lifetime)
+    )
+      fail({
+        code: "INVALID_REQUEST",
+        message: "Invalid durable nonce lifetime",
+        field: "lifetime",
+      });
+    if (
+      !durable &&
+      (!isAddress(request.lifetime.blockhash) ||
+        typeof request.lifetime.lastValidBlockHeight !== "bigint" ||
+        request.lifetime.lastValidBlockHeight < 0n)
     )
       fail({
         code: "INVALID_REQUEST",
@@ -172,12 +215,38 @@ export function compileTransaction(
         message: "Supply compute budget either in instructions or options, not both",
         field: "computeBudget",
       });
+    if (
+      durable &&
+      request.instructions.some(
+        (ix) =>
+          ix.programAddress === SYSTEM_PROGRAM_ADDRESS &&
+          ix.data?.length &&
+          ix.data.length >= 4 &&
+          new DataView(ix.data.buffer, ix.data.byteOffset, ix.data.byteLength).getUint32(
+            0,
+            true,
+          ) === 4,
+      )
+    )
+      fail({
+        code: "INVALID_REQUEST",
+        message: "Nonce advance is generated by the compiler; do not supply another",
+        field: "instructions",
+      });
     const instructions: Instruction[] = [
       ...(request.computeBudget ? computeInstructions(request.computeBudget) : []),
       ...request.instructions,
     ];
     const referencedAccounts = new Set([
       request.feePayer,
+      ...(durable
+        ? [
+            request.lifetime.account,
+            request.lifetime.authority,
+            SYSTEM_PROGRAM_ADDRESS,
+            "SysvarRecentB1ockHashes11111111111111111111",
+          ]
+        : []),
       ...instructions.flatMap((instruction) => [
         instruction.programAddress,
         ...(instruction.accounts ?? []).map((account) => account.address),
@@ -216,24 +285,52 @@ export function compileTransaction(
         });
       lookupTables[table.address] = [...table.addresses];
     }
-    const message = appendTransactionMessageInstructions(
-      instructions,
-      setTransactionMessageLifetimeUsingBlockhash(
-        {
-          blockhash: blockhash(request.lifetime.blockhash),
-          lastValidBlockHeight: request.lifetime.lastValidBlockHeight,
-        },
-        setTransactionMessageFeePayer(
-          request.feePayer,
-          createTransactionMessage({ version: 0 }),
-        ),
-      ),
+    const base = setTransactionMessageFeePayer(
+      request.feePayer,
+      createTransactionMessage({ version: 0 }),
     );
+    const withLifetime = durable
+      ? setTransactionMessageLifetimeUsingDurableNonce(
+          {
+            nonce: request.lifetime.value as Nonce,
+            nonceAccountAddress: request.lifetime.account,
+            nonceAuthorityAddress: request.lifetime.authority,
+          },
+          base,
+        )
+      : setTransactionMessageLifetimeUsingBlockhash(
+          {
+            blockhash: blockhash(request.lifetime.blockhash),
+            lastValidBlockHeight: request.lifetime.lastValidBlockHeight,
+          },
+          base,
+        );
+    const message = appendTransactionMessageInstructions(instructions, withLifetime);
     const compressed = compressTransactionMessageUsingAddressLookupTables(
       message,
       lookupTables,
     );
-    const transaction = compileKitTransaction(compressed);
+    // SIMD-0242 requires the nonce account to remain static. Restore only its
+    // metadata after compression, preserving every other ALT entry's original index.
+    const nonceAccount = durable ? request.lifetime.account : undefined;
+    const finalMessage = durable
+      ? {
+          ...compressed,
+          instructions: compressed.instructions.map((ix) => ({
+            ...ix,
+            ...(ix.accounts === undefined
+              ? {}
+              : {
+                  accounts: ix.accounts.map((account) =>
+                    account.address === nonceAccount
+                      ? { address: account.address, role: account.role }
+                      : account,
+                  ),
+                }),
+          })),
+        }
+      : compressed;
+    const transaction = compileKitTransaction(finalMessage);
     const requiredSigners = Object.keys(transaction.signatures) as Address[];
     const wireBytes = Uint8Array.from(getTransactionEncoder().encode(transaction));
     if (wireBytes.length > V0_PACKET_LIMIT)

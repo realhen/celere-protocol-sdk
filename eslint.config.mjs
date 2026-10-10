@@ -20,6 +20,10 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/sender/**/*.ts"],
+    rules: { "no-restricted-globals": "off" },
+  },
+  {
     files: ["**/*.mjs"],
     languageOptions: {
       globals: {

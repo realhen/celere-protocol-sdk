@@ -146,3 +146,23 @@ void [
   sweep_creator_fee(curveSweepAccounts),
   sweep_protocol_fee(poolSweepAccounts),
 ];
+
+// Provider options retain their region constraints through the published declarations.
+import {
+  SenderClient,
+  ZeroSlotSender,
+  AstralaneSender,
+  Region,
+  SenderConfigurationError,
+  type SenderError,
+} from "celere-protocol-sdk/sender";
+const sender = new SenderClient({
+  defaultRpc: { url: "https://rpc.example" },
+  routes: [new ZeroSlotSender({ apiKey: "example", region: Region.Frankfurt })],
+});
+// @ts-expect-error 0slot does not publish a London endpoint.
+new ZeroSlotSender({ apiKey: "example", region: Region.London });
+// @ts-expect-error Binary Iris has no built-in Dublin lane.
+new AstralaneSender({ apiKey: "example", region: Region.Dublin });
+const senderError: SenderError = new SenderConfigurationError("Invalid endpoint");
+void [sender, senderError];
