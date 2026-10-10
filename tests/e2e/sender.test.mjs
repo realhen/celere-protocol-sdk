@@ -247,6 +247,39 @@ test("consumer fans out every HTTP adapter before responses, batch-signs and sha
   assert.equal(simple.variants.length, 1, "RPC-only clients have a single variant");
 });
 
+test("consumer sends through an RPC-only client with an explicit recent blockhash", async (t) => {
+  const received = [];
+  const url = await fixture(t, (req, res, body) => {
+    const json = JSON.parse(body);
+    const bytes = Buffer.from(json.params[0], "base64");
+    received.push(getTransactionDecoder().decode(bytes));
+    res.end(JSON.stringify({ result: signature(bytes) }));
+  });
+  const { payer, request } = await trade();
+  const { nonce, ...ordinary } = request;
+  const sender = new SenderClient({ defaultRpc: { url } });
+  const submission = await sender.send({
+    ...ordinary,
+    signers: [payer],
+    lifetime: { blockhash: nonce.value, lastValidBlockHeight: 1n },
+  });
+  const results = await submission.results;
+  assert.equal(submission.variants.length, 1);
+  assert.equal(received.length, 1);
+  assert.deepEqual(
+    results.map((result) => result.provider),
+    [SenderProvider.Rpc],
+  );
+  assert.equal(results[0].status, SubmissionStatus.Accepted);
+  const message = getCompiledTransactionMessageDecoder().decode(received[0].messageBytes);
+  assert.equal(message.lifetimeToken, nonce.value);
+  assert.equal(
+    message.instructions.length,
+    3,
+    "compute budget plus the caller transfer, without nonce advance or provider tip",
+  );
+});
+
 test("consumer gets independent rejection, ambiguous response and bounded timeout observations", async (t) => {
   const url = await fixture(t, (req, res, body) => {
     if (req.url.startsWith("/hang")) {
@@ -303,6 +336,14 @@ test("consumer validates nonce and fee policy before invoking wallets or network
     routes: [new HeliusSender({ apiKey: "test" })],
   });
   const { nonce, ...rest } = request;
+  await assert.rejects(client.send(rest), code(SenderErrorCode.InvalidRequest));
+  await assert.rejects(
+    client.send({
+      ...request,
+      lifetime: { blockhash: nonce.value, lastValidBlockHeight: 1n },
+    }),
+    code(SenderErrorCode.InvalidRequest),
+  );
   await assert.rejects(
     client.send({
       ...rest,

@@ -1,8 +1,8 @@
 import { SubmissionStatus } from "./types.js";
 import type { RouteResult, SenderHttpTransport } from "./types.js";
 
-import type { ConfiguredRoute } from "./configuration.js";
-import type { SignedPayload } from "./sign-submission.js";
+import type { ConfiguredRoute } from "./providers/configuration.js";
+import type { SignedPayload } from "./transaction.js";
 
 function isResponseObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

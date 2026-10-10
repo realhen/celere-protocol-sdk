@@ -153,6 +153,7 @@ export interface SenderFees {
  * The sender adds compute-budget instructions and provider tips; do not add a second
  * compute budget or nonce advance instruction. A blockhash lifetime is sufficient only
  * when there is a single variant. Distinct provider/RPC variants require a shared nonce.
+ * The client neither fetches a lifetime nor falls back to RPC-only sending when a nonce is missing.
  */
 export type PrepareRequest = {
   /** Ordered instructions from any protocol or other Kit-compatible source. At least one is required. */

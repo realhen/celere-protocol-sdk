@@ -68,15 +68,14 @@ For external signing, call `sender.prepare(request)`, sign each `prepared.varian
 
 Start with [SenderClient](src/sender/client.ts) for the public `prepare`, `send`, and `submitSigned` flow. Each public method documents its parameters, return timing, failures, and a typed example; these comments are included in the generated declarations.
 
-| Module                                                 | Responsibility                                                                          |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| [configuration](src/sender/configuration.ts)           | Retain validated providers, snapshot custom route metadata, and assign result IDs.      |
-| [prepare-submission](src/sender/prepare-submission.ts) | Validate fees and compile distinct provider-tip variants.                               |
-| [sign-submission](src/sender/sign-submission.ts)       | Batch-sign, verify unchanged messages and signatures, and serialize wire bytes.         |
-| [submit-submission](src/sender/submit-submission.ts)   | Launch every route and collect independent observations.                                |
-| [http](src/sender/http.ts)                             | Apply shared deadlines, cancellation, and acknowledgment interpretation.                |
-| [providers](src/sender/providers/index.ts)             | One class per provider, owning endpoints, recipients, fee floors, and request encoding. |
-| [types](src/sender/types.ts)                           | Public configuration, fee units, request types, and result contracts.                   |
+| Module                                     | Responsibility                                                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [client](src/sender/client.ts)             | Configure routes, validate requests, coordinate preparation/signing, launch every route, and collect independent observations.                    |
+| [transaction](src/sender/transaction.ts)   | Compile provider-tip variants, batch-sign, verify unchanged messages and signatures, and serialize wire bytes.                                    |
+| [transport](src/sender/transport.ts)       | Apply shared HTTP deadlines, cancellation, and acknowledgment interpretation.                                                                     |
+| [providers](src/sender/providers/index.ts) | One class per provider, owning endpoints, recipients, fee floors, and request encoding; shared constructor checks live in provider configuration. |
+| [types](src/sender/types.ts)               | Public configuration, fee units, request types, and result contracts.                                                                             |
+| [errors](src/sender/errors/index.ts)       | Typed configuration, preparation, signing, and cancellation failures.                                                                             |
 
 The HTTP boundary accepts a named `SenderHttpTransport`, compatible with Fetch API implementations. By default it calls the runtime's standard `fetch`; injection is available for application-managed pools and proxies. Module-private state keeps credentials and original preparation buffers out of the public client object without exposing JavaScript private-field syntax in their declarations.
 

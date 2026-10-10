@@ -1,6 +1,17 @@
 import { SenderConfigurationError } from "../errors/index.js";
 import type { Region, RouteOptions, SenderRoute } from "../types.js";
-import type { ValidationResult } from "../validation.js";
+import type { SenderError } from "../errors/index.js";
+
+/** Internal validation result. Public methods preserve their documented throw/reject boundary. */
+export type ValidationResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: SenderError };
+
+/** Immutable provider metadata and the client-assigned observation identity. */
+export interface ConfiguredRoute {
+  readonly id: string;
+  readonly config: SenderRoute;
+}
 
 /** Built-in providers validate their inputs once, before the client receives them. */
 const configuredProviders = new WeakSet<SenderRoute>();

@@ -90,6 +90,15 @@ Supply `{ account, authority, value }` using an already-provisioned nonce accoun
 
 After submission, the application determines whether the trade landed and when the account is safe to reuse. Refresh its value before another trade. RPC-only clients may instead supply `lifetime: { blockhash, lastValidBlockHeight }`; distinct tipped variants require a durable nonce.
 
+Supply exactly one lifetime on every request. The client does not fetch a blockhash or silently drop configured provider routes when a nonce is missing.
+
+| Client and lifetime                                      | Behavior                                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Provider routes plus a nonce snapshot                    | Submit provider-specific variants and the untipped default RPC variant concurrently. |
+| RPC-only client plus a recent blockhash                  | Submit one transaction through the default RPC.                                      |
+| Provider routes plus a recent blockhash, without a nonce | Throw `NonceRequiredError` before signing or dispatch.                               |
+| Neither lifetime, or both a nonce and a recent blockhash | Throw `SenderRequestError` before signing or dispatch.                               |
+
 ## External signing
 
 Use `prepare` when a wallet integration needs to inspect and sign messages separately. Keep the original prepared object and variant order. Every signed message must remain byte-for-byte identical, and all required signatures must be valid. A plan belongs to the client that created it.

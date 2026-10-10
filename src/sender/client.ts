@@ -2,17 +2,22 @@ import {
   SenderConfigurationError,
   SenderRequestError,
   SenderAbortedError,
+  PriorityFeeTooLowError,
 } from "./errors/index.js";
 import type { Transaction } from "@solana/kit";
-import { configureSenderRoutes } from "./configuration.js";
-import type { ConfiguredRoute } from "./configuration.js";
-import { prepareTransactionVariants } from "./prepare-submission.js";
+import { U64_MAX } from "../core/amounts.js";
+import { isValidAddress } from "../core/addresses.js";
+import { isConfiguredProvider, validateTimeout } from "./providers/configuration.js";
+import type { ConfiguredRoute, ValidationResult } from "./providers/configuration.js";
+import { RpcSender } from "./providers/rpc.js";
+import { sendRouteTransaction } from "./transport.js";
 import {
+  copyPreparedVariants,
+  prepareTransactionVariants,
   signPreparedTransactions,
   serializeSignedTransactions,
-} from "./sign-submission.js";
-import { submitTransactionVariants } from "./submit-submission.js";
-import { copyPreparedVariants } from "./transaction.js";
+} from "./transaction.js";
+import { SenderProvider } from "./types.js";
 import type {
   PrepareRequest,
   PreparedSubmission,
@@ -20,6 +25,7 @@ import type {
   SendRequest,
   SenderClientOptions,
   SenderHttpTransport,
+  SenderRoute,
   Submission,
   SubmitSignedOptions,
 } from "./types.js";
@@ -87,6 +93,8 @@ export class SenderClient {
    *
    * Compatible regional routes share a variant. Distinct tipped variants and the untipped
    * RPC variant must share a durable nonce, with its advance instruction first.
+   * A recent blockhash supports an RPC-only client. Missing a nonce never silently
+   * disables configured providers, and the client never fetches a lifetime implicitly.
    *
    * @param request - Instructions, payer, fees, lookup contents, and one explicit lifetime.
    * @returns A plan belonging to this client. Keep this exact object for {@link submitSigned}.
@@ -110,6 +118,8 @@ export class SenderClient {
    */
   prepare(request: PrepareRequest): PreparedSubmission {
     const { routes, preparedSubmissions } = getClientState(this);
+    const validation = validatePreparationRequest(request, routes);
+    if (!validation.ok) throw validation.error;
     const variants = copyPreparedVariants(prepareTransactionVariants(request, routes));
     const prepared = Object.freeze({ variants: copyPreparedVariants(variants) });
     preparedSubmissions.set(prepared, variants);
@@ -207,6 +217,178 @@ export class SenderClient {
     if (options.signal?.aborted) {
       throw new SenderAbortedError("Send aborted before dispatch");
     }
-    return submitTransactionVariants(routes, variants, payloads, transport, options);
+    // Launch every route before returning; only the results promise waits for HTTP responses.
+    const results = routes.map((route) => {
+      const index = variants.findIndex((variant) => variant.routeIds.includes(route.id));
+      return sendRouteTransaction(
+        route,
+        payloads[index]!,
+        transport,
+        options.signal,
+      ).then((result) => {
+        const onRouteResult = options.onRouteResult;
+        if (onRouteResult) {
+          // Observation is application work: neither slow callbacks nor callback failures
+          // should delay the transport results or affect another route's submission.
+          void Promise.resolve()
+            .then(() => onRouteResult(result))
+            .catch(() => {});
+        }
+        return result;
+      });
+    });
+    return {
+      variants: payloads.map((payload, index) => ({
+        signature: payload.signature,
+        routeIds: [...variants[index]!.routeIds],
+        wireBytes: Uint8Array.from(payload.bytes),
+      })),
+      results: Promise.all(results),
+    };
   }
+}
+
+/** Built-ins are already validated and immutable. Snapshot metadata for custom implementations. */
+function configureRoute(route: SenderRoute): ValidationResult<SenderRoute> {
+  if (isConfiguredProvider(route)) return { ok: true, value: route };
+  if (
+    !route ||
+    !Object.values(SenderProvider).includes(route.provider) ||
+    route.provider === SenderProvider.Rpc
+  )
+    return {
+      ok: false,
+      error: new SenderConfigurationError(
+        "Use a provider route; defaultRpc supplies the RPC lane",
+      ),
+    };
+  if (route.name !== undefined && (typeof route.name !== "string" || !route.name.trim()))
+    return { ok: false, error: new SenderConfigurationError("Invalid route name") };
+  const amounts = [route.minimumTipLamports, route.minimumPriorityFeeLamports];
+  if (
+    amounts.some((value) => typeof value !== "bigint" || value < 0n || value > U64_MAX) ||
+    route.minimumTipLamports === 0n ||
+    !Array.isArray(route.tipAccounts) ||
+    !route.tipAccounts.length ||
+    route.tipAccounts.some((value) => !isValidAddress(value)) ||
+    typeof route.createRequest !== "function"
+  )
+    return {
+      ok: false,
+      error: new SenderConfigurationError(
+        "Invalid provider requirements or request encoder",
+      ),
+    };
+  const timeout = validateTimeout(route.timeoutMs);
+  if (!timeout.ok) return timeout;
+  return {
+    ok: true,
+    value: Object.freeze({
+      provider: route.provider,
+      ...(route.name === undefined ? {} : { name: route.name }),
+      timeoutMs: timeout.value,
+      minimumTipLamports: route.minimumTipLamports,
+      minimumPriorityFeeLamports: route.minimumPriorityFeeLamports,
+      tipAccounts: Object.freeze([...route.tipAccounts]),
+      createRequest: route.createRequest.bind(route),
+    }),
+  };
+}
+
+/** Configure once, add the default RPC, and assign stable IDs. No network work is performed. */
+function configureSenderRoutes(options: SenderClientOptions): readonly ConfiguredRoute[] {
+  if (!options?.defaultRpc) throw new SenderConfigurationError("defaultRpc is required");
+  if (options.routes !== undefined && !Array.isArray(options.routes))
+    throw new SenderConfigurationError("routes must be an array of providers");
+  if (options.fetch !== undefined && typeof options.fetch !== "function")
+    throw new SenderConfigurationError("fetch must be an HTTP transport function");
+  const routes: SenderRoute[] = [];
+  const names = new Set<string>();
+  for (const route of options.routes ?? []) {
+    const result = configureRoute(route);
+    if (!result.ok) throw result.error;
+    if (result.value.name !== undefined) {
+      if (names.has(result.value.name))
+        throw new SenderConfigurationError("Explicit route names must be unique");
+      names.add(result.value.name);
+    }
+    routes.push(result.value);
+  }
+  return [
+    { id: "rpc:0", config: new RpcSender(options.defaultRpc) },
+    ...routes.map((config, index) => ({ id: `${config.provider}:${index + 1}`, config })),
+  ];
+}
+
+/** A fee is an atomic, non-negative u64 amount. No coercion or implicit fee adjustment. */
+function isFeeAmount(value: unknown): value is bigint {
+  return typeof value === "bigint" && value >= 0n && value <= U64_MAX;
+}
+
+/** Return expected input failures as values; the public preparation boundary decides how to surface them. */
+function validatePreparationRequest(
+  request: PrepareRequest,
+  routes: readonly ConfiguredRoute[],
+): ValidationResult<PrepareRequest> {
+  if (
+    !request ||
+    !request.fees ||
+    !Array.isArray(request.instructions) ||
+    request.instructions.length === 0
+  )
+    return {
+      ok: false,
+      error: new SenderRequestError("At least one instruction and fees are required"),
+    };
+  if (Boolean(request.nonce) === Boolean(request.lifetime))
+    return {
+      ok: false,
+      error: new SenderRequestError("Supply exactly one nonce or blockhash lifetime"),
+    };
+  const fees = request.fees;
+  if (!isFeeAmount(fees.tipLamports) || !isFeeAmount(fees.computeUnitPriceMicroLamports))
+    return {
+      ok: false,
+      error: new SenderRequestError("Fee amounts must be non-negative u64 bigint values"),
+    };
+  if (
+    !Number.isInteger(fees.computeUnitLimit) ||
+    fees.computeUnitLimit <= 0 ||
+    fees.computeUnitLimit > 1_400_000
+  )
+    return {
+      ok: false,
+      error: new SenderRequestError(
+        "Compute unit limit must be an integer from 1 through 1400000",
+      ),
+    };
+  // Solana rounds the total priority fee up to whole lamports, not the per-CU price.
+  const priorityFeeLamports =
+    (BigInt(fees.computeUnitLimit) * fees.computeUnitPriceMicroLamports + 999_999n) /
+    1_000_000n;
+  for (const route of routes) {
+    if (priorityFeeLamports < route.config.minimumPriorityFeeLamports)
+      return {
+        ok: false,
+        error: new PriorityFeeTooLowError(`Priority fee below minimum for ${route.id}`),
+      };
+  }
+  for (const [provider, amount] of Object.entries(fees.tipOverrides ?? {})) {
+    if (
+      provider === SenderProvider.Rpc ||
+      !routes.some((route) => route.config.provider === provider)
+    )
+      return {
+        ok: false,
+        error: new SenderRequestError("Tip override refers to an unconfigured provider"),
+      };
+    if (!isFeeAmount(amount))
+      return {
+        ok: false,
+        error: new SenderRequestError(
+          "Tip overrides must be non-negative u64 bigint values",
+        ),
+      };
+  }
+  return { ok: true, value: request };
 }
