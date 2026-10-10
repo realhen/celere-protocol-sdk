@@ -25,8 +25,10 @@ import {
   TipTooLowError,
 } from "./errors/index.js";
 import type { ConfiguredRoute } from "./providers/configuration.js";
-import { SenderProvider } from "./types.js";
-import type { PrepareRequest, PreparedVariant, SenderRoute } from "./types.js";
+import { SenderProvider } from "./types/providers.js";
+import type { PrepareRequest } from "./types/requests.js";
+import type { PreparedVariant } from "./types/results.js";
+import type { SenderRoute } from "./types/providers.js";
 
 /** An unsigned or partially signed transaction with its caller-supplied lifetime. */
 export type PreparedTransaction = Transaction & TransactionWithLifetime;

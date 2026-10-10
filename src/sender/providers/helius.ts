@@ -1,14 +1,18 @@
 import { address } from "@solana/kit";
-import { Region, SenderProvider, HeliusSenderMode } from "../types.js";
-import type {
-  RouteOptions,
-  SenderRoute,
-  SenderTransactionPayload,
-  SenderHttpRequest,
-} from "../types.js";
+import { Region, SenderProvider } from "../types/providers.js";
+import type { RouteOptions, SenderRoute } from "../types/providers.js";
+import type { SenderTransactionPayload, SenderHttpRequest } from "../types/transport.js";
 import { configureProvider, registerProvider } from "./configuration.js";
 import { SenderConfigurationError } from "../errors/index.js";
 import { createRpcRequest } from "./rpc.js";
+
+/** Helius product tier; each has its own minimum tip. */
+export enum HeliusSenderMode {
+  /** Sender Max: minimum tip 1,000,000 lamports and priority fee 5,000 lamports. */
+  Max = "max",
+  /** SWQoS-only: minimum tip 5,000 lamports. */
+  SwqosOnly = "swqos-only",
+}
 
 /** Supported binary/HTTP locations. See README for alternate datacenters and coverage limits. */
 const ENDPOINTS = {

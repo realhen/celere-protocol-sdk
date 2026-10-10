@@ -1,13 +1,21 @@
 import { address } from "@solana/kit";
-import { Region, SenderProvider, AstralaneTier } from "../types.js";
-import type {
-  RouteOptions,
-  SenderRoute,
-  SenderTransactionPayload,
-  SenderHttpRequest,
-} from "../types.js";
+import { Region, SenderProvider } from "../types/providers.js";
+import type { RouteOptions, SenderRoute } from "../types/providers.js";
+import type { SenderTransactionPayload, SenderHttpRequest } from "../types/transport.js";
 import { configureProvider, registerProvider } from "./configuration.js";
 import { SenderConfigurationError } from "../errors/index.js";
+
+/** Astralane's provisioned fee tier. Selecting a tier does not upgrade the provider account. */
+export enum AstralaneTier {
+  /** Free tier: minimum tip 1,000,000 lamports. */
+  Free = "free",
+  /** VIP 1: minimum tip 100,000 lamports. */
+  Vip1 = "vip-1",
+  /** VIP 2: minimum tip 100,000 lamports. */
+  Vip2 = "vip-2",
+  /** VIP 3: minimum tip 10,000 lamports. */
+  Vip3 = "vip-3",
+}
 
 /** Supported binary/HTTP locations. See README for alternate datacenters and coverage limits. */
 const ENDPOINTS = {

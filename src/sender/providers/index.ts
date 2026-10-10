@@ -1,4 +1,4 @@
-export { AstralaneSender } from "./astralane.js";
+export { AstralaneSender, AstralaneTier } from "./astralane.js";
 export type { AstralaneSenderOptions, AstralaneRegion } from "./astralane.js";
 export { BlockRazorSender } from "./block-razor.js";
 export type { BlockRazorSenderOptions, BlockRazorRegion } from "./block-razor.js";
@@ -6,5 +6,5 @@ export { ZeroSlotSender } from "./zero-slot.js";
 export type { ZeroSlotSenderOptions, ZeroSlotRegion } from "./zero-slot.js";
 export { NextBlockSender } from "./next-block.js";
 export type { NextBlockSenderOptions, NextBlockRegion } from "./next-block.js";
-export { HeliusSender } from "./helius.js";
+export { HeliusSender, HeliusSenderMode } from "./helius.js";
 export type { HeliusSenderOptions, HeliusRegion } from "./helius.js";

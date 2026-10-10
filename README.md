@@ -74,7 +74,7 @@ Start with [SenderClient](src/sender/client.ts) for the public `prepare`, `send`
 | [transaction](src/sender/transaction.ts)   | Compile provider-tip variants, batch-sign, verify unchanged messages and signatures, and serialize wire bytes.                                    |
 | [transport](src/sender/transport.ts)       | Apply shared HTTP deadlines, cancellation, and acknowledgment interpretation.                                                                     |
 | [providers](src/sender/providers/index.ts) | One class per provider, owning endpoints, recipients, fee floors, and request encoding; shared constructor checks live in provider configuration. |
-| [types](src/sender/types.ts)               | Public configuration, fee units, request types, and result contracts.                                                                             |
+| [types](src/sender/types/index.ts)         | Public contracts grouped into client configuration, providers, requests, results, and transport.                                                  |
 | [errors](src/sender/errors/index.ts)       | Typed configuration, preparation, signing, and cancellation failures.                                                                             |
 
 The HTTP boundary accepts a named `SenderHttpTransport`, compatible with Fetch API implementations. By default it calls the runtime's standard `fetch`; injection is available for application-managed pools and proxies. JavaScript private fields (`#routes`, `#transport`, and `#preparedSubmissions`) keep the client's configuration and original preparation buffers inaccessible through public properties. The preparation map uses weak keys so unused plans can be garbage-collected.

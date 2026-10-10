@@ -1,10 +1,7 @@
-import { SenderProvider } from "../types.js";
-import type {
-  RpcRouteOptions,
-  SenderRoute,
-  SenderTransactionPayload,
-  SenderHttpRequest,
-} from "../types.js";
+import { SenderProvider } from "../types/providers.js";
+import type { RpcRouteOptions } from "../types/client.js";
+import type { SenderRoute } from "../types/providers.js";
+import type { SenderTransactionPayload, SenderHttpRequest } from "../types/transport.js";
 import { validateEndpoint, validateTimeout } from "./configuration.js";
 
 /** Common Solana JSON-RPC encoding used by RPC, 0slot, and Helius. */

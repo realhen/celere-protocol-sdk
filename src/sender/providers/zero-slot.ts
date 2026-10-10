@@ -1,11 +1,7 @@
 import { address } from "@solana/kit";
-import { Region, SenderProvider } from "../types.js";
-import type {
-  RouteOptions,
-  SenderRoute,
-  SenderTransactionPayload,
-  SenderHttpRequest,
-} from "../types.js";
+import { Region, SenderProvider } from "../types/providers.js";
+import type { RouteOptions, SenderRoute } from "../types/providers.js";
+import type { SenderTransactionPayload, SenderHttpRequest } from "../types/transport.js";
 import { configureProvider, registerProvider } from "./configuration.js";
 import { SenderConfigurationError } from "../errors/index.js";
 import { createRpcRequest } from "./rpc.js";

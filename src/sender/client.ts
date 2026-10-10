@@ -17,18 +17,16 @@ import {
   signPreparedTransactions,
   serializeSignedTransactions,
 } from "./transaction.js";
-import { SenderProvider } from "./types.js";
+import { SenderProvider } from "./types/providers.js";
 import type {
   PrepareRequest,
-  PreparedSubmission,
-  PreparedVariant,
   SendRequest,
-  SenderClientOptions,
-  SenderHttpTransport,
-  SenderRoute,
-  Submission,
   SubmitSignedOptions,
-} from "./types.js";
+} from "./types/requests.js";
+import type { PreparedSubmission, PreparedVariant, Submission } from "./types/results.js";
+import type { SenderClientOptions } from "./types/client.js";
+import type { SenderHttpTransport } from "./types/transport.js";
+import type { SenderRoute } from "./types/providers.js";
 
 /**
  * Prepares, signs, and concurrently submits transactions through configured routes.

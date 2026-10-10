@@ -1,5 +1,5 @@
 import { SenderConfigurationError } from "../errors/index.js";
-import type { Region, RouteOptions, SenderRoute } from "../types.js";
+import type { Region, RouteOptions, SenderRoute } from "../types/providers.js";
 import type { SenderError } from "../errors/index.js";
 
 /** Internal validation result. Public methods preserve their documented throw/reject boundary. */

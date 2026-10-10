@@ -1,5 +1,6 @@
-import { SubmissionStatus } from "./types.js";
-import type { RouteResult, SenderHttpTransport } from "./types.js";
+import { SubmissionStatus } from "./types/results.js";
+import type { RouteResult } from "./types/results.js";
+import type { SenderHttpTransport } from "./types/transport.js";
 
 import type { ConfiguredRoute } from "./providers/configuration.js";
 import type { SignedPayload } from "./transaction.js";
