@@ -1,5 +1,6 @@
 import type { Address } from "@solana/kit";
-import type { SenderTransactionPayload, SenderHttpRequest } from "./transport.js";
+import type { SenderTransactionPayload } from "../transaction.js";
+import type { SenderHttpRequest } from "../transport.js";
 
 /**
  * Identifies a submission provider in route results and per-send tip overrides.

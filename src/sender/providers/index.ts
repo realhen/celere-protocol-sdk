@@ -8,3 +8,6 @@ export { NextBlockSender } from "./next-block.js";
 export type { NextBlockSenderOptions, NextBlockRegion } from "./next-block.js";
 export { HeliusSender, HeliusSenderMode } from "./helius.js";
 export type { HeliusSenderOptions, HeliusRegion } from "./helius.js";
+export { SenderProvider, Region } from "./route.js";
+export type { RouteOptions, SenderRoute } from "./route.js";
+export type { RpcRouteOptions } from "./rpc.js";

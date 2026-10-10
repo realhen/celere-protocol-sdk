@@ -25,10 +25,90 @@ import {
   TipTooLowError,
 } from "./errors/index.js";
 import type { ConfiguredRoute } from "./providers/configuration.js";
-import { SenderProvider } from "./types/providers.js";
-import type { PrepareRequest } from "./types/requests.js";
-import type { PreparedVariant } from "./types/results.js";
-import type { SenderRoute } from "./types/providers.js";
+import { SenderProvider } from "./providers/route.js";
+import type { SenderRoute } from "./providers/route.js";
+import type {
+  BlockhashLifetime,
+  DurableNonce,
+  LookupTable,
+} from "../transactions/index.js";
+
+/** Per-send amounts. All monetary values are atomic bigint values. No automatic fee sampling. */
+export interface SenderFees {
+  /**
+   * Requested compute units for the entire transaction, including setup, nonce, and tip
+   * instructions. Integer 1–1,400,000. The sender does not simulate or estimate this value.
+   */
+  readonly computeUnitLimit: number;
+  /**
+   * Micro-lamports per requested compute unit, as a u64 bigint. Priority fee in lamports
+   * is ceil(limit × price / 1,000,000). For example, 200,000 CUs at 50,000n costs 10,000 lamports.
+   */
+  readonly computeUnitPriceMicroLamports: bigint;
+  /**
+   * Tip in lamports for each provider variant, as a u64 bigint; 1,000,000n is 0.001 SOL.
+   * The default RPC variant has no provider tip. Each route's minimum is checked before signing.
+   */
+  readonly tipLamports: bigint;
+  /** Per-provider tip amounts in lamports, replacing tipLamports for all that provider's lanes. */
+  readonly tipOverrides?: Readonly<
+    Partial<Record<Exclude<SenderProvider, SenderProvider.Rpc>, bigint>>
+  >;
+}
+
+/**
+ * Inputs for local transaction compilation. Supply exactly one nonce or blockhash lifetime.
+ *
+ * The sender adds compute-budget instructions and provider tips; do not add a second
+ * compute budget or nonce advance instruction. A blockhash lifetime is sufficient only
+ * when there is a single variant. Distinct provider/RPC variants require a shared nonce.
+ * The client neither fetches a lifetime nor falls back to RPC-only sending when a nonce is missing.
+ */
+export type PrepareRequest = {
+  /** Ordered instructions from any protocol or other Kit-compatible source. At least one is required. */
+  readonly instructions: readonly Instruction[];
+  /** Address paying transaction fees and provider tips; its signature is required. */
+  readonly feePayer: Address;
+  /** Caller-observed address lookup contents. The nonce account always remains a static account. */
+  readonly lookupTables?: readonly LookupTable[];
+  /** Explicit per-send fees, including the complete transaction's compute-unit limit. */
+  readonly fees: SenderFees;
+} & (
+  | {
+      /** Current nonce snapshot exclusively selected by the application for this logical trade. */
+      readonly nonce: DurableNonce;
+      readonly lifetime?: never;
+    }
+  | {
+      /** Recent blockhash and expiration height for a single-variant send. */
+      readonly lifetime: BlockhashLifetime;
+      readonly nonce?: never;
+    }
+);
+
+/** Transaction and assigned route IDs; regional lanes can share one variant. */
+export interface PreparedVariant {
+  /** Unsigned transaction with required signature slots and explicit lifetime metadata. */
+  readonly transaction: Transaction & TransactionWithLifetime;
+  /** Client-assigned IDs of all lanes sharing this exact transaction. */
+  readonly routeIds: readonly string[];
+}
+
+/** Prepared plans belong to the client that created them. Retain for external signing. */
+export interface PreparedSubmission {
+  /** Distinct unsigned variants in the order expected by external signing and submission. */
+  readonly variants: readonly PreparedVariant[];
+}
+
+/** Serialized, verified transaction supplied to a provider's request encoder. */
+export interface SenderTransactionPayload {
+  /** Signed wire bytes; treat as readonly. */
+  readonly bytes: Uint8Array;
+  /** Base64 representation of the same signed bytes. */
+  readonly base64: string;
+  /** Locally verified fee-payer signature. */
+  readonly signature: string;
+}
 
 /** An unsigned or partially signed transaction with its caller-supplied lifetime. */
 export type PreparedTransaction = Transaction & TransactionWithLifetime;

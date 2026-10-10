@@ -1,9 +1,31 @@
-import { SubmissionStatus } from "./types/results.js";
-import type { RouteResult } from "./types/results.js";
-import type { SenderHttpTransport } from "./types/transport.js";
-
+import { SubmissionStatus } from "./submission.js";
+import type { RouteResult } from "./submission.js";
 import type { ConfiguredRoute } from "./providers/configuration.js";
 import type { SignedPayload } from "./transaction.js";
+
+/** A provider-encoded HTTP submission. URLs and headers may contain credentials. */
+export interface SenderHttpRequest {
+  /** Complete submission URL with authentication parameters, if required. */
+  readonly url: string;
+  /** POST body, headers and redirect policy; the shared transport adds cancellation. */
+  readonly init: RequestInit;
+}
+
+/**
+ * HTTP implementation used for each submission, compatible with the standard Fetch API.
+ *
+ * A custom transport can supply an application-managed connection pool or proxy. It should
+ * honor the request's abort signal. The client bounds its own wait even if a custom transport
+ * ignores cancellation; the application remains responsible for that transport's resources.
+ *
+ * @param url - Complete provider URL, including authentication query parameters when required.
+ * @param options - POST body, headers, abort signal, and redirect policy supplied by the sender.
+ * @returns The HTTP response, including its status and body. Do not log credentials in URLs or headers.
+ */
+export type SenderHttpTransport = (
+  url: string,
+  options: RequestInit,
+) => Promise<Response>;
 
 function isResponseObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

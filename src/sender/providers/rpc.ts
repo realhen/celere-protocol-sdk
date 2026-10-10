@@ -1,8 +1,16 @@
-import { SenderProvider } from "../types/providers.js";
-import type { RpcRouteOptions } from "../types/client.js";
-import type { SenderRoute } from "../types/providers.js";
-import type { SenderTransactionPayload, SenderHttpRequest } from "../types/transport.js";
+import { SenderProvider } from "./route.js";
+import type { SenderRoute } from "./route.js";
+import type { SenderTransactionPayload } from "../transaction.js";
+import type { SenderHttpRequest } from "../transport.js";
 import { validateEndpoint, validateTimeout } from "./configuration.js";
+
+/** Default RPC route, always submitted alongside the configured provider routes. */
+export interface RpcRouteOptions {
+  /** Full RPC URL. This endpoint receives the untipped variant. */
+  readonly url: string;
+  /** HTTP deadline in milliseconds, including reading the body. Integer 1–60,000; default 3,000. */
+  readonly timeoutMs?: number;
+}
 
 /** Common Solana JSON-RPC encoding used by RPC, 0slot, and Helius. */
 export function createRpcRequest(

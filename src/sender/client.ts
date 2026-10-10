@@ -17,16 +17,30 @@ import {
   signPreparedTransactions,
   serializeSignedTransactions,
 } from "./transaction.js";
-import { SenderProvider } from "./types/providers.js";
+import { SenderProvider } from "./providers/route.js";
 import type {
   PrepareRequest,
-  SendRequest,
-  SubmitSignedOptions,
-} from "./types/requests.js";
-import type { PreparedSubmission, PreparedVariant, Submission } from "./types/results.js";
-import type { SenderClientOptions } from "./types/client.js";
-import type { SenderHttpTransport } from "./types/transport.js";
-import type { SenderRoute } from "./types/providers.js";
+  PreparedSubmission,
+  PreparedVariant,
+} from "./transaction.js";
+import type { SendRequest, SubmitSignedOptions, Submission } from "./submission.js";
+import type { SenderHttpTransport } from "./transport.js";
+import type { SenderRoute } from "./providers/route.js";
+import type { RpcRouteOptions } from "./providers/rpc.js";
+
+/** Configuration for the reusable sender client. */
+export interface SenderClientOptions {
+  /** Mandatory RPC route; provider lanes supplement it rather than replace it. */
+  readonly defaultRpc: RpcRouteOptions;
+  /**
+   * Optional HTTP implementation. Defaults to the runtime's standard `fetch` in Node,
+   * browsers, and workers. The sender does not open connections during construction.
+   * Lifecycle of an injected connection pool belongs to the application.
+   */
+  readonly fetch?: SenderHttpTransport;
+  /** Initial provider lanes. Multiple regions of the same provider are supported. */
+  readonly routes?: readonly SenderRoute[];
+}
 
 /**
  * Prepares, signs, and concurrently submits transactions through configured routes.

@@ -68,14 +68,17 @@ For external signing, call `sender.prepare(request)`, sign each `prepared.varian
 
 Start with [SenderClient](src/sender/client.ts) for the public `prepare`, `send`, and `submitSigned` flow. Each public method documents its parameters, return timing, failures, and a typed example; these comments are included in the generated declarations.
 
-| Module                                     | Responsibility                                                                                                                                    |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [client](src/sender/client.ts)             | Configure routes, validate requests, coordinate preparation/signing, launch every route, and collect independent observations.                    |
-| [transaction](src/sender/transaction.ts)   | Compile provider-tip variants, batch-sign, verify unchanged messages and signatures, and serialize wire bytes.                                    |
-| [transport](src/sender/transport.ts)       | Apply shared HTTP deadlines, cancellation, and acknowledgment interpretation.                                                                     |
-| [providers](src/sender/providers/index.ts) | One class per provider, owning endpoints, recipients, fee floors, and request encoding; shared constructor checks live in provider configuration. |
-| [types](src/sender/types/index.ts)         | Public contracts grouped into client configuration, providers, requests, results, and transport.                                                  |
-| [errors](src/sender/errors/index.ts)       | Typed configuration, preparation, signing, and cancellation failures.                                                                             |
+| Module                                          | Responsibility                                                                                                                   |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| [client](src/sender/client.ts)                  | Client configuration and class; validate requests, coordinate preparation/signing, launch every route, and collect observations. |
+| [transaction](src/sender/transaction.ts)        | Preparation inputs, fees, plans, and signed payloads alongside compilation, signing, verification, and serialization.            |
+| [transport](src/sender/transport.ts)            | HTTP request and transport contracts alongside deadlines, cancellation, and acknowledgment interpretation.                       |
+| [submission](src/sender/submission.ts)          | Shared send requests, cancellation/callback options, submitted variants, and result statuses.                                    |
+| [providers](src/sender/providers/index.ts)      | Each provider owns its class, options, regions, tiers, endpoints, recipients, fee floors, and request encoding.                  |
+| [provider route](src/sender/providers/route.ts) | Shared provider identities, regions, route options, and the common provider contract.                                            |
+| [errors](src/sender/errors/index.ts)            | Typed configuration, preparation, signing, and cancellation failures.                                                            |
+
+Component-specific types live with their implementation. Shared route and submission contracts have their own modules. All supported public names remain available from `celere-protocol-sdk/sender`; consumers do not import internal source paths.
 
 The HTTP boundary accepts a named `SenderHttpTransport`, compatible with Fetch API implementations. By default it calls the runtime's standard `fetch`; injection is available for application-managed pools and proxies. JavaScript private fields (`#routes`, `#transport`, and `#preparedSubmissions`) keep the client's configuration and original preparation buffers inaccessible through public properties. The preparation map uses weak keys so unused plans can be garbage-collected.
 
