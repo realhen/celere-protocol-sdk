@@ -14,8 +14,8 @@ export async function installExampleProject(source, directory, tarball, integrit
   const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
   const sdkManifest = JSON.parse(await readFile("package.json", "utf8"));
   const sdkLock = JSON.parse(await readFile("package-lock.json", "utf8"));
-  // The shipped projects pin a GitHub revision until publication. This test must exercise the
-  // uncommitted candidate build, without depending on a prior published/remote version.
+  // The shipped projects link the repository root. Copied test folders instead use
+  // the candidate tarball so their imports cannot accidentally resolve this checkout.
   manifest.dependencies["celere-protocol-sdk"] = `file:${tarball}`;
   await writeFile(join(directory, "package.json"), JSON.stringify(manifest));
   await writeFile(
