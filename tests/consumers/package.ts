@@ -10,11 +10,16 @@ import {
   buildSwapInstructions,
   compileTransaction,
   getSwapRequirements,
+  fetchSwapInstructions,
+  getPumpBondingCurveAddress,
+  SwapBuildError,
   type SwapRequest,
   type BuildError,
 } from "celere-protocol-sdk";
 import { createProtocolSdk } from "celere-protocol-sdk/core";
 import { raydiumCpmmAdapter } from "celere-protocol-sdk/protocols/raydium-cpmm";
+import { createSolanaRpc } from "@solana/kit";
+import { getPumpBondingCurveAddress as getCurveFromPump } from "celere-protocol-sdk/protocols/pump";
 import { pumpAdapter } from "celere-protocol-sdk/protocols/pump";
 import { orcaWhirlpoolAdapter } from "celere-protocol-sdk/protocols/orca";
 import { pumpAmmAdapter } from "celere-protocol-sdk/protocols/pump-amm";
@@ -182,3 +187,25 @@ const sharedError: SenderError = new RootSenderConfigurationError("example");
 declare const rootRequest: RootSendRequest;
 const focusedRequest: SendRequest = rootRequest;
 void [rootClient, focusedClient, sharedError, focusedRequest];
+
+// RPC convenience returns the build directly and preserves typed failure details.
+const { snapshot: unusedSnapshot, ...intent } = request;
+const fetched = await fetchSwapInstructions(
+  createSolanaRpc("http://localhost:8899"),
+  intent,
+  {
+    commitment: "confirmed",
+    abortSignal: new AbortController().signal,
+  },
+);
+const pool = await getPumpBondingCurveAddress(request.outputMint);
+const samePool = await getCurveFromPump(request.outputMint);
+void [unusedSnapshot, fetched.instructions, pool, samePool];
+try {
+  await fetchSwapInstructions(createSolanaRpc("http://localhost:8899"), intent);
+} catch (error) {
+  if (error instanceof SwapBuildError && error.detail.code === "INVALID_REQUEST") {
+    const field: string = error.detail.field;
+    void field;
+  }
+}
