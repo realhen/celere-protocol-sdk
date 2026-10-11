@@ -54,10 +54,11 @@ export async function meteoraDlmmFixture(
     binLiquidity = 1_000_000n,
     unixTimestamp = 1_800_000_000n,
     feePhase = "decayed",
+    quoteMint,
   } = {},
 ) {
   const suffix = `${owner}:${label}`;
-  const mints = [key(`x:${suffix}`), key(`y:${suffix}`)].sort((a, b) =>
+  const mints = [quoteMint ?? key(`x:${suffix}`), key(`y:${suffix}`)].sort((a, b) =>
     Buffer.compare(Buffer.from(encoder.encode(a)), Buffer.from(encoder.encode(b))),
   );
   const [mintX, mintY] = mints;

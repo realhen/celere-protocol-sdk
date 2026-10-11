@@ -18,7 +18,7 @@ npm pack
 
 ## Concurrent sender
 
-Import from `celere-protocol-sdk/sender`. Configure once, supply protocol instructions, signer(s), nonce, and fees per transaction. Start with the [sender guide](docs/sender.md) for configuration, fees, signing, errors, and transport behavior. See [the complete typed example](example/sender.ts) for all five providers and regional lanes.
+Import from `celere-protocol-sdk/sender`. Configure once, supply protocol instructions, signer(s), nonce, and fees per transaction. Start with the [sender guide](docs/sender.md) for configuration, fees, signing, errors, and transport behavior. See the standalone [Pump.fun](example/pumpfun) and [Meteora DLMM](example/meteora-dlmm) projects for complete buy-and-send flows.
 
 ```ts
 import {
@@ -184,7 +184,7 @@ const poolBuy = pumpAmm.buy_v2(poolAccounts, poolArgs);
 
 For example, [CPMM swap base input](src/protocols/raydium/instructions/cpmm/swap_base_input.ts) shows the named instruction-data encoder followed by every account in native order with its signer/writable role. TSDoc explains argument units, amount bounds, concrete values, and native execution caveats, with a typed usage example for every function. [Pump buy](src/protocols/pump/instructions/bonding-curve/buy.ts) also makes the trailing native flags explicit. The adapters call these same builders.
 
-The [`example/` folder](example/README.md) contains one standalone TypeScript example per protocol. These use caller-resolved accounts and clearly hypothetical quotes to show instruction construction; the caller selects the amounts and slippage tolerance. The packed-package consumer test typechecks all instruction documentation snippets and protocol examples against the public exports.
+The [`example/` folder](example/README.md) contains two independently runnable projects: Pump.fun and Meteora DLMM. Each includes its own package manifest, environment template, RPC account discovery, wallet loading, live quotes, simulation-based compute estimates, and SenderClient submission. Native instruction usage remains documented in each builder’s TSDoc. The packed-package consumer test compiles those snippets and independently builds both copied projects.
 
 Instruction entrypoints expose functions named exactly after the native instructions and their readonly account/argument interfaces. Available subpaths are `/instructions/pump`, `/instructions/pump-amm`, `/instructions/raydium-amm-v4`, `/instructions/raydium-cpmm`, `/instructions/raydium-clmm`, `/instructions/raydium-launchlab`, `/instructions/meteora-damm-v1`, `/instructions/meteora-damm-v2`, `/instructions/meteora-dlmm`, `/instructions/moonshot`, `/instructions/vertigo`, `/instructions/orca`, `/instructions/boop`, `/instructions/meteora-dbc`, `/instructions/heaven`, `/instructions/rise-rich`, `/instructions/liquid-af`, `/instructions/liquid-af-amm`, `/instructions/metadao`, and historical `/instructions/sugar`. They do not import quote adapters or Orca's math WASM.
 

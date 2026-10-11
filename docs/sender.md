@@ -2,7 +2,7 @@
 
 The sender API is available from both `celere-protocol-sdk` and the focused `celere-protocol-sdk/sender` entrypoint. It submits instructions built by any protocol. The application owns wallets, nonce accounts, fee estimates, and chain tracking. The client prepares provider-specific transactions, verifies signatures, and launches every configured lane plus the default RPC concurrently.
 
-The package includes this guide, commented TypeScript source, declarations, and a [complete all-provider example](../example/sender.ts). Import public APIs from `celere-protocol-sdk` or `celere-protocol-sdk/sender`; source and `dist` internals are implementation details.
+The package includes this guide, commented TypeScript source, declarations, and standalone [Pump.fun](../example/pumpfun) and [Meteora DLMM](../example/meteora-dlmm) buy-and-send projects. Import public APIs from `celere-protocol-sdk` or `celere-protocol-sdk/sender`; source and `dist` internals are implementation details.
 
 ## Configure once, send per transaction
 

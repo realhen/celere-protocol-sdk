@@ -8,6 +8,7 @@ import { generateKeyPairSigner } from "@solana/kit";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
 import { raydiumCpmmFixture } from "../fixtures/raydium-cpmm.mjs";
+import { installExampleProject } from "../fixtures/example-projects.mjs";
 
 test("packed public package installs offline and exposes usable strict TypeScript entrypoints", async () => {
   const directory = await mkdtemp(join(tmpdir(), "celere-package-"));
@@ -150,13 +151,21 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         );
       }
     }
-    const protocolExamples = packed.files.filter(
-      (file) => file.path.startsWith("example/") && file.path.endsWith(".ts"),
-    );
-    assert.equal(protocolExamples.length, 21);
-    documentationSources.push(
-      ...protocolExamples.map((file) => join(installedPackage, file.path)),
-    );
+    for (const project of ["pumpfun", "meteora-dlmm"]) {
+      const source = join(installedPackage, "example", project);
+      const manifest = JSON.parse(await readFile(join(source, "package.json"), "utf8"));
+      assert.equal(
+        manifest.dependencies["celere-protocol-sdk"],
+        "git+https://github.com/realhen/celere-protocol-sdk.git#e98c8095a8a19b512639ce21905f68518ad862d0",
+      );
+      await readFile(join(source, ".env.example"), "utf8");
+      await installExampleProject(
+        source,
+        join(directory, project),
+        join(directory, packed.filename),
+        packed.integrity,
+      );
+    }
     execFileSync(
       process.execPath,
       [
