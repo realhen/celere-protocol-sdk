@@ -1,16 +1,5 @@
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  getU64Encoder,
-  type Address,
-} from "@solana/kit";
-import {
-  TOKEN_PROGRAM,
-  associatedTokenAddress,
-  readMint,
-  readTokenAccount,
-} from "../../accounts/tokens";
+import { getAddressDecoder, type Address } from "@solana/kit";
+import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
 import { minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
 import { requireAccount } from "../../core/snapshot";
@@ -23,9 +12,14 @@ import type {
 } from "../../core/types";
 import { METADAO_PROGRAM } from "./constants";
 import { spot_swap } from "./instructions/index";
+import {
+  getMetaDaoTokenVaultAddress,
+  findMetaDaoDaoPda,
+  findMetaDaoEventAuthorityPda,
+} from "./pda";
+export * from "./pda";
 export { METADAO_PROGRAM } from "./constants";
 
-const addressEncoder = getAddressEncoder();
 const addressDecoder = getAddressDecoder();
 const DAO_DISCRIMINATOR = [163, 9, 47, 31, 52, 85, 197, 49];
 
@@ -147,20 +141,10 @@ function validateGovernanceLayout(data: Uint8Array, account: Address): void {
 async function validateAddresses(request: SwapRequest, pool: SpotPool): Promise<Address> {
   const [[expectedPool, bump], baseVault, quoteVault, [eventAuthority]] =
     await Promise.all([
-      getProgramDerivedAddress({
-        programAddress: METADAO_PROGRAM,
-        seeds: [
-          new TextEncoder().encode("dao"),
-          addressEncoder.encode(pool.creator),
-          getU64Encoder().encode(pool.nonce),
-        ],
-      }),
-      associatedTokenAddress(request.pool, pool.baseMint, TOKEN_PROGRAM),
-      associatedTokenAddress(request.pool, pool.quoteMint, TOKEN_PROGRAM),
-      getProgramDerivedAddress({
-        programAddress: METADAO_PROGRAM,
-        seeds: [new TextEncoder().encode("__event_authority")],
-      }),
+      findMetaDaoDaoPda(pool.creator, pool.nonce),
+      getMetaDaoTokenVaultAddress(request.pool, pool.baseMint),
+      getMetaDaoTokenVaultAddress(request.pool, pool.quoteMint),
+      findMetaDaoEventAuthorityPda(),
     ]);
   if (
     expectedPool !== request.pool ||

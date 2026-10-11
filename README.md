@@ -6,7 +6,7 @@ Typed native Solana protocol instruction builders, offline transaction compilati
 
 Callers select the protocol and native instruction, supply accounts and arguments, and receive a portable unsigned instruction. Builders encode the native ABI without choosing routes, inspecting trading activity, fetching accounts, quoting amounts, or applying the optional swap API's fill policy. Callers own wallets and execution policy. The optional `/sender` entrypoint accepts caller-owned Kit signers and submits transactions.
 
-Use `fetchSwapInstructions(rpc, request)` to fetch the required accounts, quote a swap, and receive unsigned instructions in one call. Optional offline helpers provide the same account discovery, state validation, quotes, and swap limits from caller-supplied snapshots. Their supported variants and execution guarantees are separate from direct instruction construction.
+For streaming applications, use `buildSwapInstructions` with caller-supplied account snapshots. The SDK handles offline address discovery, state validation, quotes, and swap limits while your application owns its gRPC/WebSocket/feed integration. See [offline addresses and streamed state](docs/addresses.md). `fetchSwapInstructions(rpc, request)` is an optional convenience for applications that want explicit RPC reads. Their supported variants and execution guarantees are separate from direct instruction construction.
 
 Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto. Protocol builders and `/transactions` remain strictly offline. Root imports and client construction perform no I/O; `fetchSwapInstructions` performs explicitly requested account reads, and sender methods perform explicitly requested signing and submission. The root exports the sender API for convenience, and `/sender` remains available as a focused import.
 
@@ -38,7 +38,7 @@ The same function handles a Meteora DLMM pool or another supported adapter; the 
 
 Expected construction failures reject with `SwapBuildError`; its `code` and `detail` preserve the structured errors returned by the offline API. RPC and cancellation errors propagate unchanged. There is no `unwrap` helper to copy. The function performs fresh RPC reads per call, without caching, signing, wrapping SOL, sending, or confirmation. Latency-sensitive applications with their own data feed can keep using `getSwapRequirements` and `buildSwapInstructions` to avoid these RPC round trips.
 
-Pump PDA helpers live in `src/protocols/pump/pda.ts` and are exported from both the root and `/protocols/pump`. They derive the bonding curve, auxiliary v2 curve, global configuration, fee configuration, creator vault, event authority, and volume accumulators without fetching or creating accounts. Standard token-account derivation continues to use `findAssociatedTokenPda` from `@solana-program/token`.
+Protocol-owned PDA helpers are exported from the root and each protocol entrypoint. They cover the derivations used by every implemented adapter, with historical helpers for Sugar. See the [address helper inventory](docs/addresses.md#address-helpers) for coverage, native parameter meanings, and the streaming workflow. Standard token-account derivation continues to use `findAssociatedTokenPda` from `@solana-program/token`.
 
 ## Concurrent sender
 

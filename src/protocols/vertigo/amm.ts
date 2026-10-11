@@ -1,10 +1,5 @@
 /** Uses the official Vertigo SDK's MIT-declared account and instruction schema; see NOTICE.md. */
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
 import { minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -18,8 +13,9 @@ import type {
 } from "../../core/types";
 import * as instructions from "./instructions/index";
 import { VERTIGO_PROGRAM } from "./constants";
+import { getVertigoPoolAddresses } from "./pda";
+export * from "./pda";
 export { VERTIGO_PROGRAM } from "./constants";
-const encoder = getAddressEncoder();
 const decoder = getAddressDecoder();
 const U128_MAX = (1n << 128n) - 1n;
 const POOL_DISCRIMINATOR = [241, 154, 109, 4, 17, 177, 109, 188];
@@ -121,26 +117,14 @@ function readPool(request: SwapRequest): Pool {
   return pool;
 }
 async function poolAddresses(request: SwapRequest, pool: Pool) {
-  const [expected, bump] = await getProgramDerivedAddress({
-    programAddress: VERTIGO_PROGRAM,
-    seeds: [
-      new TextEncoder().encode("pool"),
-      encoder.encode(pool.owner),
-      encoder.encode(pool.mintA),
-      encoder.encode(pool.mintB),
-    ],
-  });
+  const {
+    pool: expected,
+    bump,
+    vaultA,
+    vaultB,
+  } = await getVertigoPoolAddresses(pool.owner, pool.mintA, pool.mintB);
   if (expected !== request.pool || bump !== pool.bump)
     invalid(request.pool, "Invalid Vertigo pool PDA or bump");
-  const deriveVault = (mint: Address) =>
-    getProgramDerivedAddress({
-      programAddress: VERTIGO_PROGRAM,
-      seeds: [encoder.encode(request.pool), encoder.encode(mint)],
-    });
-  const [[vaultA], [vaultB]] = await Promise.all([
-    deriveVault(pool.mintA),
-    deriveVault(pool.mintB),
-  ]);
   return { vaultA, vaultB };
 }
 async function requirements(

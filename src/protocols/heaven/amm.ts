@@ -1,16 +1,6 @@
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
-import {
-  associatedTokenAddress,
-  readMint,
-  readTokenAccount,
-  WRAPPED_SOL_MINT,
-} from "../../accounts/tokens";
+import { getAddressDecoder, type Address } from "@solana/kit";
+import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
 import { assertAmount, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
 import { requireAccount } from "../../core/snapshot";
@@ -23,11 +13,15 @@ import type {
 } from "../../core/types";
 import { HEAVEN_PROGRAM } from "./constants";
 import * as instructions from "./instructions/index";
-export { HEAVEN_PROGRAM } from "./constants";
+import {
+  getHeavenTokenVaultAddress,
+  findHeavenProtocolConfigPda,
+  getHeavenPoolAddress,
+} from "./pda";
+export * from "./pda";
+export * from "./constants";
 
 const addressDecoder = getAddressDecoder();
-const addressEncoder = getAddressEncoder();
-const utf8 = new TextEncoder();
 function invalid(address: Address, message: string): never {
   return fail({ code: "INVALID_ACCOUNT", address, message });
 }
@@ -140,21 +134,8 @@ async function build(
   );
   const version = pool.view.getUint16(88, true);
   if (version !== 1 && version !== 2) unsupported(`configuration version ${version}`);
-  const [expectedConfig, bump] = await getProgramDerivedAddress({
-    programAddress: HEAVEN_PROGRAM,
-    seeds: [
-      utf8.encode("protocol_config_state"),
-      Uint8Array.of(version >> 8, version & 255),
-    ],
-  });
-  const [expectedPool] = await getProgramDerivedAddress({
-    programAddress: HEAVEN_PROGRAM,
-    seeds: [
-      utf8.encode("liquidity_pool_state"),
-      addressEncoder.encode(mint),
-      addressEncoder.encode(WRAPPED_SOL_MINT),
-    ],
-  });
+  const [expectedConfig, bump] = await findHeavenProtocolConfigPda(version);
+  const expectedPool = await getHeavenPoolAddress(mint, WRAPPED_SOL_MINT);
   if (
     expectedConfig !== configKey ||
     expectedPool !== request.pool ||
@@ -212,9 +193,8 @@ async function build(
   const vaultA = pool.key(664),
     vaultB = pool.key(696);
   if (
-    vaultA !== (await associatedTokenAddress(configKey, mint, TOKEN_PROGRAM_ADDRESS)) ||
-    vaultB !==
-      (await associatedTokenAddress(configKey, WRAPPED_SOL_MINT, TOKEN_PROGRAM_ADDRESS))
+    vaultA !== (await getHeavenTokenVaultAddress(configKey, mint)) ||
+    vaultB !== (await getHeavenTokenVaultAddress(configKey, WRAPPED_SOL_MINT))
   )
     invalid(request.pool, "Heaven vault PDA mismatch");
   const tokenVault = readTokenAccount(

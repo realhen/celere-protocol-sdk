@@ -1,10 +1,5 @@
 /** Offline adaptation of Meteora's MIT DBC SDK and public IDL; see NOTICE.md. */
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -18,11 +13,16 @@ import type {
   SwapRequest,
 } from "../../core/types";
 import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants";
+export * from "./pda";
+import {
+  getMeteoraDbcPoolAddress,
+  getMeteoraDbcTokenVaultAddress,
+  getMeteoraDbcEventAuthorityAddress,
+} from "./pda";
 import { swap2 } from "./instructions/swap2";
 import { calculateCurveSwap, type CurvePoint } from "./math";
 export { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants";
-const decoder = getAddressDecoder(),
-  encoder = getAddressEncoder();
+const decoder = getAddressDecoder();
 const FEE_DENOMINATOR = 1_000_000_000n;
 const MIN_PRICE = 4_295_048_016n,
   MAX_PRICE = 79_226_673_521_066_979_257_578_248_091n;
@@ -211,23 +211,11 @@ async function build(
 ): Promise<ProtocolSwap> {
   const pool = readPool(request),
     config = readConfig(request, pool);
-  const base = encoder.encode(pool.baseMint),
-    quote = encoder.encode(config.quoteMint);
-  let baseLarger = false;
-  for (let i = 0; i < base.length; i++) {
-    if (base[i] === quote[i]) continue;
-    baseLarger = base[i]! > quote[i]!;
-    break;
-  }
-  const [expectedPool] = await getProgramDerivedAddress({
-    programAddress: METEORA_DBC_PROGRAM,
-    seeds: [
-      "pool",
-      encoder.encode(pool.config),
-      baseLarger ? base : quote,
-      baseLarger ? quote : base,
-    ],
-  });
+  const expectedPool = await getMeteoraDbcPoolAddress(
+    pool.config,
+    pool.baseMint,
+    config.quoteMint,
+  );
   if (
     expectedPool !== request.pool ||
     pool.baseMint === config.quoteMint ||
@@ -240,10 +228,7 @@ async function build(
   ] as const) {
     if (readMint(request.snapshot, mint).tokenProgram !== TOKEN_PROGRAM)
       unsupported("Token-2022 assets");
-    const [expected] = await getProgramDerivedAddress({
-      programAddress: METEORA_DBC_PROGRAM,
-      seeds: ["token_vault", encoder.encode(mint), encoder.encode(request.pool)],
-    });
+    const expected = await getMeteoraDbcTokenVaultAddress(mint, request.pool);
     if (vault !== expected) invalid(vault, "DBC vault PDA mismatch");
   }
   if (readMint(request.snapshot, pool.baseMint).decimals !== config.decimals)
@@ -342,10 +327,7 @@ async function build(
         expectedAmountOut: output,
         fees,
       };
-  const [eventAuthority] = await getProgramDerivedAddress({
-    programAddress: METEORA_DBC_PROGRAM,
-    seeds: ["__event_authority"],
-  });
+  const eventAuthority = await getMeteoraDbcEventAuthorityAddress();
   const instruction = swap2(
     {
       config: pool.config,

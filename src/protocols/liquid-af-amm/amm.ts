@@ -4,7 +4,6 @@ import {
   TOKEN_PROGRAM,
   TOKEN_2022_PROGRAM,
   WRAPPED_SOL_MINT,
-  associatedTokenAddress,
   readMint,
   readTokenAccount,
 } from "../../accounts/tokens";
@@ -19,10 +18,8 @@ import type {
   SwapRequest,
 } from "../../core/types";
 import {
-  deriveLiquidAddress,
   invalidLiquidAccount,
   liquidAccount,
-  liquidSharedAddresses,
   readLiquidAddress,
   readLiquidSolPrice,
   unsupportedLiquidFeature,
@@ -35,7 +32,19 @@ import {
   sell_exact_out,
   type LiquidAfAmmSwapAccounts,
 } from "./instructions/index";
-export { LIQUID_AF_AMM_PROGRAM } from "./constants";
+import {
+  getLiquidAfAmmPoolAddresses,
+  findLiquidAfAmmProtocolFeeVaultPda,
+  getLiquidAfFeeVaultTokenAddress,
+} from "./pda";
+export * from "./pda";
+export * from "./constants";
+export {
+  LIQUID_AF_FEES_PROGRAM,
+  LIQUID_AF_STATE_PROGRAM,
+  LIQUID_AF_EVENTS_PROGRAM,
+  LIQUID_AF_PYTH_RECEIVER_PROGRAM,
+} from "../liquid-af/constants";
 
 const USDC_MINT = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 interface Pool {
@@ -209,45 +218,25 @@ function readConfig(
   return { tiers, oracle, feeRecipient };
 }
 async function resolve(request: SwapRequest, pool: Pool) {
-  const [
-    [expectedPool],
-    [baseVault],
-    [quoteVault],
-    [lpMint],
-    [observation],
-    [authority, authorityBump],
-    [globalConfig, configBump],
-    [cpiAuthority],
-    [buybackVault],
+  const {
+    pool: expectedPool,
+    baseVault,
+    quoteVault,
+    lpMint,
+    observation,
+    authority,
+    authorityBump,
+    globalConfig,
+    configBump,
+    cpiAuthority,
+    buybackVault,
     shared,
-  ] = await Promise.all([
-    deriveLiquidAddress(LIQUID_AF_AMM_PROGRAM, "pool", pool.baseMint, pool.quoteMint),
-    deriveLiquidAddress(LIQUID_AF_AMM_PROGRAM, "pool_vault", request.pool, pool.baseMint),
-    deriveLiquidAddress(
-      LIQUID_AF_AMM_PROGRAM,
-      "pool_vault",
-      request.pool,
-      pool.quoteMint,
-    ),
-    deriveLiquidAddress(LIQUID_AF_AMM_PROGRAM, "pool_lp_mint", request.pool),
-    deriveLiquidAddress(LIQUID_AF_AMM_PROGRAM, "observation", request.pool),
-    deriveLiquidAddress(LIQUID_AF_AMM_PROGRAM, "vault_and_lp_mint_auth_seed"),
-    deriveLiquidAddress(LIQUID_AF_AMM_PROGRAM, "global_config"),
-    deriveLiquidAddress(LIQUID_AF_AMM_PROGRAM, "cpi_authority"),
-    deriveLiquidAddress(
-      LIQUID_AF_AMM_PROGRAM,
-      "buyback_vault",
-      request.pool,
-      pool.quoteMint,
-    ),
-    liquidSharedAddresses(
-      request.owner,
-      pool.creator,
-      pool.baseMint,
-      pool.quoteMint,
-      true,
-    ),
-  ]);
+  } = await getLiquidAfAmmPoolAddresses(
+    pool.baseMint,
+    pool.quoteMint,
+    request.owner,
+    pool.creator,
+  );
   if (
     expectedPool !== request.pool ||
     baseVault !== pool.baseVault ||
@@ -262,13 +251,12 @@ async function resolve(request: SwapRequest, pool: Pool) {
     );
   const config = readConfig(request, globalConfig, configBump, pool.quoteMint);
   const [[protocolFeeVault], feeVaultTokenAccount] = await Promise.all([
-    deriveLiquidAddress(
-      LIQUID_AF_AMM_PROGRAM,
-      "global_fee",
-      config.feeRecipient,
+    findLiquidAfAmmProtocolFeeVaultPda(config.feeRecipient, pool.quoteMint),
+    getLiquidAfFeeVaultTokenAddress(
+      shared.feeVault,
       pool.quoteMint,
+      pool.quoteTokenProgram,
     ),
-    associatedTokenAddress(shared.feeVault, pool.quoteMint, pool.quoteTokenProgram),
   ]);
   return {
     authority,

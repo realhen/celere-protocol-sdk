@@ -14,10 +14,14 @@ import {
   generateKeyPairSigner,
   getBase64EncodedWireTransaction,
   signTransaction,
-  getAddressEncoder,
   getAddressDecoder,
-  getProgramDerivedAddress,
 } from "@solana/kit";
+import {
+  findSugarBondingCurvePda,
+  findSugarSolVaultPda,
+  getSugarStateAddress,
+  getSugarEventAuthorityAddress,
+} from "celere-protocol-sdk/protocols/sugar";
 import { compileTransaction } from "../../dist/index.js";
 import { sugarFixture } from "../fixtures/sugar.mjs";
 
@@ -77,24 +81,12 @@ test(
     const signer = await generateKeyPairSigner();
     const f = await sugarFixture(signer.address);
     await install(f, signer);
-    const enc = getAddressEncoder(),
-      text = new TextEncoder();
-    const [, curveBump] = await getProgramDerivedAddress({
-      programAddress: SUGAR_PROGRAM,
-      seeds: [text.encode("bonding_curve_"), enc.encode(f.mint)],
-    });
-    const [, solVaultBump] = await getProgramDerivedAddress({
-      programAddress: SUGAR_PROGRAM,
-      seeds: [
-        text.encode("bonding_curve_"),
-        enc.encode(f.mint),
-        text.encode("_sol_vault"),
-      ],
-    });
-    const [eventAuthority] = await getProgramDerivedAddress({
-      programAddress: SUGAR_PROGRAM,
-      seeds: [text.encode("__event_authority")],
-    });
+    const [curve, curveBump] = await findSugarBondingCurvePda(f.mint);
+    const [solVault, solVaultBump] = await findSugarSolVaultPda(f.mint);
+    const eventAuthority = await getSugarEventAuthorityAddress();
+    assert.equal(curve, f.pool);
+    assert.equal(solVault, f.solVault);
+    assert.equal(await getSugarStateAddress(), f.state);
     const instructionAccounts = {
       state: f.state,
       mint: f.mint,

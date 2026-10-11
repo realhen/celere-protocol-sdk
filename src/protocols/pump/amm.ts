@@ -1,9 +1,4 @@
-import {
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-  type Instruction,
-} from "@solana/kit";
+import { type Instruction } from "@solana/kit";
 import {
   associatedTokenAddress,
   createAssociatedTokenInstruction,
@@ -21,7 +16,6 @@ import type {
 } from "../../core/types";
 import { quotePumpAmm } from "./amm-math";
 import {
-  AMM_FEE_PROGRAM,
   AMM_SYSTEM_PROGRAM,
   PUMP_AMM_PROGRAM,
   readAmmFees,
@@ -29,30 +23,23 @@ import {
   readAmmPool,
 } from "./amm-state";
 
-import { PUMP_PROGRAM } from "./constants";
 import { buy_v2, buy_exact_quote_in_v2, sell_v2 } from "./instructions/amm/index";
 
-const bytes = getAddressEncoder();
-const utf8 = new TextEncoder();
-
-async function derive(
-  programAddress: Address,
-  label: string,
-  ...addresses: readonly Address[]
-): Promise<Address> {
-  return (
-    await getProgramDerivedAddress({
-      programAddress,
-      seeds: [utf8.encode(label), ...addresses.map((value) => bytes.encode(value))],
-    })
-  )[0];
-}
+import { getPumpPoolAuthorityAddress, getPumpHolderRewardsAddress } from "./pda";
+import {
+  findPumpAmmPoolPda,
+  getPumpAmmGlobalAddress,
+  getPumpAmmFeeConfigAddress,
+  getPumpAmmEventAuthorityAddress,
+  getPumpAmmUserVolumeAccumulatorAddress,
+} from "./amm-pda";
+export * from "./amm-pda";
 
 async function commonAddresses() {
   const [global, feeConfig, eventAuthority] = await Promise.all([
-    derive(PUMP_AMM_PROGRAM, "global_config"),
-    derive(AMM_FEE_PROGRAM, "fee_config", PUMP_AMM_PROGRAM),
-    derive(PUMP_AMM_PROGRAM, "__event_authority"),
+    getPumpAmmGlobalAddress(),
+    getPumpAmmFeeConfigAddress(),
+    getPumpAmmEventAuthorityAddress(),
   ]);
   return { global, feeConfig, eventAuthority };
 }
@@ -110,18 +97,7 @@ async function build(
       field: "inputMint",
       message: "Requested mints do not match the Pump AMM pool",
     });
-  const indexBytes = new Uint8Array(2);
-  new DataView(indexBytes.buffer).setUint16(0, pool.index, true);
-  const [expectedPool, bump] = await getProgramDerivedAddress({
-    programAddress: PUMP_AMM_PROGRAM,
-    seeds: [
-      utf8.encode("pool"),
-      indexBytes,
-      ...[pool.creator, pool.baseMint, pool.quoteMint].map((value) =>
-        bytes.encode(value),
-      ),
-    ],
-  });
+  const [expectedPool, bump] = await findPumpAmmPoolPda(pool);
   if (request.pool !== expectedPool || pool.bump !== bump)
     fail({
       code: "INVALID_ACCOUNT",
@@ -190,15 +166,14 @@ async function build(
   }
   if (
     pool.isHolderReward &&
-    pool.coinCreator !== (await derive(PUMP_PROGRAM, "holder-rewards", pool.baseMint))
+    pool.coinCreator !== (await getPumpHolderRewardsAddress(pool.baseMint))
   )
     fail({
       code: "INVALID_ACCOUNT",
       address: request.pool,
       message: "Pump AMM holder-reward creator is not the canonical rewards PDA",
     });
-  const canonical =
-    pool.creator === (await derive(PUMP_PROGRAM, "pool-authority", pool.baseMint));
+  const canonical = pool.creator === (await getPumpPoolAuthorityAddress(pool.baseMint));
   if (baseVault.amount === 0n)
     fail({
       code: "INSUFFICIENT_LIQUIDITY",
@@ -240,11 +215,7 @@ async function build(
     baseTokenProgram: base.tokenProgram,
     quoteTokenProgram: quoteMint.tokenProgram,
     systemProgram: AMM_SYSTEM_PROGRAM,
-    userVolumeAccumulator: await derive(
-      PUMP_AMM_PROGRAM,
-      "user_volume_accumulator",
-      request.owner,
-    ),
+    userVolumeAccumulator: await getPumpAmmUserVolumeAccumulatorAddress(request.owner),
     feeConfig,
     buybackFeeRecipient: buybackTokenAccount,
     eventAuthority,

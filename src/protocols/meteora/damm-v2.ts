@@ -1,10 +1,5 @@
 /** Bigint adaptation of Meteora's MIT damm-v2-sdk; see NOTICE.md. */
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import {
   readMint,
   readTokenAccount,
@@ -27,14 +22,18 @@ import {
   METEORA_DAMM_V2_PROGRAM,
   METEORA_DAMM_V2_POOL_AUTHORITY as POOL_AUTHORITY,
 } from "./constants";
+export * from "./damm-v2-pda";
+import {
+  getMeteoraDammV2TokenVaultAddress,
+  getMeteoraDammV2EventAuthorityAddress,
+} from "./damm-v2-pda";
 import { swap2 } from "./instructions/damm-v2/swap2";
-export { METEORA_DAMM_V2_PROGRAM } from "./constants";
+export { METEORA_DAMM_V2_PROGRAM, METEORA_DAMM_V2_POOL_AUTHORITY } from "./constants";
 const POOL_DISCRIMINATOR = [241, 154, 109, 4, 17, 177, 109, 188];
 const FEE_DENOMINATOR = 1_000_000_000n;
 const Q128 = 1n << 128n;
 const MIN_SQRT_PRICE = 4_295_048_016n;
 const MAX_SQRT_PRICE = 79_226_673_521_066_979_257_578_248_091n;
-const addressEncoder = getAddressEncoder();
 const addressDecoder = getAddressDecoder();
 
 interface PoolState {
@@ -274,14 +273,7 @@ async function build(
     [pool.mintA, pool.vaultA, pool.tokenProgramA],
     [pool.mintB, pool.vaultB, pool.tokenProgramB],
   ] as const) {
-    const [expectedVault] = await getProgramDerivedAddress({
-      programAddress: METEORA_DAMM_V2_PROGRAM,
-      seeds: [
-        new TextEncoder().encode("token_vault"),
-        addressEncoder.encode(mint),
-        addressEncoder.encode(request.pool),
-      ],
-    });
+    const expectedVault = await getMeteoraDammV2TokenVaultAddress(mint, request.pool);
     if (vault !== expectedVault) invalid(vault, "Invalid Meteora DAMM v2 vault address");
     if (readMint(request.snapshot, mint).tokenProgram !== program) {
       invalid(request.pool, "Pool token program flag does not match its mint");
@@ -348,10 +340,7 @@ async function build(
           expectedAmountOut: curve.output,
           fees,
         };
-  const [eventAuthority] = await getProgramDerivedAddress({
-    programAddress: METEORA_DAMM_V2_PROGRAM,
-    seeds: [new TextEncoder().encode("__event_authority")],
-  });
+  const eventAuthority = await getMeteoraDammV2EventAuthorityAddress();
   const instruction = swap2(
     {
       poolAuthority: POOL_AUTHORITY,

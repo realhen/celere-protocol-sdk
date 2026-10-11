@@ -3,7 +3,6 @@ import type { Address } from "@solana/kit";
 import {
   TOKEN_2022_PROGRAM,
   WRAPPED_SOL_MINT,
-  associatedTokenAddress,
   readMint,
   readTokenAccount,
 } from "../../accounts/tokens";
@@ -25,16 +24,16 @@ import {
   type LiquidAfNativeSwapAccounts,
 } from "./instructions/index";
 import {
-  deriveLiquidAddress,
   invalidLiquidAccount,
   liquidAccount,
-  liquidSharedAddresses,
   readLiquidAddress,
   readLiquidSolPrice,
   unsupportedLiquidFeature,
   validateLiquidSharedState,
 } from "./shared-state";
-export { LIQUID_AF_PROGRAM } from "./constants";
+import { getLiquidAfCurveAddresses } from "./pda";
+export * from "./pda";
+export * from "./constants";
 
 interface Curve {
   readonly creator: Address;
@@ -167,29 +166,17 @@ function readGlobal(request: SwapRequest, account: Address, expectedBump: number
   };
 }
 async function resolve(request: SwapRequest, curve: Curve) {
-  const [
-    [pool, bump],
-    [globalConfig, configBump],
-    [solVault],
-    [buybackVault],
-    [cpiAuthority],
+  const {
+    pool,
+    bump,
+    globalConfig,
+    configBump,
+    solVault,
+    buybackVault,
+    cpiAuthority,
     tokenVault,
     shared,
-  ] = await Promise.all([
-    deriveLiquidAddress(LIQUID_AF_PROGRAM, "bonding_curve", curve.mint),
-    deriveLiquidAddress(LIQUID_AF_PROGRAM, "global_config"),
-    deriveLiquidAddress(LIQUID_AF_PROGRAM, "bonding_curve_sol_vault", request.pool),
-    deriveLiquidAddress(LIQUID_AF_PROGRAM, "buyback_vault", request.pool),
-    deriveLiquidAddress(LIQUID_AF_PROGRAM, "cpi_authority"),
-    associatedTokenAddress(request.pool, curve.mint, TOKEN_2022_PROGRAM),
-    liquidSharedAddresses(
-      request.owner,
-      curve.creator,
-      curve.mint,
-      WRAPPED_SOL_MINT,
-      false,
-    ),
-  ]);
+  } = await getLiquidAfCurveAddresses(curve.mint, request.owner, curve.creator);
   if (pool !== request.pool || bump !== curve.bump)
     invalidLiquidAccount(request.pool, "Invalid LiquidAF curve PDA or bump");
   const config = readGlobal(request, globalConfig, configBump);

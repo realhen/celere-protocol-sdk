@@ -1,10 +1,5 @@
 /** Offline bigint adaptation of the ISC Meteora DLMM TypeScript SDK; see NOTICE.md. */
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -19,14 +14,21 @@ import type {
 } from "../../core/types";
 
 import { METEORA_DLMM_PROGRAM } from "./constants";
+export * from "./dlmm-pda";
+import {
+  findMeteoraDlmmPoolPda,
+  getMeteoraDlmmReserveAddress,
+  getMeteoraDlmmOracleAddress,
+  getMeteoraDlmmBitmapExtensionAddress,
+  getMeteoraDlmmBinArrayAddress,
+  getMeteoraDlmmEventAuthorityAddress,
+} from "./dlmm-pda";
 import { swap2 } from "./instructions/dlmm/swap2";
 import { swap_exact_out2 } from "./instructions/dlmm/swap_exact_out2";
 export { METEORA_DLMM_PROGRAM } from "./constants";
 const Q64 = 1n << 64n;
 const FEE_PRECISION = 1_000_000_000n;
-const encodeAddress = getAddressEncoder();
 const decodeAddress = getAddressDecoder();
-const textEncoder = new TextEncoder();
 const POOL_DISCRIMINATOR = [33, 11, 49, 98, 181, 101, 177, 13];
 const ARRAY_DISCRIMINATOR = [92, 142, 92, 220, 5, 148, 70, 181];
 const BITMAP_DISCRIMINATOR = [80, 111, 124, 113, 55, 237, 18, 5];
@@ -85,13 +87,6 @@ function u128(view: DataView, offset: number): bigint {
 }
 function discriminator(data: Uint8Array, expected: readonly number[]): boolean {
   return expected.every((byte, index) => data[index] === byte);
-}
-async function pda(
-  seeds: Parameters<typeof getProgramDerivedAddress>[0]["seeds"],
-): Promise<Address> {
-  return (
-    await getProgramDerivedAddress({ programAddress: METEORA_DLMM_PROGRAM, seeds })
-  )[0];
 }
 function decodePool(request: SwapRequest): Pool {
   const { data } = requireAccount(
@@ -189,15 +184,11 @@ function decodePool(request: SwapRequest): Pool {
 }
 
 async function validateAddresses(request: SwapRequest, pool: Pool): Promise<void> {
-  const seeds = [
-    encodeAddress.encode(pool.mintX),
-    encodeAddress.encode(pool.mintY),
-    pool.data.subarray(73, 75),
-  ];
-  if (pool.data[83] === 1) seeds.push(pool.data.subarray(84, 86));
-  const [expectedPool, bump] = await getProgramDerivedAddress({
-    programAddress: METEORA_DLMM_PROGRAM,
-    seeds,
+  const [expectedPool, bump] = await findMeteoraDlmmPoolPda({
+    mintX: pool.mintX,
+    mintY: pool.mintY,
+    binStep: pool.view.getUint16(73, true),
+    ...(pool.data[83] === 1 ? { baseFactor: pool.view.getUint16(84, true) } : {}),
   });
   if (
     expectedPool !== request.pool ||
@@ -209,26 +200,17 @@ async function validateAddresses(request: SwapRequest, pool: Pool): Promise<void
     [pool.mintX, pool.reserveX],
     [pool.mintY, pool.reserveY],
   ] as const) {
-    if (
-      reserve !==
-      (await pda([encodeAddress.encode(request.pool), encodeAddress.encode(mint)]))
-    )
+    if (reserve !== (await getMeteoraDlmmReserveAddress(request.pool, mint)))
       invalid(reserve, "Invalid DLMM reserve PDA");
   }
-  if (
-    pool.oracle !==
-    (await pda([textEncoder.encode("oracle"), encodeAddress.encode(request.pool)]))
-  )
+  if (pool.oracle !== (await getMeteoraDlmmOracleAddress(request.pool)))
     invalid(pool.oracle, "Invalid DLMM oracle PDA");
 }
 
 async function bitmapState(
   request: SwapRequest,
 ): Promise<{ address: Address; data: Uint8Array | null }> {
-  const bitmap = await pda([
-    textEncoder.encode("bitmap"),
-    encodeAddress.encode(request.pool),
-  ]);
+  const bitmap = await getMeteoraDlmmBitmapExtensionAddress(request.pool);
   if (request.snapshot.accounts[bitmap] === null) return { address: bitmap, data: null };
   const { data } = requireAccount(
     request.snapshot,
@@ -294,13 +276,7 @@ async function walk(
       index += step;
     if (index < minimumIndex || index > maximumIndex) insufficient();
     if (arrays.length >= 8) unsupported("swaps requiring more than eight bin arrays");
-    const indexBytes = new Uint8Array(8);
-    viewOf(indexBytes).setBigInt64(0, BigInt(index), true);
-    const arrayAddress = await pda([
-      textEncoder.encode("bin_array"),
-      encodeAddress.encode(request.pool),
-      indexBytes,
-    ]);
+    const arrayAddress = await getMeteoraDlmmBinArrayAddress(request.pool, BigInt(index));
     requirements?.push({ address: arrayAddress, role: "DLMM bin array" });
     if (requirements && request.snapshot.accounts[arrayAddress] === undefined)
       return null;
@@ -384,10 +360,7 @@ async function requirements(
 ): Promise<readonly AccountRequirement[]> {
   const pool = decodePool(request);
   await validateAddresses(request, pool);
-  const bitmapAddress = await pda([
-    textEncoder.encode("bitmap"),
-    encodeAddress.encode(request.pool),
-  ]);
+  const bitmapAddress = await getMeteoraDlmmBitmapExtensionAddress(request.pool);
   const result: AccountRequirement[] = [
     { address: request.pool, role: "DLMM pool" },
     { address: pool.mintX, role: "token X mint" },
@@ -486,7 +459,7 @@ async function build(
     sender: request.owner,
     tokenProgramX: TOKEN_PROGRAM,
     tokenProgramY: TOKEN_PROGRAM,
-    eventAuthority: await pda([textEncoder.encode("__event_authority")]),
+    eventAuthority: await getMeteoraDlmmEventAuthorityAddress(),
     binArrays: curve.arrays,
   };
   const instruction =

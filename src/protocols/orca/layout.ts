@@ -1,20 +1,13 @@
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import type { TickArrayFacade, WhirlpoolFacade } from "@orca-so/whirlpools-core";
 import { fail } from "../../core/errors";
 import type { SnapshotAccount } from "../../core/types";
 
-import { WHIRLPOOL_PROGRAM } from "./constants";
 export { WHIRLPOOL_PROGRAM } from "./constants";
 const POOL_DISCRIMINATOR = Uint8Array.of(63, 149, 209, 12, 225, 128, 99, 9);
 const FIXED_TICK_DISCRIMINATOR = Uint8Array.of(69, 97, 189, 190, 110, 7, 66, 187);
 const DYNAMIC_TICK_DISCRIMINATOR = Uint8Array.of(17, 216, 246, 142, 225, 199, 218, 56);
 const decodeAddress = getAddressDecoder();
-const encodeAddress = getAddressEncoder();
 
 export type Pool = WhirlpoolFacade & {
   whirlpoolsConfig: Address;
@@ -109,30 +102,4 @@ export function decodeFixedArray(
       };
     }),
   };
-}
-
-/** Derive native protocol addresses locally; no data source is consulted. */
-export function poolAddress(pool: Pool) {
-  return getProgramDerivedAddress({
-    programAddress: WHIRLPOOL_PROGRAM,
-    seeds: [
-      "whirlpool",
-      encodeAddress.encode(pool.whirlpoolsConfig),
-      encodeAddress.encode(pool.tokenMintA),
-      encodeAddress.encode(pool.tokenMintB),
-      Uint8Array.of(pool.feeTierIndex & 255, pool.feeTierIndex >> 8),
-    ],
-  });
-}
-export function tickArrayAddress(pool: Address, startTickIndex: number) {
-  return getProgramDerivedAddress({
-    programAddress: WHIRLPOOL_PROGRAM,
-    seeds: ["tick_array", encodeAddress.encode(pool), String(startTickIndex)],
-  });
-}
-export function oracleAddress(pool: Address) {
-  return getProgramDerivedAddress({
-    programAddress: WHIRLPOOL_PROGRAM,
-    seeds: ["oracle", encodeAddress.encode(pool)],
-  });
 }

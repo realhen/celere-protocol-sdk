@@ -1,15 +1,13 @@
+export * from "./pda";
+import {
+  findOrcaWhirlpoolPda,
+  getOrcaTickArrayAddress,
+  getOrcaOracleAddress,
+} from "./pda";
 import type { Address } from "@solana/kit";
 import { swap_v2 } from "./instructions/swap_v2";
 import type { TickArrayFacade } from "@orca-so/whirlpools-core";
-import {
-  WHIRLPOOL_PROGRAM,
-  decodePool,
-  decodeFixedArray,
-  poolAddress,
-  tickArrayAddress,
-  oracleAddress,
-  type Pool,
-} from "./layout";
+import { WHIRLPOOL_PROGRAM, decodePool, decodeFixedArray, type Pool } from "./layout";
 import { readMint, readTokenAccount } from "../../accounts/tokens";
 import { fail } from "../../core/errors";
 import { requireAccount } from "../../core/snapshot";
@@ -79,7 +77,7 @@ async function readPool(request: SwapRequest): Promise<Pool> {
       feature: "adaptiveFees",
       message: "Adaptive-fee Whirlpools are not qualified in this release",
     });
-  const [expectedPool, bump] = await poolAddress(pool);
+  const [expectedPool, bump] = await findOrcaWhirlpoolPda(pool);
   if (expectedPool !== request.pool || pool.bump !== bump) {
     invalidAccount(
       request.pool,
@@ -111,7 +109,7 @@ async function discoverArrays(
   ].filter((start) => start >= minimumStart && start <= MAX_TICK);
   return Promise.all(
     starts.map(async (startTickIndex) => ({
-      address: (await tickArrayAddress(poolAddress, startTickIndex))[0],
+      address: await getOrcaTickArrayAddress(poolAddress, startTickIndex),
       startTickIndex,
     })),
   );
@@ -122,7 +120,7 @@ async function requirements(
 ): Promise<readonly AccountRequirement[]> {
   const pool = await readPool(request);
   const arrays = await discoverArrays(request.pool, pool);
-  const [oracle] = await oracleAddress(request.pool);
+  const oracle = await getOrcaOracleAddress(request.pool);
   return [
     { address: request.pool, role: "Whirlpool" },
     { address: pool.tokenMintA, role: "Whirlpool token A mint" },
@@ -281,7 +279,7 @@ async function build(
     request.pool,
   );
   const arrays = await discoverArrays(request.pool, pool);
-  const [oracle] = await oracleAddress(request.pool);
+  const oracle = await getOrcaOracleAddress(request.pool);
   const quote = quoteSwap(
     request,
     pool,

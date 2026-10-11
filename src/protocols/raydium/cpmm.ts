@@ -1,10 +1,5 @@
 /** Adapted from raydium-io/raydium-cp-swap (Apache-2.0); see NOTICE.md. */
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { readMint, readTokenAccount } from "../../accounts/tokens";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -22,13 +17,24 @@ import type {
 import { swap_base_input, swap_base_output } from "./instructions/cpmm/index";
 import { RAYDIUM_CPMM_PROGRAM } from "./constants";
 export { RAYDIUM_CPMM_PROGRAM } from "./constants";
+import {
+  findRaydiumCpmmAuthorityPda,
+  findRaydiumCpmmConfigPda,
+  getRaydiumCpmmObservationAddress,
+} from "./pda";
+export {
+  findRaydiumCpmmAuthorityPda,
+  getRaydiumCpmmAuthorityAddress,
+  findRaydiumCpmmConfigPda,
+  getRaydiumCpmmConfigAddress,
+  getRaydiumCpmmObservationAddress,
+} from "./pda";
 
 const FEE_DENOMINATOR = 1_000_000n;
 const POOL_DISCRIMINATOR = [247, 237, 227, 245, 215, 195, 222, 70];
 const CONFIG_DISCRIMINATOR = [218, 244, 33, 104, 203, 203, 43, 111];
 const OBSERVATION_DISCRIMINATOR = [122, 174, 197, 53, 129, 9, 165, 132];
 const addressDecoder = getAddressDecoder();
-const addressEncoder = getAddressEncoder();
 
 interface PoolState {
   readonly config: Address;
@@ -150,10 +156,9 @@ async function readFees(request: SwapRequest, pool: PoolState): Promise<FeeRates
   );
   validateLayout(account, 236, CONFIG_DISCRIMINATOR);
   const data = account.data;
-  const [expectedConfig, bump] = await getProgramDerivedAddress({
-    programAddress: RAYDIUM_CPMM_PROGRAM,
-    seeds: [new TextEncoder().encode("amm_config"), Uint8Array.of(data[11]!, data[10]!)],
-  });
+  const [expectedConfig, bump] = await findRaydiumCpmmConfigPda(
+    new DataView(data.buffer, data.byteOffset, data.byteLength).getUint16(10, true),
+  );
   if (pool.config !== expectedConfig || data[8] !== bump || data[9]! > 1) {
     invalidAccount(pool.config, "Invalid Raydium CPMM configuration address or flags");
   }
@@ -258,16 +263,10 @@ async function build(
       "Raydium CPMM swaps are disabled or the pool has not opened",
     );
   }
-  const [authority, authorityBump] = await getProgramDerivedAddress({
-    programAddress: RAYDIUM_CPMM_PROGRAM,
-    seeds: [new TextEncoder().encode("vault_and_lp_mint_auth_seed")],
-  });
+  const [authority, authorityBump] = await findRaydiumCpmmAuthorityPda();
   if (pool.authorityBump !== authorityBump)
     invalidAccount(request.pool, "Invalid pool authority bump");
-  const [observationAddress] = await getProgramDerivedAddress({
-    programAddress: RAYDIUM_CPMM_PROGRAM,
-    seeds: [new TextEncoder().encode("observation"), addressEncoder.encode(request.pool)],
-  });
+  const observationAddress = await getRaydiumCpmmObservationAddress(request.pool);
   if (pool.observation !== observationAddress)
     invalidAccount(pool.observation, "Invalid observation address");
   const observation = requireAccount(
