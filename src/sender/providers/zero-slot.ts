@@ -111,11 +111,10 @@ export class ZeroSlotSender implements SenderRoute {
    */
   constructor(options: ZeroSlotSenderOptions) {
     const configuration = configureProvider(options, ENDPOINTS, Region.Frankfurt);
-    if (!configuration.ok) throw configuration.error;
     const minimum = options.minimumTipLamports ?? 1_000_000n;
     if (minimum !== 100_000n && minimum !== 1_000_000n)
       throw new SenderConfigurationError("Unsupported 0slot plan minimum");
-    const { url, name, timeoutMs } = configuration.value;
+    const { url, name, timeoutMs } = configuration;
     if (name !== undefined) this.name = name;
     this.timeoutMs = timeoutMs;
     this.minimumTipLamports = minimum;

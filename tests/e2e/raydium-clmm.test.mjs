@@ -1,25 +1,17 @@
+import {
+  InsufficientLiquidityError,
+  UnsupportedPoolFeatureError,
+  buildSwapInstructions,
+  getSwapRequirements,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { address, getAddressEncoder } from "@solana/kit";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import test from "node:test";
-import { buildSwapInstructions, getSwapRequirements } from "../../dist/index.js";
+
 import { raydiumClmmFixture } from "../fixtures/raydium-clmm.mjs";
 
 const owner = address("11111111111111111111111111111111");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
-function error(result, code) {
-  assert.equal(result.ok, false);
-  assert.equal(result.error.code, code);
-}
 
 test("public CLMM consumer discovers dependencies in rounds and builds native full-fill modes", async () => {
   for (const reverse of [false, true])
@@ -40,7 +32,7 @@ test("public CLMM consumer discovers dependencies in rounds and builds native fu
       };
       let rounds = 0;
       while (true) {
-        const requirements = value(await getSwapRequirements(request));
+        const requirements = await getSwapRequirements(request);
         if (requirements.complete) break;
         assert.ok(requirements.missing.length > 0);
         for (const item of requirements.missing) {
@@ -53,7 +45,7 @@ test("public CLMM consumer discovers dependencies in rounds and builds native fu
         rounds >= 4,
         "Pool, dependencies, and successive tick arrays are discovered in stages",
       );
-      const build = value(await buildSwapInstructions(request));
+      const build = await buildSwapInstructions(request);
       assert.equal(build.protocol, "raydium-clmm");
       assert.equal(build.execution.mayPartiallyFill, false);
       assert.equal(
@@ -98,7 +90,7 @@ test("public CLMM consumer discovers tick arrays in positive and negative extens
         reverse,
         label: `bitmap:${tickOffset}:${reverse}`,
       });
-      const build = value(await buildSwapInstructions(fixture.request));
+      const build = await buildSwapInstructions(fixture.request);
       assert.ok(build.quote.expectedAmountOut > 0n);
       const accounts = build.swapInstructions[0].accounts.map((item) => item.address);
       assert.ok(accounts.includes(fixture.bitmap));
@@ -111,15 +103,16 @@ test("public CLMM consumer reports exhausted liquidity and malformed account dep
   for (const reverse of [false, true])
     for (const kind of ["exactIn", "exactOut"]) {
       const fixture = await raydiumClmmFixture(owner, { reverse });
-      error(
-        await buildSwapInstructions({
-          ...fixture.request,
-          amount:
-            kind === "exactIn"
-              ? { kind, amountIn: 10_000_000_000n }
-              : { kind, amountOut: 10_000_000_000n },
-        }),
-        "INSUFFICIENT_LIQUIDITY",
+      await assert.rejects(
+        () =>
+          buildSwapInstructions({
+            ...fixture.request,
+            amount:
+              kind === "exactIn"
+                ? { kind, amountIn: 10_000_000_000n }
+                : { kind, amountOut: 10_000_000_000n },
+          }),
+        InsufficientLiquidityError,
       );
     }
   for (const mutation of [
@@ -159,11 +152,15 @@ test("public CLMM consumer reports exhausted liquidity and malformed account dep
   ]) {
     const fixture = await raydiumClmmFixture(owner);
     mutation(fixture);
-    const result = await buildSwapInstructions(fixture.request);
-    assert.equal(result.ok, false);
-    assert.ok(
-      ["INVALID_ACCOUNT", "UNSUPPORTED_PROTOCOL"].includes(result.error.code),
-      result.error.code,
+    await assert.rejects(
+      () => buildSwapInstructions(fixture.request),
+      (error) => {
+        assert.ok(
+          ["INVALID_ACCOUNT", "UNSUPPORTED_PROTOCOL"].includes(error.code),
+          error.code,
+        );
+        return true;
+      },
     );
   }
 });
@@ -200,7 +197,10 @@ test("public CLMM consumer rejects unqualified dynamic fees, token features, and
   ]) {
     const fixture = await raydiumClmmFixture(owner);
     mutation(fixture);
-    error(await buildSwapInstructions(fixture.request), "UNSUPPORTED_POOL_FEATURE");
+    await assert.rejects(
+      () => buildSwapInstructions(fixture.request),
+      UnsupportedPoolFeatureError,
+    );
   }
 });
 
@@ -211,15 +211,16 @@ test("public CLMM consumer rejects u64 input-vault settlement overflow in both m
       const data =
         fixture.request.snapshot.accounts[reverse ? fixture.vault1 : fixture.vault0].data;
       new DataView(data.buffer).setBigUint64(64, (1n << 64n) - 1n, true);
-      error(
-        await buildSwapInstructions({
-          ...fixture.request,
-          amount:
-            kind === "exactIn"
-              ? { kind, amountIn: 1_000_001n }
-              : { kind, amountOut: 1_000_001n },
-        }),
-        "INSUFFICIENT_LIQUIDITY",
+      await assert.rejects(
+        () =>
+          buildSwapInstructions({
+            ...fixture.request,
+            amount:
+              kind === "exactIn"
+                ? { kind, amountIn: 1_000_001n }
+                : { kind, amountOut: 1_000_001n },
+          }),
+        InsufficientLiquidityError,
       );
     }
 });

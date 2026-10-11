@@ -1,16 +1,23 @@
 /** Offline bigint adaptation of the ISC Meteora DLMM TypeScript SDK; see NOTICE.md. */
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  InvalidSnapshotContextError,
+} from "../errors";
 import type { Address } from "@solana/kit";
 import {
-  invalidAccount,
   accountDataView,
   readAddress,
   readU128,
   matchesDiscriminator,
-} from "../shared/accounts";
-import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/bytes";
+import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -18,7 +25,7 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 
 import { METEORA_DLMM_PROGRAM } from "./constants";
 
@@ -70,8 +77,7 @@ interface Walk {
 }
 
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "meteora-dlmm",
     feature,
     message: `Meteora DLMM ${feature} is not qualified for this release`,
@@ -79,8 +85,7 @@ function unsupported(feature: string): never {
 }
 
 function insufficient(): never {
-  fail({
-    code: "INSUFFICIENT_LIQUIDITY",
+  throw new InsufficientLiquidityError({
     protocol: "meteora-dlmm",
     message: "Requested swap exceeds the supplied DLMM liquidity",
   });
@@ -94,7 +99,10 @@ function decodePool(request: SwapRequest): Pool {
     METEORA_DLMM_PROGRAM,
   );
   if (data.length !== 904 || !matchesDiscriminator(data, POOL_DISCRIMINATOR)) {
-    invalidAccount(request.pool, "Unsupported DLMM pool layout or discriminator");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported DLMM pool layout or discriminator",
+    });
   }
 
   const view = accountDataView(data);
@@ -102,10 +110,16 @@ function decodePool(request: SwapRequest): Pool {
     unsupported("permissioned, customizable or v2 pool addressing");
   }
   if (data[82] !== 0) {
-    invalidAccount(request.pool, "DLMM pool is disabled");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "DLMM pool is disabled",
+    });
   }
   if (data[83]! > 1 || data[86]! > 1 || data[882]! > 1 || data[35]! > 2) {
-    invalidAccount(request.pool, "Unknown DLMM pool version or flags");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown DLMM pool version or flags",
+    });
   }
   if (data[36] !== 0) {
     unsupported("output-side fee collection");
@@ -141,11 +155,13 @@ function decodePool(request: SwapRequest): Pool {
     reduction > 10_000n ||
     view.getUint16(32, true) > 10_000
   ) {
-    invalidAccount(request.pool, "Invalid DLMM bin range or fee parameters");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid DLMM bin range or fee parameters",
+    });
   }
   if (lastUpdate > request.snapshot.unixTimestamp || lastUpdate < 0n) {
-    fail({
-      code: "INVALID_SNAPSHOT_CONTEXT",
+    throw new InvalidSnapshotContextError({
       message: "DLMM volatility state is newer than the caller's chain timestamp",
     });
   }
@@ -155,7 +171,10 @@ function decodePool(request: SwapRequest): Pool {
   let volatilityReference = BigInt(view.getUint32(44, true));
   let indexReference = view.getInt32(48, true);
   if (volatilityAccumulator > maxVolatility || volatilityReference > maxVolatility) {
-    invalidAccount(request.pool, "Invalid DLMM volatility state");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid DLMM volatility state",
+    });
   }
 
   // Reset the volatility reference only after the native filter period has elapsed.
@@ -190,14 +209,16 @@ function decodePool(request: SwapRequest): Pool {
     pool.mintX === pool.mintY ||
     pool.reserveX === pool.reserveY
   ) {
-    invalidAccount(request.pool, "Invalid DLMM fee or token pair");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid DLMM fee or token pair",
+    });
   }
   if (!(
     (request.inputMint === pool.mintX && request.outputMint === pool.mintY) ||
     (request.inputMint === pool.mintY && request.outputMint === pool.mintX)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested token pair does not match the DLMM pool",
     });
@@ -218,7 +239,10 @@ async function validateAddresses(request: SwapRequest, pool: Pool): Promise<void
     bump !== pool.data[72] ||
     pool.view.getUint16(73, true) !== pool.binStep
   ) {
-    invalidAccount(request.pool, "Invalid DLMM pool PDA or seeds");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid DLMM pool PDA or seeds",
+    });
   }
 
   for (const [mint, reserve] of [
@@ -226,11 +250,17 @@ async function validateAddresses(request: SwapRequest, pool: Pool): Promise<void
     [pool.mintY, pool.reserveY],
   ] as const) {
     if (reserve !== (await getMeteoraDlmmReserveAddress(request.pool, mint))) {
-      invalidAccount(reserve, "Invalid DLMM reserve PDA");
+      throw new InvalidAccountError({
+        address: reserve,
+        message: "Invalid DLMM reserve PDA",
+      });
     }
   }
   if (pool.oracle !== (await getMeteoraDlmmOracleAddress(request.pool))) {
-    invalidAccount(pool.oracle, "Invalid DLMM oracle PDA");
+    throw new InvalidAccountError({
+      address: pool.oracle,
+      message: "Invalid DLMM oracle PDA",
+    });
   }
 }
 
@@ -253,7 +283,10 @@ async function bitmapState(
     !matchesDiscriminator(data, BITMAP_DISCRIMINATOR) ||
     readAddress(data, 8) !== request.pool
   ) {
-    invalidAccount(bitmap, "Invalid DLMM bitmap extension");
+    throw new InvalidAccountError({
+      address: bitmap,
+      message: "Invalid DLMM bitmap extension",
+    });
   }
 
   return { address: bitmap, data };
@@ -345,7 +378,10 @@ async function walk(
       readAddress(data, 24) !== request.pool ||
       data[16]! > 1
     ) {
-      invalidAccount(arrayAddress, "Invalid DLMM bin array layout, index or identity");
+      throw new InvalidAccountError({
+        address: arrayAddress,
+        message: "Invalid DLMM bin array layout, index or identity",
+      });
     }
 
     arrays.push(arrayAddress);
@@ -371,10 +407,10 @@ async function walk(
       if (available > 0n) {
         const price = readU128(view, offset + 16);
         if (price === 0n || readU128(view, offset + 32) === 0n) {
-          invalidAccount(
-            arrayAddress,
-            "DLMM liquid bin has zero price or liquidity supply",
-          );
+          throw new InvalidAccountError({
+            address: arrayAddress,
+            message: "DLMM liquid bin has zero price or liquidity supply",
+          });
         }
 
         const rate = feeRate(pool, binId);
@@ -461,7 +497,10 @@ async function build(
 
   for (const mint of [pool.mintX, pool.mintY]) {
     if (readMint(request.snapshot, mint).tokenProgram !== TOKEN_PROGRAM) {
-      invalidAccount(mint, "DLMM pool token program flag does not match mint");
+      throw new InvalidAccountError({
+        address: mint,
+        message: "DLMM pool token program flag does not match mint",
+      });
     }
   }
 
@@ -482,7 +521,10 @@ async function build(
   const protocolX = pool.view.getBigUint64(216, true);
   const protocolY = pool.view.getBigUint64(224, true);
   if (reserveX < protocolX || reserveY < protocolY) {
-    invalidAccount(request.pool, "DLMM protocol fees exceed reserve balances");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "DLMM protocol fees exceed reserve balances",
+    });
   }
 
   const oracle = requireAccount(
@@ -499,7 +541,10 @@ async function build(
     oracleView.getBigUint64(8, true) >= oracleView.getBigUint64(24, true) ||
     oracleView.getBigUint64(16, true) > oracleView.getBigUint64(24, true)
   ) {
-    invalidAccount(pool.oracle, "Invalid DLMM oracle layout");
+    throw new InvalidAccountError({
+      address: pool.oracle,
+      message: "Invalid DLMM oracle layout",
+    });
   }
 
   const curve = (await walk(request, pool, bitmap.data))!;

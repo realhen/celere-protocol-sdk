@@ -1,7 +1,8 @@
+import { UnsupportedSwapModeError, buildSwapInstructions } from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
-import { buildSwapInstructions } from "../../dist/index.js";
+
 import {
   SOL,
   TOKEN,
@@ -57,14 +58,8 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
           fillPolicy: "requireFull",
         });
         const result = await buildSwapInstructions(request);
-        assert.equal(
-          result.ok,
-          true,
-          JSON.stringify(result, (_, value) =>
-            typeof value === "bigint" ? value.toString() : value,
-          ),
-        );
-        const build = result.value;
+
+        const build = result;
         assert.equal(build.execution.mayPartiallyFill, false);
         const previousSol = await solBalance();
         const signature = await submitInstructions(url, build.instructions, user);
@@ -140,9 +135,14 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
         amount: { kind: "exactOut", amountOut: 1n },
         slippageBps: 50,
       });
-      const rejected = await buildSwapInstructions(unsupported);
-      assert.equal(rejected.ok, false);
-      assert.equal(rejected.error.code, "UNSUPPORTED_SWAP_MODE");
+      await assert.rejects(
+        () => buildSwapInstructions(unsupported),
+        (error) => {
+          assert.ok(error instanceof UnsupportedSwapModeError);
+          assert.equal(error.code, "UNSUPPORTED_SWAP_MODE");
+          return true;
+        },
+      );
     },
   );
 }

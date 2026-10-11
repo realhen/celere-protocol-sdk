@@ -1,3 +1,5 @@
+import { InvalidAccountError, UnsupportedFillPolicyError } from "../errors";
+import { InvalidRequestError } from "../../shared/errors";
 import { type Address, type Instruction } from "@solana/kit";
 import {
   readMint,
@@ -5,17 +7,17 @@ import {
   createAssociatedTokenInstruction,
   TOKEN_PROGRAM,
   associatedTokenAddress,
-} from "../../accounts/tokens";
-import { assertAmount } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/tokens";
+import { assertAmount } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import { quotePump } from "./math";
 import {
   buy_exact_sol_in,
@@ -55,8 +57,7 @@ function direction(request: SwapRequest): {
   const curve = readCurve(request.snapshot, request.pool);
   const isBuy = request.inputMint === curve.quoteMint;
   if (isBuy === (request.outputMint === curve.quoteMint)) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested mints do not match the Pump curve's quote mint",
     });
@@ -145,8 +146,7 @@ async function build(
   const { isBuy, mint, quoteMint } = direction(request);
   const curve = readCurve(request.snapshot, request.pool);
   if ((await getPumpBondingCurveAddress(mint)) !== request.pool) {
-    fail({
-      code: "INVALID_ACCOUNT",
+    throw new InvalidAccountError({
       address: request.pool,
       message: "Pump curve PDA does not match the requested base mint",
     });
@@ -166,8 +166,7 @@ async function build(
     request.pool,
   );
   if (vaultState.amount < curve.realTokens) {
-    fail({
-      code: "INVALID_ACCOUNT",
+    throw new InvalidAccountError({
       address: vault,
       message: "Pump vault contains fewer tokens than the curve's real reserve",
     });
@@ -177,8 +176,7 @@ async function build(
   if (
     userTokenAccount !== (await associatedTokenAddress(request.owner, mint, tokenProgram))
   ) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "tokenAccounts",
       message: "Pump requires the owner's associated base token account",
     });
@@ -189,8 +187,7 @@ async function build(
     requireAccount(request.snapshot, request.pool, "Pump curve").lamports <
       curve.realSol + curve.creatorFees + curve.protocolFees
   ) {
-    fail({
-      code: "INVALID_ACCOUNT",
+    throw new InvalidAccountError({
       address: request.pool,
       message: "Pump curve lamports do not cover its real reserve and accrued fees",
     });
@@ -200,8 +197,7 @@ async function build(
   const legacyBuy = usesLegacyBuy(request);
   const mayPartiallyFill = isBuy && request.amount.kind === "exactIn" && !legacyBuy;
   if (mayPartiallyFill && request.fillPolicy !== "allowPartial") {
-    fail({
-      code: "UNSUPPORTED_FILL_POLICY",
+    throw new UnsupportedFillPolicyError({
       protocol: "pump",
       message: "Pump v3 exact-input buys may refund a completion tail; use allowPartial",
     });
@@ -263,8 +259,7 @@ async function build(
   let buyback = recipients.buybackRecipient;
   if (quoteMint !== NATIVE_SOL_MINT) {
     if ((isBuy ? accounts.input : accounts.output) !== userQuote) {
-      fail({
-        code: "INVALID_REQUEST",
+      throw new InvalidRequestError({
         field: "tokenAccounts",
         message: "Pump requires the owner's associated quote token account",
       });
@@ -278,8 +273,7 @@ async function build(
       request.pool,
     );
     if (quoteState.amount < curve.realSol + curve.creatorFees + curve.protocolFees) {
-      fail({
-        code: "INVALID_ACCOUNT",
+      throw new InvalidAccountError({
         address: quoteVault,
         message: "Pump quote vault does not cover its real reserve and accrued fees",
       });

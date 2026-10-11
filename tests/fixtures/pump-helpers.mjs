@@ -3,7 +3,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
-import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { WRAPPED_SOL_MINT } from "../../dist/protocols/accounts/tokens.js";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { SYSVAR_RENT_ADDRESS } from "@solana/sysvars";
 import {
@@ -146,16 +146,10 @@ export async function submitInstructions(url, instructions, payer, signers = [pa
     },
     computeBudget: { units: 500_000 },
   });
-  assert.equal(
-    compiled.ok,
-    true,
-    JSON.stringify(compiled, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    ),
-  );
+
   const signed = await signTransaction(
     signers.map((signer) => signer.keyPair),
-    compiled.value.transaction,
+    compiled.transaction,
   );
   const signature = await rpc(url, "sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -187,15 +181,9 @@ export async function observeRequest(url, request) {
   const observed = { ...request, snapshot };
   for (let round = 0; round < 6; round++) {
     const result = await getSwapRequirements(observed);
-    assert.equal(
-      result.ok,
-      true,
-      JSON.stringify(result, (_, value) =>
-        typeof value === "bigint" ? value.toString() : value,
-      ),
-    );
-    if (result.value.complete) return observed;
-    const accounts = result.value.missing;
+
+    if (result.complete) return observed;
+    const accounts = result.missing;
     const resultAccounts = await rpc(url, "getMultipleAccounts", [
       accounts.map((entry) => entry.address),
       { encoding: "base64", commitment: "confirmed" },

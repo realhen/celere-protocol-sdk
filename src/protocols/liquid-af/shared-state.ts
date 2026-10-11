@@ -1,14 +1,10 @@
+import { InvalidAccountError, UnsupportedPoolFeatureError } from "../errors";
 import type { getLiquidAfSharedAddresses } from "./pda";
 import type { Address } from "@solana/kit";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
-import type { ProtocolId, SnapshotAccount, SwapRequest } from "../../core/types";
-import {
-  invalidAccount,
-  accountDataView,
-  readAddress,
-  matchesDiscriminator,
-} from "../shared/accounts";
+
+import { requireAccount } from "../accounts/snapshot";
+import type { ProtocolId, SnapshotAccount, SwapRequest } from "../types";
+import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import {
   LIQUID_AF_FEES_PROGRAM,
   LIQUID_AF_STATE_PROGRAM,
@@ -20,10 +16,10 @@ export function unsupportedLiquidFeature(
   feature: string,
   message: string,
 ): never {
-  fail({ code: "UNSUPPORTED_POOL_FEATURE", protocol, feature, message });
+  throw new UnsupportedPoolFeatureError({ protocol, feature, message });
 }
 
-export { readAddress as readLiquidAddress } from "../shared/accounts";
+export { readAddress as readLiquidAddress } from "../accounts/bytes";
 
 export function liquidAccount(
   request: SwapRequest,
@@ -39,7 +35,10 @@ export function liquidAccount(
     observation.data.length < minimumLength ||
     !matchesDiscriminator(observation.data, discriminator)
   ) {
-    invalidAccount(account, `Invalid or truncated ${role}`);
+    throw new InvalidAccountError({
+      address: account,
+      message: `Invalid or truncated ${role}`,
+    });
   }
 
   return observation;
@@ -75,10 +74,10 @@ export function validateLiquidSharedState(
     readAddress(fee.data, 72) !== quoteMint ||
     fee.data[538] !== addresses.feeBump
   ) {
-    invalidAccount(
-      fee.address,
-      "LiquidAF fee configuration does not match its pool or PDA",
-    );
+    throw new InvalidAccountError({
+      address: fee.address,
+      message: "LiquidAF fee configuration does not match its pool or PDA",
+    });
   }
   if (fee.data[104] !== 0) {
     unsupportedLiquidFeature(
@@ -91,7 +90,10 @@ export function validateLiquidSharedState(
   const recipients = fee.data[105]!;
 
   if (recipients === 0 || recipients > 10) {
-    invalidAccount(fee.address, "Invalid LiquidAF fee-recipient count");
+    throw new InvalidAccountError({
+      address: fee.address,
+      message: "Invalid LiquidAF fee-recipient count",
+    });
   }
 
   const feeView = accountDataView(fee.data);
@@ -101,10 +103,10 @@ export function validateLiquidSharedState(
     shares += feeView.getUint16(138 + index * 40, true);
   }
   if (shares !== 10_000) {
-    invalidAccount(
-      fee.address,
-      "LiquidAF creator fee shares must total 10000 basis points",
-    );
+    throw new InvalidAccountError({
+      address: fee.address,
+      message: "LiquidAF creator fee shares must total 10000 basis points",
+    });
   }
   for (const account of amm
     ? [addresses.userProperties]
@@ -131,7 +133,10 @@ export function validateLiquidSharedState(
       user.data[118]! > 1 ||
       (user.data[118] === 1 && user.data.length < 151)
     ) {
-      invalidAccount(account, "Invalid LiquidAF user-state option or boolean");
+      throw new InvalidAccountError({
+        address: account,
+        message: "Invalid LiquidAF user-state option or boolean",
+      });
     }
     if (account === addresses.userProperties && user.data[49] === 1) {
       unsupportedLiquidFeature(
@@ -164,7 +169,10 @@ export function validateLiquidSharedState(
   );
 
   if (readAddress(volume.data, 8) !== mint) {
-    invalidAccount(volume.address, "LiquidAF volume mint does not match the pool");
+    throw new InvalidAccountError({
+      address: volume.address,
+      message: "LiquidAF volume mint does not match the pool",
+    });
   }
 
   const cashback = liquidAccount(
@@ -184,7 +192,10 @@ export function validateLiquidSharedState(
     end + 3 > cashback.data.length ||
     cashbackView.getUint16(end, true) > 10_000
   ) {
-    invalidAccount(cashback.address, "Invalid LiquidAF cashback ranges or rate");
+    throw new InvalidAccountError({
+      address: cashback.address,
+      message: "Invalid LiquidAF cashback ranges or rate",
+    });
   }
 
   let previousEnd = 0n;
@@ -194,10 +205,10 @@ export function validateLiquidSharedState(
     const finish = cashbackView.getBigUint64(52 + index * 18, true);
 
     if (start !== previousEnd || finish <= start) {
-      invalidAccount(
-        cashback.address,
-        "LiquidAF cashback ranges must be contiguous and increasing",
-      );
+      throw new InvalidAccountError({
+        address: cashback.address,
+        message: "LiquidAF cashback ranges must be contiguous and increasing",
+      });
     }
 
     previousEnd = finish;
@@ -206,7 +217,10 @@ export function validateLiquidSharedState(
   const pending = cashback.data[end + 2];
 
   if (pending !== 0 && (pending !== 1 || end + 35 > cashback.data.length)) {
-    invalidAccount(cashback.address, "Invalid LiquidAF cashback pending-admin option");
+    throw new InvalidAccountError({
+      address: cashback.address,
+      message: "Invalid LiquidAF cashback pending-admin option",
+    });
   }
 }
 
@@ -229,7 +243,10 @@ export function readLiquidSolPrice(request: SwapRequest, account: Address): bigi
     oracle.data[40] !== 1 ||
     feed.some((byte, index) => oracle.data[41 + index] !== byte)
   ) {
-    invalidAccount(account, "LiquidAF requires a fully verified SOL/USD Pyth price");
+    throw new InvalidAccountError({
+      address: account,
+      message: "LiquidAF requires a fully verified SOL/USD Pyth price",
+    });
   }
 
   const view = accountDataView(oracle.data);
@@ -244,13 +261,12 @@ export function readLiquidSolPrice(request: SwapRequest, account: Address): bigi
     publishedAt > request.snapshot.unixTimestamp ||
     request.snapshot.unixTimestamp - publishedAt > 30n
   ) {
-    invalidAccount(
-      account,
-      "LiquidAF requires a positive SOL/USD price with exponent -8 and age at most 30 seconds",
-    );
+    throw new InvalidAccountError({
+      address: account,
+      message:
+        "LiquidAF requires a positive SOL/USD price with exponent -8 and age at most 30 seconds",
+    });
   }
 
   return price / 100n;
 }
-
-export { invalidAccount as invalidLiquidAccount } from "../shared/accounts";

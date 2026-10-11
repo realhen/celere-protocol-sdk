@@ -105,11 +105,8 @@ export async function provisionCanonicalPool(url, user, mint, tokenProgram) {
     slippageBps: 50,
   });
   const built = await buildSwapInstructions(finish);
-  assert.ok(
-    built.ok,
-    JSON.stringify(built, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-  );
-  await submitInstructions(url, built.value.instructions, user);
+
+  await submitInstructions(url, built.instructions, user);
   const global = await pda(PUMP, "global");
   const globalData = (await readAccount(url, global)).data;
   const withdrawal = decoder.decode(globalData.subarray(113, 145));
@@ -223,12 +220,9 @@ export async function observeAmmRequest(url, request) {
   const observed = { ...request, snapshot };
   for (let round = 0; round < 6; round++) {
     const requirements = await ammSdk.getSwapRequirements(observed);
-    assert.ok(
-      requirements.ok,
-      JSON.stringify(requirements, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-    );
-    if (requirements.value.complete) return observed;
-    const missing = requirements.value.missing;
+
+    if (requirements.complete) return observed;
+    const missing = requirements.missing;
     const response = await rpc(url, "getMultipleAccounts", [
       missing.map((a) => a.address),
       { encoding: "base64", commitment: "confirmed" },

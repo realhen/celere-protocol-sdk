@@ -1,3 +1,9 @@
+import type { AccountSnapshot, AccountRequirement } from "./accounts/snapshot";
+export type {
+  AccountSnapshot,
+  SnapshotAccount,
+  AccountRequirement,
+} from "./accounts/snapshot";
 import type { Address, Instruction } from "@solana/kit";
 
 /** Protocol identities are stable API values; registration does not imply implementation. */
@@ -23,24 +29,6 @@ export type ProtocolId =
   | "rise-rich"
   | "metadao";
 
-/** Immutable caller-observed account data. Slots record observations, not authenticity. */
-export interface SnapshotAccount {
-  readonly address: Address;
-  readonly owner: Address;
-  readonly data: Uint8Array;
-  readonly lamports: bigint;
-  readonly executable: boolean;
-  readonly slot: bigint;
-}
-
-/** No clock or RPC is consulted. Null means observed absent; a missing key is unknown. */
-export interface AccountSnapshot {
-  readonly slot: bigint;
-  readonly epoch: bigint;
-  readonly unixTimestamp: bigint;
-  readonly accounts: Readonly<Record<string, SnapshotAccount | null>>;
-}
-
 /** Atomic token units. Exact output is available only through a native output-specified instruction. */
 export type SwapAmount =
   | { readonly kind: "exactIn"; readonly amountIn: bigint }
@@ -60,13 +48,6 @@ export interface SwapRequest {
   readonly fillPolicy?: "allowPartial" | "requireFull";
   /** Reject observations older than this many slots relative to snapshot.slot. */
   readonly maxAccountAgeSlots?: bigint;
-}
-
-/** A protocol-owned address discovery result, fulfilled by the consumer's data layer. */
-export interface AccountRequirement {
-  readonly address: Address;
-  readonly role: string;
-  readonly optional?: boolean;
 }
 
 /** Discovery can need multiple rounds as newly supplied state reveals dependencies. */

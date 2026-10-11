@@ -1,20 +1,18 @@
+import {
+  MissingAccountsError,
+  UnsupportedFillPolicyError,
+  UnsupportedSwapModeError,
+  createProtocolSdk,
+  compileTransaction,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
-import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
+
 import { boopAdapter } from "../../dist/protocols/boop/adapter.js";
 import { boopFixture } from "../fixtures/boop.mjs";
 const sdk = createProtocolSdk([boopAdapter]);
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    ),
-  );
-  return result.value;
-}
+
 test("offline Boop consumer discovers native SOL accounts and compiles portable buy/sell plans", async () => {
   const signer = await generateKeyPairSigner(),
     previousFetch = globalThis.fetch;
@@ -31,27 +29,25 @@ test("offline Boop consumer discovers native SOL accounts and compiles portable 
           accounts: { [f.pool]: f.request.snapshot.accounts[f.pool] },
         },
       };
-      const needed = value(await sdk.getSwapRequirements(partial));
+      const needed = await sdk.getSwapRequirements(partial);
       assert.ok(needed.missing.some((item) => item.address === f.feesVault));
-      assert.equal(
-        (await sdk.buildSwapInstructions(partial)).error.code,
-        "MISSING_ACCOUNTS",
+      await assert.rejects(
+        () => sdk.buildSwapInstructions(partial),
+        MissingAccountsError,
       );
-      const built = value(await sdk.buildSwapInstructions(f.request));
+      const built = await sdk.buildSwapInstructions(f.request);
       assert.equal(built.execution.mayPartiallyFill, !reverse);
       assert.deepEqual(structuredClone(built), built);
       assert.equal(built.instructions[0].data.length, 24);
       assert.equal(built.instructions[0].accounts.length, reverse ? 12 : 13);
-      const compiled = value(
-        compileTransaction({
-          instructions: built.instructions,
-          feePayer: signer.address,
-          lifetime: {
-            blockhash: "11111111111111111111111111111111",
-            lastValidBlockHeight: 100n,
-          },
-        }),
-      );
+      const compiled = compileTransaction({
+        instructions: built.instructions,
+        feePayer: signer.address,
+        lifetime: {
+          blockhash: "11111111111111111111111111111111",
+          lastValidBlockHeight: 100n,
+        },
+      });
       assert.ok(compiled.byteLength <= 1232);
       assert.ok(
         Object.values(compiled.transaction.signatures).every(
@@ -59,19 +55,31 @@ test("offline Boop consumer discovers native SOL accounts and compiles portable 
         ),
       );
       if (!reverse) {
-        const full = await sdk.buildSwapInstructions({
-          ...f.request,
-          fillPolicy: "requireFull",
-        });
-        assert.equal(full.ok, false);
-        assert.equal(full.error.code, "UNSUPPORTED_FILL_POLICY");
+        await assert.rejects(
+          () =>
+            sdk.buildSwapInstructions({
+              ...f.request,
+              fillPolicy: "requireFull",
+            }),
+          (error) => {
+            assert.ok(error instanceof UnsupportedFillPolicyError);
+            assert.equal(error.code, "UNSUPPORTED_FILL_POLICY");
+            return true;
+          },
+        );
       }
-      const exactOut = await sdk.buildSwapInstructions({
-        ...f.request,
-        amount: { kind: "exactOut", amountOut: 1000n },
-      });
-      assert.equal(exactOut.ok, false);
-      assert.equal(exactOut.error.code, "UNSUPPORTED_SWAP_MODE");
+      await assert.rejects(
+        () =>
+          sdk.buildSwapInstructions({
+            ...f.request,
+            amount: { kind: "exactOut", amountOut: 1000n },
+          }),
+        (error) => {
+          assert.ok(error instanceof UnsupportedSwapModeError);
+          assert.equal(error.code, "UNSUPPORTED_SWAP_MODE");
+          return true;
+        },
+      );
     }
   } finally {
     globalThis.fetch = previousFetch;
@@ -100,8 +108,12 @@ test("Boop rejects paused, legacy, malformed, unbacked and exhausted caller snap
   ]) {
     const f = await boopFixture(signer.address, { reverse: true });
     mutate(f);
-    const result = await sdk.buildSwapInstructions(f.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, code, result.error.message);
+    await assert.rejects(
+      () => sdk.buildSwapInstructions(f.request),
+      (error) => {
+        assert.equal(error.code, code, error.message);
+        return true;
+      },
+    );
   }
 });

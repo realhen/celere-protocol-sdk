@@ -242,6 +242,17 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       globalThis.fetch = () => { throw new Error('Import or construction attempted network access'); };
       const root = await import('celere-protocol-sdk');
       const sender = await import('celere-protocol-sdk/sender');
+      const protocols = await import('celere-protocol-sdk/protocols');
+      const legacyCore = await import('celere-protocol-sdk/core');
+      const transactions = await import('celere-protocol-sdk/transactions');
+      for (const name of ['SwapAccountFetchError', 'ProtocolError', 'ProtocolErrorCode', 'MissingAccountsError', 'InvalidAccountError', 'InvalidSnapshotContextError', 'UnsupportedProtocolError', 'UnsupportedPoolFeatureError', 'UnsupportedSwapModeError', 'UnsupportedTokenExtensionError', 'InsufficientLiquidityError', 'UnsupportedFillPolicyError', 'InvalidRequestError', 'ValidationErrorCode']) {
+        assert.equal(root[name], protocols[name], name);
+        assert.equal(legacyCore[name], protocols[name], name);
+      }
+      for (const name of ['TransactionTooLargeError', 'TransactionErrorCode', 'InvalidRequestError', 'ValidationErrorCode']) assert.equal(root[name], transactions[name], name);
+      assert.ok(new root.MissingAccountsError({ message: 'missing', accounts: [] }) instanceof protocols.ProtocolError);
+      assert.ok(new root.TransactionTooLargeError({ message: 'too large', size: 1233, limit: 1232 }) instanceof transactions.TransactionTooLargeError);
+
       for (const name of Object.keys(sender)) assert.equal(root[name], sender[name], name);
       const client = new root.SenderClient({defaultRpc: {url: 'https://rpc.example'}});
       assert.ok(client instanceof sender.SenderClient);
@@ -283,15 +294,13 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         { kind: "exactOut", amountOut: 1_000_001n },
       ]) {
         const built = await buildSwapInstructions({ ...fixture.request, amount });
-        assert.equal(built.ok, true);
-        assert.equal(built.value.instructions.length, 1);
+        assert.equal(built.instructions.length, 1);
         const compiled = compileTransaction({
-          instructions: built.value.instructions,
+          instructions: built.instructions,
           feePayer: owner,
           lifetime,
         });
-        assert.equal(compiled.ok, true);
-        const { quote } = built.value;
+        const { quote } = built;
         cases.push({
           kind: amount.kind,
           accounts: {
@@ -314,8 +323,8 @@ test("packed public package installs offline and exposes usable strict TypeScrip
               ? { amountIn: quote.amountIn, minimumAmountOut: quote.minimumAmountOut }
               : { maximumAmountIn: quote.maximumAmountIn, amountOut: quote.amountOut },
           lifetime,
-          expectedInstruction: built.value.instructions[0],
-          expectedWireBytes: compiled.value.wireBytes,
+          expectedInstruction: built.instructions[0],
+          expectedWireBytes: compiled.wireBytes,
         });
       }
     }

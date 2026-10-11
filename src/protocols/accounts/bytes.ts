@@ -1,12 +1,6 @@
 import { getAddressDecoder, type Address } from "@solana/kit";
-import { fail } from "../../core/errors";
 
 const addressDecoder = getAddressDecoder();
-
-/** Reject a caller-supplied account with the protocol decoder's specific failure reason. */
-export function invalidAccount(address: Address, message: string): never {
-  fail({ code: "INVALID_ACCOUNT", address, message });
-}
 
 /**
  * View exactly the supplied account bytes, including snapshots backed by a subarray.

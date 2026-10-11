@@ -1,19 +1,25 @@
+import {
+  InvalidAccountError,
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+} from "../errors";
+import { InvalidRequestError } from "../../shared/errors";
 import { type Instruction } from "@solana/kit";
 import {
   associatedTokenAddress,
   createAssociatedTokenInstruction,
   readMint,
   readTokenAccount,
-} from "../../accounts/tokens";
-import { assertAmount } from "../../core/amounts";
-import { fail } from "../../core/errors";
+} from "../accounts/tokens";
+import { assertAmount } from "../amounts";
+
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import { quotePumpAmm } from "./amm-math";
 import {
   AMM_SYSTEM_PROGRAM,
@@ -96,8 +102,7 @@ async function build(
     !isBuy &&
     !(request.inputMint === pool.baseMint && request.outputMint === pool.quoteMint)
   ) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested mints do not match the Pump AMM pool",
     });
@@ -106,8 +111,7 @@ async function build(
   // Validate pool identity and vault relationships before using balances in the quote.
   const [expectedPool, bump] = await findPumpAmmPoolPda(pool);
   if (request.pool !== expectedPool || pool.bump !== bump) {
-    fail({
-      code: "INVALID_ACCOUNT",
+    throw new InvalidAccountError({
       address: request.pool,
       message: "Pump AMM pool PDA or bump does not match its state",
     });
@@ -116,8 +120,7 @@ async function build(
   const { global, feeConfig, eventAuthority } = await commonAddresses();
   const globalState = readAmmGlobal(request.snapshot, global);
   if (globalState.disabled & (isBuy ? 8 : 16)) {
-    fail({
-      code: "UNSUPPORTED_POOL_FEATURE",
+    throw new UnsupportedPoolFeatureError({
       protocol: "pump-amm",
       feature: "disabled-swap-direction",
       message: "Pump AMM global configuration disables this swap direction",
@@ -131,8 +134,7 @@ async function build(
     associatedTokenAddress(request.pool, pool.quoteMint, quoteMint.tokenProgram),
   ]);
   if (pool.baseVault !== expectedBaseVault || pool.quoteVault !== expectedQuoteVault) {
-    fail({
-      code: "INVALID_ACCOUNT",
+    throw new InvalidAccountError({
       address: request.pool,
       message: "Pump AMM pool vault addresses are not canonical",
     });
@@ -184,8 +186,7 @@ async function build(
     pool.isHolderReward &&
     pool.coinCreator !== (await getPumpHolderRewardsAddress(pool.baseMint))
   ) {
-    fail({
-      code: "INVALID_ACCOUNT",
+    throw new InvalidAccountError({
       address: request.pool,
       message: "Pump AMM holder-reward creator is not the canonical rewards PDA",
     });
@@ -193,8 +194,7 @@ async function build(
 
   const canonical = pool.creator === (await getPumpPoolAuthorityAddress(pool.baseMint));
   if (baseVault.amount === 0n) {
-    fail({
-      code: "INSUFFICIENT_LIQUIDITY",
+    throw new InsufficientLiquidityError({
       protocol: "pump-amm",
       message: "Pump AMM base reserve is empty",
     });

@@ -7,7 +7,7 @@ import {
   getAddressDecoder,
   getProgramDerivedAddress,
 } from "@solana/kit";
-import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { WRAPPED_SOL_MINT } from "../../dist/protocols/accounts/tokens.js";
 export const BOOP_PROGRAM = address("boop8hVGQGqehUK2iVEMEnMrL5RbjywRzHKBmBE7ry4");
 const encoder = getAddressEncoder(),
   decoder = getAddressDecoder();

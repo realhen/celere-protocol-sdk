@@ -12,7 +12,7 @@ import {
   type Address,
   type Instruction,
 } from "@solana/kit";
-import { WRAPPED_SOL_MINT } from "../../../accounts/tokens";
+import { WRAPPED_SOL_MINT } from "../../accounts/tokens";
 import { BOOP_PROGRAM } from "../constants";
 
 /** Identifies Boop’s native `buy_token` instruction. */

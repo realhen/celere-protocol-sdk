@@ -1,3 +1,9 @@
+import {
+  InsufficientLiquidityError,
+  UnsupportedSwapModeError,
+  compileTransaction,
+  buildSwapInstructions,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -11,19 +17,12 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { compileTransaction, buildSwapInstructions } from "../../dist/index.js";
+
 import { liquidAfAmmFixture, LIQUID_AF_AMM_PROGRAM } from "../fixtures/liquid-af-amm.mjs";
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native LiquidAF tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const r = await fetch(endpoint, {
     method: "POST",
@@ -64,19 +63,17 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: [
-        getSetComputeUnitLimitInstruction({ units: 600_000 }),
-        ...build.instructions,
-      ],
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: [
+      getSetComputeUnitLimitInstruction({ units: 600_000 }),
+      ...build.instructions,
+    ],
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -193,7 +190,7 @@ test(
           : { kind: "exactIn", amountIn: amount },
         slippageBps: 0,
       };
-      const build = value(await buildSwapInstructions(request));
+      const build = await buildSwapInstructions(request);
       await install(f, signer);
       const inputBefore = await tokenAmount(f.request.tokenAccounts.input),
         outputBefore = await tokenAmount(f.request.tokenAccounts.output),
@@ -274,7 +271,7 @@ test(
               ? { kind: "exactOut", amountOut: 1_000_001n }
               : f.request.amount,
           };
-          const build = value(await buildSwapInstructions(request));
+          const build = await buildSwapInstructions(request);
           const vault = f.request.snapshot.accounts[reverse ? f.quoteVault : f.baseVault];
           new DataView(vault.data.buffer).setBigUint64(
             64,
@@ -297,9 +294,14 @@ test(
           assert.equal(await tokenAmount(f.request.tokenAccounts.output), outputBefore);
           assert.deepEqual(await poolData(f), stateBefore);
           if (exhausted) {
-            const offline = await buildSwapInstructions(request);
-            assert.equal(offline.ok, false);
-            assert.equal(offline.error.code, "INSUFFICIENT_LIQUIDITY");
+            await assert.rejects(
+              () => buildSwapInstructions(request),
+              (error) => {
+                assert.ok(error instanceof InsufficientLiquidityError);
+                assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+                return true;
+              },
+            );
           }
         }
   },
@@ -317,12 +319,18 @@ test(
         unixTimestamp: await clockTime(),
       });
       const amountOut = 123_456_789n;
-      const result = await buildSwapInstructions({
-        ...f.request,
-        amount: { kind: "exactOut", amountOut },
-      });
-      assert.equal(result.ok, false);
-      assert.equal(result.error.code, "UNSUPPORTED_SWAP_MODE");
+      await assert.rejects(
+        () =>
+          buildSwapInstructions({
+            ...f.request,
+            amount: { kind: "exactOut", amountOut },
+          }),
+        (error) => {
+          assert.ok(error instanceof UnsupportedSwapModeError);
+          assert.equal(error.code, "UNSUPPORTED_SWAP_MODE");
+          return true;
+        },
+      );
       const instruction = buy_exact_out(f.instructionAccounts, {
         amountOut,
         maximumAmountIn: 100_000_000n,

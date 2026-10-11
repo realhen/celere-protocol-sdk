@@ -7,7 +7,7 @@ import {
   getProgramDerivedAddress,
 } from "@solana/kit";
 import { MOONSHOT_PROGRAM } from "../../dist/protocols/moonshot/curve.js";
-import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { WRAPPED_SOL_MINT } from "../../dist/protocols/accounts/tokens.js";
 const encoder = getAddressEncoder();
 const decoder = getAddressDecoder();
 const utf8 = new TextEncoder();

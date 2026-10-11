@@ -16,7 +16,12 @@ import type {
   TransactionWithLifetime,
 } from "@solana/kit";
 import { getTransferSolInstruction } from "@solana-program/system";
-import { compileTransaction } from "../transactions/index";
+import {
+  compileTransaction,
+  InvalidRequestError,
+  TransactionTooLargeError,
+  type CompiledTransaction,
+} from "../transactions/index";
 import {
   NonceRequiredError,
   SenderCompilationError,
@@ -228,22 +233,30 @@ export function prepareTransactionVariants(
     const instructions = [...request.instructions];
     if (recipient)
       instructions.push(createTipInstruction(request.feePayer, recipient, tipLamports));
-    const compiled = compileTransaction({
-      instructions,
-      feePayer: request.feePayer,
-      lifetime: request.nonce ?? request.lifetime!,
-      computeBudget: {
-        units: request.fees.computeUnitLimit,
-        microLamports: request.fees.computeUnitPriceMicroLamports,
-      },
-      ...(request.lookupTables === undefined
-        ? {}
-        : { lookupTables: request.lookupTables }),
-    });
-    if (!compiled.ok) {
-      throw new SenderCompilationError(compiled.error.message);
+    let compiled: CompiledTransaction;
+    try {
+      compiled = compileTransaction({
+        instructions,
+        feePayer: request.feePayer,
+        lifetime: request.nonce ?? request.lifetime!,
+        computeBudget: {
+          units: request.fees.computeUnitLimit,
+          microLamports: request.fees.computeUnitPriceMicroLamports,
+        },
+        ...(request.lookupTables === undefined
+          ? {}
+          : { lookupTables: request.lookupTables }),
+      });
+    } catch (error) {
+      if (
+        error instanceof InvalidRequestError ||
+        error instanceof TransactionTooLargeError
+      ) {
+        throw new SenderCompilationError(error.message);
+      }
+      throw error;
     }
-    const variant = { transaction: compiled.value.transaction, routeIds: [route.id] };
+    const variant = { transaction: compiled.transaction, routeIds: [route.id] };
     variantsByTip.set(variantKey, variant);
     variants.push(variant);
   }

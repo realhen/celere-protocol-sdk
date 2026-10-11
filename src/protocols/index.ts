@@ -1,8 +1,8 @@
 export { createProtocolSdk } from "./sdk";
 export type { ProtocolSdk } from "./sdk";
 export { basisPoints } from "./amounts";
-export { SwapBuildError } from "./errors";
-export type { BuildError, Result } from "./errors";
+export * from "./errors";
+export { InvalidRequestError, ValidationErrorCode } from "../shared/errors";
 export type {
   AccountSnapshot,
   SnapshotAccount,
@@ -32,3 +32,5 @@ export type {
   ProtocolRoute,
   RouteAdapter,
 } from "./route-types";
+
+export { SwapAccountFetchError } from "./fetch-swap";

@@ -8,7 +8,6 @@ The application chooses its account source: gRPC, WebSocket, RPC, a local cache,
 import {
   buildSwapInstructions,
   getPumpBondingCurveAddress,
-  SwapBuildError,
   type AccountSnapshot,
   type Address,
 } from "celere-protocol-sdk";
@@ -31,15 +30,14 @@ const result = await buildSwapInstructions({
   fillPolicy: "requireFull",
   snapshot: latestSnapshot,
 });
-if (!result.ok) throw new SwapBuildError(result.error);
 
 // Pass these instructions to SenderClient with your signer, nonce and fees.
-const instructions = result.value.instructions;
+const instructions = result.instructions;
 ```
 
 A snapshot contains raw account bytes, owners, lamports, executable flags, and observation slots, along with the relevant slot, epoch, and chain timestamp. Keep it immutable during construction. A missing account-map entry means unknown; `null` means your data layer observed absence. Merely deriving an address cannot establish absence or account existence.
 
-`getSwapRequirements(request)` is optional offline dependency discovery for your subscription manager. It returns addresses and roles using the state supplied so far. Your application obtains missing observations and subscribes to updates. Discovery may take several rounds, and required bin/tick arrays can change with market state, swap direction, and amount. Once the snapshot contains the dependencies, call the builder directly. Missing data produces a structured error; it never triggers an RPC fallback.
+`getSwapRequirements(request)` is optional offline dependency discovery for your subscription manager. It returns addresses and roles using the state supplied so far. Your application obtains missing observations and subscribes to updates. Discovery may take several rounds, and required bin/tick arrays can change with market state, swap direction, and amount. Once the snapshot contains the dependencies, call the builder directly. Missing data throws `MissingAccountsError` with an `accounts` field; it never triggers an RPC fallback.
 
 `fetchSwapInstructions` remains a separate opt-in RPC convenience. Stream-driven execution should use `buildSwapInstructions` to avoid those network reads.
 

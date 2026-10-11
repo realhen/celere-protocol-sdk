@@ -36,19 +36,25 @@ const buy = await fetchSwapInstructions(rpc, {
 
 The same function handles a Meteora DLMM pool or another supported adapter; the pool's owner selects the protocol. It defaults to `confirmed` and accepts `{ commitment, abortSignal }` as its third argument. It fetches all discovered accounts together with Clock at one bank context per round, preserving observed absence for ATA creation. It supports up to 99 swap accounts plus Clock and 20 discovery rounds. Larger account sets need a caller-maintained coherent snapshot and the offline API.
 
-Expected construction failures reject with `SwapBuildError`; its `code` and `detail` preserve the structured errors returned by the offline API. RPC and cancellation errors propagate unchanged. There is no `unwrap` helper to copy. The function performs fresh RPC reads per call, without caching, signing, wrapping SOL, sending, or confirmation. Latency-sensitive applications with their own data feed can keep using `getSwapRequirements` and `buildSwapInstructions` to avoid these RPC round trips.
+Expected construction failures reject with the same named errors as the offline API, such as `MissingAccountsError` and `InvalidRequestError`. Their stable `code` and typed metadata are direct properties. `SwapAccountFetchError` identifies the convenience layer's own discovery limits and invalid RPC batches. RPC and cancellation errors propagate unchanged. There is no `unwrap` helper to copy. The function performs fresh RPC reads per call, without caching, signing, wrapping SOL, sending, or confirmation. Latency-sensitive applications with their own data feed can keep using `getSwapRequirements` and `buildSwapInstructions` to avoid these RPC round trips.
 
 Protocol-owned PDA helpers are exported from the root and each protocol entrypoint. They cover the derivations used by every implemented adapter, with historical helpers for Sugar. See the [address helper inventory](docs/addresses.md#address-helpers) for coverage, native parameter meanings, and the streaming workflow. Standard token-account derivation continues to use `findAssociatedTokenPda` from `@solana-program/token`.
 
 When reading the implementation, each protocol folder owns its native account layouts,
 PDA seeds, fee and curve math, validation rules, and instructions. Common account-byte
-readers and invalid-account error construction live in
-[`src/protocols/shared/accounts.ts`](src/protocols/shared/accounts.ts);
-token-account handling lives in `src/accounts`, and shared amount/slippage arithmetic
-lives in `src/core/amounts.ts`. The byte readers are internal building blocks, not a
+readers live in [`src/protocols/accounts/bytes.ts`](src/protocols/accounts/bytes.ts);
+protocol validation sites throw named errors with their native account context.
+Token-account handling lives in `src/protocols/accounts`, and shared amount/slippage arithmetic
+lives in `src/protocols/amounts.ts`. The byte readers are internal building blocks, not a
 separate public entrypoint. They operate on caller-supplied data without fetching or
 streaming accounts; each protocol validates its owner, applicable discriminator, and
 supported layout before interpreting fields.
+
+Protocol registries, swap/route orchestration, and their error classes also live under
+`src/protocols`. Transaction compilation and its size errors belong to `src/transactions`;
+route configuration and submission belong to `src/sender`. Only address validation,
+u64 bounds, and request-validation errors are shared across these features in `src/shared`.
+There is no `src/core` folder; `/core` is retained only as a compatibility import alias.
 
 ## Concurrent sender
 
@@ -222,7 +228,7 @@ The [`example/` folder](example/README.md) contains two independently runnable p
 
 Instruction entrypoints expose functions named exactly after the native instructions and their readonly account/argument interfaces. Available subpaths are `/instructions/pump`, `/instructions/pump-amm`, `/instructions/raydium-amm-v4`, `/instructions/raydium-cpmm`, `/instructions/raydium-clmm`, `/instructions/raydium-launchlab`, `/instructions/meteora-damm-v1`, `/instructions/meteora-damm-v2`, `/instructions/meteora-dlmm`, `/instructions/moonshot`, `/instructions/vertigo`, `/instructions/orca`, `/instructions/boop`, `/instructions/meteora-dbc`, `/instructions/heaven`, `/instructions/rise-rich`, `/instructions/liquid-af`, `/instructions/liquid-af-amm`, `/instructions/metadao`, and historical `/instructions/sugar`. They do not import quote adapters or Orca's math WASM.
 
-These synchronous functions encode the documented native instruction variant. Callers supply valid account addresses, verify PDAs and program state, and choose atomic amounts and execution bounds. The builders do not quote, discover accounts, create token accounts, or provide the high-level full-fill guarantee. Codec range errors throw synchronously; use the protocol-neutral API for structured validation results. Fixed flags and unsupported optional instruction features are documented in each builder. Account roles describe required signatures but never attach a signer or private key.
+These synchronous functions encode the documented native instruction variant. Callers supply valid account addresses, verify PDAs and program state, and choose atomic amounts and execution bounds. The builders do not quote, discover accounts, create token accounts, or provide the high-level full-fill guarantee. Codec range errors throw synchronously; use the protocol-neutral API for named validation errors. Fixed flags and unsupported optional instruction features are documented in each builder. Account roles describe required signatures but never attach a signer or private key.
 
 ## Optional swap helpers
 
@@ -251,25 +257,23 @@ const request: SwapRequest = {
   snapshot,
 };
 
-const requirements = await getSwapRequirements(request);
-if (!requirements.ok) {
-  handleError(requirements.error);
-} else if (!requirements.value.complete) {
-  // Your data layer fulfills these requirements, then repeats discovery.
-  requestAccounts(requirements.value.missing);
-} else {
-  const built = await buildSwapInstructions(request);
-  if (!built.ok) {
-    handleError(built.error);
+try {
+  const requirements = await getSwapRequirements(request);
+  if (!requirements.complete) {
+    // Your data layer fulfills these requirements, then repeats discovery.
+    requestAccounts(requirements.missing);
   } else {
+    const built = await buildSwapInstructions(request);
     const compiled = compileTransaction({
-      instructions: built.value.instructions,
+      instructions: built.instructions,
       feePayer: address(feePayerAddress),
       lifetime: { blockhash, lastValidBlockHeight },
       computeBudget: { units: 300_000, microLamports: 1_000n },
     });
-    // Your application handles compiled.error or signs compiled.value.transaction.
+    // Your application signs compiled.transaction.
   }
+} catch (error) {
+  handleError(error);
 }
 ```
 
@@ -281,7 +285,7 @@ To request a native exact-output swap, use:
 amount: { kind: "exactOut", amountOut: 250_000n }
 ```
 
-The SDK quotes the required input and encodes an upward-rounded maximum input. It never replaces exact output with inverse-sized exact-input execution. Unsupported directions or variants return structured errors.
+The SDK quotes the required input and encodes an upward-rounded maximum input. It never replaces exact output with inverse-sized exact-input execution. Unsupported directions or variants throw named errors.
 
 ## Native multi-hop routes
 
@@ -311,7 +315,7 @@ Pump's native route charges protocol fees at the currency end and creator/LP fee
 
 A native SOL curve endpoint still requires a WSOL token account as the router's mint-bearing sentinel, even though settlement changes wallet lamports. That sentinel's wrapped balance is not spent; inspect `build.assets` for settlement semantics. Input endpoint accounts must exist; an observed-absent output ATA can be created. The SDK does not wrap SOL. Larger routes may require caller-supplied lookup tables to fit the transaction size limit.
 
-For a smaller bundle, use `createRouteSdk([pumpRouteAdapter])` from `/core` with `pumpRouteAdapter` from `/protocols/pump-routes`.
+For a smaller bundle, use `createRouteSdk([pumpRouteAdapter])` from `/protocols` with `pumpRouteAdapter` from `/protocols/pump-routes`.
 
 ## Account snapshots
 
@@ -338,7 +342,7 @@ An omitted key is unknown. `null` means the consumer observed that the account d
 
 Account slots may differ. They must not exceed `snapshot.slot`; `maxAccountAgeSlots` optionally bounds their age relative to it. Supplied epoch/time drive protocol calculations. These checks cannot prove that a snapshot is authentic, coherent across a fork, or still current on chain. Keep snapshots immutable while an async operation runs.
 
-Public inputs/results use addresses, bigint amounts, byte arrays, and plain data. They survive structured cloning; there are no object-identity tokens or SDK clients to reconstruct in a worker. The SDK does not create workers.
+Public inputs and successful return values use addresses, bigint amounts, byte arrays, and plain data. They survive structured cloning; there are no object-identity tokens or SDK clients to reconstruct in a worker. The SDK does not create workers. Error instances need explicit application serialization before crossing a worker boundary: structured cloning an `Error` does not preserve its custom `code` or metadata fields. Send a plain object containing the fields your application needs and handle it as data on the receiving side.
 
 ## Amount and account semantics
 
@@ -357,17 +361,36 @@ The result includes ordered instructions, setup/swap/cleanup boundaries, quote/l
 
 ## Errors and types
 
-`getSwapRequirements`, `buildSwapInstructions`, `getRouteRequirements`, `buildRouteInstructions`, and `compileTransaction` return a discriminated `Result<T>`:
+`getSwapRequirements`, `buildSwapInstructions`, `getRouteRequirements`, and `buildRouteInstructions` resolve directly to their success values and reject with named `Error` subclasses on failure. `compileTransaction` returns a compiled transaction directly and throws synchronously on failure.
 
 ```ts
-if (!result.ok && result.error.code === "MISSING_ACCOUNTS") {
-  requestAccounts(result.error.accounts);
+import {
+  buildSwapInstructions,
+  MissingAccountsError,
+  InvalidRequestError,
+} from "celere-protocol-sdk";
+
+try {
+  const built = await buildSwapInstructions(request);
+  useInstructions(built.instructions);
+} catch (error) {
+  if (error instanceof MissingAccountsError) {
+    requestAccounts(error.accounts);
+  } else if (error instanceof InvalidRequestError) {
+    reportInvalidField(error.field, error.message);
+  } else {
+    throw error;
+  }
 }
 ```
 
-Stable codes include `INVALID_REQUEST`, `MISSING_ACCOUNTS`, `INVALID_ACCOUNT`, `INVALID_SNAPSHOT_CONTEXT`, `UNSUPPORTED_PROTOCOL`, `UNSUPPORTED_POOL_FEATURE`, `UNSUPPORTED_SWAP_MODE`, `UNSUPPORTED_TOKEN_EXTENSION`, `UNSUPPORTED_FILL_POLICY`, `INSUFFICIENT_LIQUIDITY`, and `TRANSACTION_TOO_LARGE`. `INTERNAL_ERROR` denotes an unexpected implementation failure, not normal unsupported state. Consumers never need to parse error messages.
+`ProtocolError` is the base for protocol failures such as `MissingAccountsError`, `InvalidAccountError`, `InvalidSnapshotContextError`, `UnsupportedProtocolError`, `UnsupportedPoolFeatureError`, `UnsupportedSwapModeError`, `UnsupportedTokenExtensionError`, `UnsupportedFillPolicyError`, and `InsufficientLiquidityError`. `InvalidRequestError` covers request validation; `TransactionTooLargeError` carries the actual `size` and packet `limit`.
 
-The small `address()` and `basisPoints()` validation constructors throw for invalid values. Creating a registry with duplicate protocol identities/programs also throws. These configuration-time contracts are separate from operation results.
+Stable uppercase codes are available through `ProtocolErrorCode`, `ValidationErrorCode`, and `TransactionErrorCode`. Metadata such as `accounts`, `address`, `field`, `protocol`, and `feature` lives directly on the appropriate error. Root, `/protocols`, and `/transactions` exports share constructor identity where applicable, so `instanceof` works across entrypoints. Unexpected implementation errors, RPC errors, and cancellation errors propagate unchanged; they are not converted into a generic internal-error result.
+
+Migration from the former `Result<T>` API: remove `.ok` branches and `.value` access, await the returned value directly, and catch named errors. Replace `SwapBuildError` and `.detail` access with the specific error class and its direct properties. `getSwapRequirements` still returns an incomplete discovery value when observations are missing; construction throws `MissingAccountsError` until they are supplied. `/core` remains an import compatibility alias for `/protocols`.
+
+The small `address()` and `basisPoints()` validation constructors also throw for invalid values. Creating a registry with duplicate protocol identities/programs throws `InvalidRequestError`.
 
 ## Optional swap adapter coverage
 
@@ -400,9 +423,9 @@ Pump uses v3 for exact-output buys and exact-input sells. For exact-input SOL bu
 
 Raw `/instructions/pump` and `/instructions/pump-amm` entrypoints include permissionless creator/protocol fee sweeps. These pay accrued buckets to designated recipients and can create recipient ATAs; they do not claim fees for the payer. Sweep creator fees before composing creator claims or fee-sharing changes. Pool sweeps increase signed virtual quote reserves as real quote tokens leave, preserving effective reserves and swap prices. LaunchLab rejects nonconstant curves and migrated pools. Meteora DAMM v2 rejects compounding, dynamic fees, rate limiters, market-cap fee schedulers, and nonstatic exponential fees. The Orca math is pinned to a historical Apache-2.0 release; newer features require a separately qualified implementation.
 
-Raydium AMM v4 rejects orderbook-active pool modes and Token-2022. CLMM rejects dynamic fees, fixed-token/output fees, permissioned pools, active limit-order fields, and Token-2022; its bitmap-extension account must be supplied. DLMM supports permissionless type-0 pools with input fees and up to eight bin arrays per swap; it rejects other pool address schemes, output fees, limit-order features, and Token-2022. Discovery reports missing arrays in stages. Exceeding the supported DLMM array count returns an unsupported-feature error. CLMM and DLMM use native exact-output instructions and reject incomplete fills on chain.
+Raydium AMM v4 rejects orderbook-active pool modes and Token-2022. CLMM rejects dynamic fees, fixed-token/output fees, permissioned pools, active limit-order fields, and Token-2022; its bitmap-extension account must be supplied. DLMM supports permissionless type-0 pools with input fees and up to eight bin arrays per swap; it rejects other pool address schemes, output fees, limit-order features, and Token-2022. Discovery reports missing arrays in stages. Exceeding the supported DLMM array count throws `UnsupportedPoolFeatureError`. CLMM and DLMM use native exact-output instructions and reject incomplete fills on chain.
 
-DAMM v1 rejects stable curves, partner fees, Token-2022, and vaults with strategies. It preserves native minimum-one-atom fees and independent vault share rounding; output is based on caller-supplied unlocked balances. Moonshot/Moonit rejects linear, flat, anti-snipe and non-SOL curves; the token side must use the owner's ATA. Vertigo rejects active fee normalization, privileged swappers, and Token-2022. DAMM v1 and Vertigo expose native exact-input swaps only; exact-output requests return `UNSUPPORTED_SWAP_MODE`.
+DAMM v1 rejects stable curves, partner fees, Token-2022, and vaults with strategies. It preserves native minimum-one-atom fees and independent vault share rounding; output is based on caller-supplied unlocked balances. Moonshot/Moonit rejects linear, flat, anti-snipe and non-SOL curves; the token side must use the owner's ATA. Vertigo rejects active fee normalization, privileged swappers, and Token-2022. DAMM v1 and Vertigo expose native exact-input swaps only; exact-output requests throw `UnsupportedSwapModeError` with code `UNSUPPORTED_SWAP_MODE`.
 
 Meteora DBC’s optional adapter qualifies up to 20 liquidity segments and static/linear fees with quote/output collection; it rejects dynamic, rate-limiter and exponential fees, privileged first swaps, Token-2022, and the native overflow fallback. Boop qualifies modern selector-31 curves and rejects legacy selector-30 math. Its buy instruction may clip at graduation; sells consume the full input or fail.
 
@@ -427,7 +450,7 @@ import { buildSwapInstructions, SenderClient, HeliusSender } from "celere-protoc
 The default export includes all implemented adapters. Consumers can choose a fixed subset without importing the others:
 
 ```ts
-import { createProtocolSdk } from "celere-protocol-sdk/core";
+import { createProtocolSdk } from "celere-protocol-sdk/protocols";
 import { raydiumCpmmAdapter } from "celere-protocol-sdk/protocols/raydium-cpmm";
 
 const sdk = createProtocolSdk([raydiumCpmmAdapter]);

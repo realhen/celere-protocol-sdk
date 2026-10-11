@@ -1,22 +1,25 @@
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  UnsupportedSwapModeError,
+  InsufficientLiquidityError,
+} from "../errors";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import type { Address } from "@solana/kit";
-import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
-import { assertAmount, ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../accounts/tokens";
+import { assertAmount, ceilDiv, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
-import {
-  invalidAccount,
-  accountDataView,
-  readAddress,
-  matchesDiscriminator,
-} from "../shared/accounts";
+} from "../types";
+import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants";
 import { buy_with_exact_cash_in, sell_with_exact_token_in } from "./instructions/index";
 import {
@@ -36,8 +39,7 @@ export * from "./pda";
 export { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants";
 
 function unsupported(feature: string): never {
-  return fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "rise-rich",
     feature,
     message: `Rise ${feature} is not qualified`,
@@ -54,7 +56,10 @@ function state(
   const account = requireAccount(request.snapshot, key, "Rise/Mayflower state", owner);
 
   if (account.data.length < size || !matchesDiscriminator(account.data, discriminator)) {
-    invalidAccount(key, "Invalid Rise/Mayflower account layout");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Invalid Rise/Mayflower account layout",
+    });
   }
   if (account.data.subarray(size).some((b) => b !== 0)) {
     unsupported("nonzero state extension");
@@ -92,7 +97,10 @@ async function deriveAddresses(request: SwapRequest) {
   const addresses = await getRiseRichMarketAddresses(tenant, marketMeta, mintMain);
 
   if (addresses.pool !== request.pool || addresses.marketBump !== marketData.bytes[381]) {
-    invalidAccount(request.pool, "Rise market PDA mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Rise market PDA mismatch",
+    });
   }
 
   return {
@@ -216,8 +224,7 @@ async function build(
   accounts: ResolvedTokenAccounts,
 ): Promise<ProtocolSwap> {
   if (request.amount.kind !== "exactIn") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "rise-rich",
       mode: request.amount.kind,
       message: "Rise exposes native exact-input swaps only",
@@ -231,8 +238,7 @@ async function build(
     request.inputMint === keys.mintToken && request.outputMint === keys.mintMain;
 
   if (!buy && !sell) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested pair does not match Rise market",
     });
@@ -283,10 +289,10 @@ async function build(
   const logPda = await findRiseRichMayflowerLogPda();
 
   if (log.bytes[16] !== logPda[1] || log.view.getBigUint64(8, true) > U64_MAX - 3n) {
-    invalidAccount(
-      keys.mayLogAccount,
-      "Invalid Mayflower log bump or exhausted event counter",
-    );
+    throw new InvalidAccountError({
+      address: keys.mayLogAccount,
+      message: "Invalid Mayflower log bump or exhausted event counter",
+    });
   }
   if (group.bytes[72] !== 0 || mayTenant.bytes[73] !== 0) {
     unsupported("pending Mayflower authority transfer");
@@ -314,7 +320,10 @@ async function build(
     linearPda[0] !== readAddress(meta.bytes, 136) ||
     cashEscrowPda[0] !== keys.cashEscrow
   ) {
-    invalidAccount(request.pool, "Rise/Mayflower PDA mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Rise/Mayflower PDA mismatch",
+    });
   }
   if (
     readAddress(meta.bytes, 8) !== keys.mintMain ||
@@ -323,7 +332,10 @@ async function build(
     readAddress(linear.bytes, 8) !== keys.marketMeta ||
     readAddress(group.bytes, 40) !== keys.tenant
   ) {
-    invalidAccount(request.pool, "Rise/Mayflower linkage mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Rise/Mayflower linkage mismatch",
+    });
   }
   if (
     meta.view.getUint16(330, true) !== 65535 ||
@@ -351,7 +363,10 @@ async function build(
     unsupported("Token-2022");
   }
   if (main.decimals !== meta.bytes[329] || main.decimals !== keys.marketData.bytes[136]) {
-    invalidAccount(keys.mintMain, "Rise main-token decimals mismatch");
+    throw new InvalidAccountError({
+      address: keys.mintMain,
+      message: "Rise main-token decimals mismatch",
+    });
   }
 
   const supply = linear.view.getBigUint64(40, true);
@@ -368,13 +383,16 @@ async function build(
     mintView.getUint32(0, true) !== 1 ||
     readAddress(mintAccount.data, 4) !== keys.marketMeta
   ) {
-    invalidAccount(
-      keys.mintToken,
-      "Rise mint authority is not the Mayflower market metadata PDA",
-    );
+    throw new InvalidAccountError({
+      address: keys.mintToken,
+      message: "Rise mint authority is not the Mayflower market metadata PDA",
+    });
   }
   if (mint.supply !== supply) {
-    invalidAccount(keys.mintToken, "Rise mint supply disagrees with Mayflower state");
+    throw new InvalidAccountError({
+      address: keys.mintToken,
+      message: "Rise mint supply disagrees with Mayflower state",
+    });
   }
 
   const floor = decimal(linear.bytes, 104);
@@ -399,10 +417,16 @@ async function build(
   const platformShare = BigInt(mayTenant.view.getUint32(74, true));
 
   if (feeRate >= 1_000_000n || platformShare > 1_000_000n) {
-    invalidAccount(readAddress(meta.bytes, 104), "Invalid Mayflower fee rate");
+    throw new InvalidAccountError({
+      address: readAddress(meta.bytes, 104),
+      message: "Invalid Mayflower fee rate",
+    });
   }
   if (BigInt(keys.marketData.view.getUint32(buy ? 169 : 201, true)) !== feeRate) {
-    invalidAccount(request.pool, "Rise governance and Mayflower fee rates disagree");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Rise governance and Mayflower fee rates disagree",
+    });
   }
 
   const amount = request.amount.amountIn;
@@ -418,8 +442,7 @@ async function build(
     }
   } else {
     if (amount > supply) {
-      fail({
-        code: "INSUFFICIENT_LIQUIDITY",
+      throw new InsufficientLiquidityError({
         protocol: "rise-rich",
         message: "Rise token input exceeds issued supply",
       });
@@ -433,16 +456,14 @@ async function build(
     output = gross - fee;
 
     if (gross > liquidity) {
-      fail({
-        code: "INSUFFICIENT_LIQUIDITY",
+      throw new InsufficientLiquidityError({
         protocol: "rise-rich",
         message: "Rise sell exceeds available liquidity",
       });
     }
   }
   if ((buy ? amount : output) < 700_000n) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "amount",
       message:
         "Rise WSOL swaps require at least 700,000 lamports of buy input or net sell output",
@@ -452,7 +473,10 @@ async function build(
   assertAmount(output, "expectedAmountOut");
 
   if (keys.marketData.bytes[484]! > 25) {
-    invalidAccount(request.pool, "Rise creator revenue share exceeds 25 percent");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Rise creator revenue share exceeds 25 percent",
+    });
   }
 
   const vaultAddresses = [
@@ -482,7 +506,10 @@ async function build(
 
   for (const [index, offset] of [200, 232, 264].entries()) {
     if (settlementVaults[index]![0] !== readAddress(meta.bytes, offset)) {
-      invalidAccount(keys.marketMeta, "Mayflower vault PDA mismatch");
+      throw new InvalidAccountError({
+        address: keys.marketMeta,
+        message: "Mayflower vault PDA mismatch",
+      });
     }
   }
   for (const vaultAddress of vaultAddresses) {
@@ -494,17 +521,26 @@ async function build(
     );
 
     if (observed.amount + (buy ? amount : fee) > U64_MAX) {
-      invalidAccount(vaultAddress, "Rise settlement balance could overflow u64");
+      throw new InvalidAccountError({
+        address: vaultAddress,
+        message: "Rise settlement balance could overflow u64",
+      });
     }
     if (
       vaultAddress === readAddress(meta.bytes, 200) &&
       (observed.authority !== keys.marketMeta || observed.amount < liquidity)
     ) {
-      invalidAccount(vaultAddress, "Mayflower vault authority or liquidity mismatch");
+      throw new InvalidAccountError({
+        address: vaultAddress,
+        message: "Mayflower vault authority or liquidity mismatch",
+      });
     }
   }
   if (buy && (supply + output > U64_MAX || liquidity + amount - fee > U64_MAX)) {
-    invalidAccount(readAddress(meta.bytes, 136), "Mayflower state would overflow u64");
+    throw new InvalidAccountError({
+      address: readAddress(meta.bytes, 136),
+      message: "Mayflower state would overflow u64",
+    });
   }
 
   const outputState = request.snapshot.accounts[accounts.output];
@@ -521,7 +557,10 @@ async function build(
       output >
       U64_MAX
   ) {
-    invalidAccount(accounts.output, "Rise output balance would overflow u64");
+    throw new InvalidAccountError({
+      address: accounts.output,
+      message: "Rise output balance would overflow u64",
+    });
   }
 
   const quote = {

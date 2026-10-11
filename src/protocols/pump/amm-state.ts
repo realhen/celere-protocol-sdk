@@ -1,16 +1,16 @@
+import { InvalidAccountError, UnsupportedPoolFeatureError } from "../errors";
 import { SYSTEM_PROGRAM_ADDRESS as AMM_SYSTEM_PROGRAM } from "@solana-program/system";
-import { WRAPPED_SOL_MINT as AMM_QUOTE_MINT } from "../../accounts/tokens";
+import { WRAPPED_SOL_MINT as AMM_QUOTE_MINT } from "../accounts/tokens";
 import type { Address } from "@solana/kit";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
-import type { AccountSnapshot, SnapshotAccount } from "../../core/types";
+
+import { requireAccount } from "../accounts/snapshot";
+import type { AccountSnapshot, SnapshotAccount } from "../types";
 import {
-  invalidAccount,
   readU64,
   readAddress,
   accountDataView,
   matchesDiscriminator,
-} from "../shared/accounts";
+} from "../accounts/bytes";
 
 import { readPumpFeeSchedule } from "./fees";
 import { PUMP_AMM_PROGRAM, PUMP_FEE_PROGRAM as AMM_FEE_PROGRAM } from "./constants";
@@ -40,8 +40,7 @@ export interface PumpAmmFeeRates {
 }
 
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "pump-amm",
     feature,
     message: `Pump AMM ${feature} is not supported by this release`,
@@ -57,7 +56,10 @@ function discriminator(
     account.data.length < minimumSize ||
     !matchesDiscriminator(account.data, expected)
   ) {
-    invalidAccount(account.address, "Invalid Pump AMM discriminator or account size");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid Pump AMM discriminator or account size",
+    });
   }
 }
 
@@ -78,7 +80,10 @@ export function readAmmPool(snapshot: AccountSnapshot, pool: Address): PumpAmmPo
   }
 
   if ((account.data[269] ?? 0) > 1 || (account.data[270] ?? 0) > 1) {
-    invalidAccount(account.address, "Invalid Pump AMM pool boolean flag");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid Pump AMM pool boolean flag",
+    });
   }
 
   const quoteMint = readAddress(account.data, 75);
@@ -121,11 +126,17 @@ export function readAmmGlobal(
     readAddress(account.data, 643 + 32 * index),
   ).find((recipient) => recipient !== AMM_SYSTEM_PROGRAM);
   if (buybackRecipient === undefined || readU64(account.data, 899) > 10_000n) {
-    invalidAccount(account.address, "Invalid Pump AMM buyback configuration");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid Pump AMM buyback configuration",
+    });
   }
 
   if ((account.data[940] ?? 0) > 1) {
-    invalidAccount(account.address, "Invalid Pump AMM configurable creator fee flag");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid Pump AMM configurable creator fee flag",
+    });
   }
 
   return {
@@ -177,7 +188,10 @@ export function readAmmFees(
         : rates.creatorBps;
   const result = { ...rates, creatorBps };
   if (result.lpBps + result.protocolBps + result.creatorBps >= 10_000n) {
-    invalidAccount(account.address, "Unsupported Pump AMM total fee rate");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Unsupported Pump AMM total fee rate",
+    });
   }
 
   return result;

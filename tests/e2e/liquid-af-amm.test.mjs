@@ -4,14 +4,7 @@ import { address } from "@solana/kit";
 import { buildSwapInstructions, getSwapRequirements } from "../../dist/index.js";
 import { liquidAfAmmFixture, LIQUID_AF_AMM_PROGRAM } from "../fixtures/liquid-af-amm.mjs";
 const owner = address("11111111111111111111111111111112");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return result.value;
-}
+
 test("consumer builds three qualified LiquidAF AMM native swaps for USDC and wrapped SOL", async () => {
   for (const nativeQuote of [false, true])
     for (const reverse of [false, true])
@@ -23,8 +16,8 @@ test("consumer builds three qualified LiquidAF AMM native swaps for USDC and wra
             ? { kind: "exactOut", amountOut: 1_000_001n }
             : f.request.amount,
         };
-        assert.equal(value(await getSwapRequirements(request)).complete, true);
-        const build = value(await buildSwapInstructions(request));
+        assert.equal((await getSwapRequirements(request)).complete, true);
+        const build = await buildSwapInstructions(request);
         assert.equal(build.protocol, "liquid-af-amm");
         assert.equal(build.swapInstructions[0].programAddress, LIQUID_AF_AMM_PROGRAM);
         assert.equal(build.swapInstructions[0].accounts.length, 34);
@@ -51,15 +44,13 @@ test("consumer builds three qualified LiquidAF AMM native swaps for USDC and wra
 });
 test("LiquidAF AMM exposes missing state dependencies without fetching", async () => {
   const f = await liquidAfAmmFixture(owner);
-  const discovery = value(
-    await getSwapRequirements({
-      ...f.request,
-      snapshot: {
-        ...f.request.snapshot,
-        accounts: { [f.pool]: f.request.snapshot.accounts[f.pool] },
-      },
-    }),
-  );
+  const discovery = await getSwapRequirements({
+    ...f.request,
+    snapshot: {
+      ...f.request.snapshot,
+      accounts: { [f.pool]: f.request.snapshot.accounts[f.pool] },
+    },
+  });
   assert.equal(discovery.complete, false);
   assert.ok(discovery.missing.some((account) => account.address === f.globalConfig));
 });
@@ -132,8 +123,12 @@ test("LiquidAF AMM rejects unqualified state, malformed fees, transfer extension
       f.request.amount = { kind: "exactOut", amountOut: 123_456_789n };
       expected = "UNSUPPORTED_SWAP_MODE";
     }
-    const result = await buildSwapInstructions(f.request);
-    assert.equal(result.ok, false, variant);
-    assert.equal(result.error.code, expected, variant);
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.equal(error.code, expected, variant);
+        return true;
+      },
+    );
   }
 });

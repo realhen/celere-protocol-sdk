@@ -1,3 +1,8 @@
+import {
+  InsufficientLiquidityError,
+  compileTransaction,
+  buildSwapInstructions,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -8,19 +13,12 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { compileTransaction, buildSwapInstructions } from "../../dist/index.js";
+
 import { metadaoFixture, METADAO_PROGRAM } from "../fixtures/metadao.mjs";
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native MetaDAO tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const r = await fetch(endpoint, {
     method: "POST",
@@ -61,16 +59,14 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -118,13 +114,11 @@ test(
         inputBalance: amountIn + 1_000_000n,
         label: `native:${index}`,
       });
-      const build = value(
-        await buildSwapInstructions({
-          ...f.request,
-          amount: { kind: "exactIn", amountIn },
-          slippageBps: 0,
-        }),
-      );
+      const build = await buildSwapInstructions({
+        ...f.request,
+        amount: { kind: "exactIn", amountIn },
+        slippageBps: 0,
+      });
       const initialData = f.request.snapshot.accounts[f.pool].data;
       const initialView = new DataView(initialData.buffer);
       const baseBefore = initialView.getBigUint64(117, true);
@@ -191,9 +185,7 @@ test(
           reverse,
           label: `rejection:${reverse}:${exhausted}`,
         });
-        const build = value(
-          await buildSwapInstructions({ ...f.request, slippageBps: 0 }),
-        );
+        const build = await buildSwapInstructions({ ...f.request, slippageBps: 0 });
         const reserve = exhausted ? 0n : reverse ? 500_000_000n : 1_000_000_000n;
         new DataView(f.request.snapshot.accounts[f.pool].data.buffer).setBigUint64(
           reverse ? 109 : 117,
@@ -217,9 +209,14 @@ test(
         assert.equal(await tokenAmount(f.request.tokenAccounts.output), outputBefore);
         assert.deepEqual(await poolData(f), stateBefore);
         if (exhausted) {
-          const offline = await buildSwapInstructions(f.request);
-          assert.equal(offline.ok, false);
-          assert.equal(offline.error.code, "INSUFFICIENT_LIQUIDITY");
+          await assert.rejects(
+            () => buildSwapInstructions(f.request),
+            (error) => {
+              assert.ok(error instanceof InsufficientLiquidityError);
+              assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+              return true;
+            },
+          );
         }
       }
   },

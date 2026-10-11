@@ -1,21 +1,24 @@
 /** Bigint adaptation of Meteora's MIT damm-v2-sdk; see NOTICE.md. */
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import { UnsupportedPoolFeatureError, InsufficientLiquidityError } from "../errors";
 import type { Address } from "@solana/kit";
 import {
-  invalidAccount,
   accountDataView,
   readAddress,
   readU128,
   matchesDiscriminator,
-} from "../shared/accounts";
+} from "../accounts/bytes";
 import {
   readMint,
   readTokenAccount,
   TOKEN_2022_PROGRAM,
   TOKEN_PROGRAM,
-} from "../../accounts/tokens";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -23,7 +26,7 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 
 import {
   METEORA_DAMM_V2_PROGRAM,
@@ -65,8 +68,7 @@ interface PoolState {
 }
 
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "meteora-damm-v2",
     feature,
     message: `Meteora DAMM v2 ${feature} is not qualified for this release`,
@@ -74,7 +76,7 @@ function unsupported(feature: string): never {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "meteora-damm-v2", message });
+  throw new InsufficientLiquidityError({ protocol: "meteora-damm-v2", message });
 }
 
 function decodePool(request: SwapRequest): PoolState {
@@ -86,10 +88,10 @@ function decodePool(request: SwapRequest): PoolState {
   );
   const data = account.data;
   if (data.length !== 1112 || !matchesDiscriminator(data, POOL_DISCRIMINATOR)) {
-    invalidAccount(
-      request.pool,
-      "Unsupported Meteora DAMM v2 pool layout or discriminator",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported Meteora DAMM v2 pool layout or discriminator",
+    });
   }
 
   const view = accountDataView(data);
@@ -102,7 +104,10 @@ function decodePool(request: SwapRequest): PoolState {
     data[486]! > 1 ||
     data[696]! > 1
   ) {
-    invalidAccount(request.pool, "Unknown Meteora DAMM v2 pool flags or version");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown Meteora DAMM v2 pool flags or version",
+    });
   }
   if (data[484] !== 0 && data[484] !== 1) {
     unsupported("compounding or unknown fee collection mode");
@@ -118,7 +123,10 @@ function decodePool(request: SwapRequest): PoolState {
     data[480] === 0 ? request.snapshot.slot : request.snapshot.unixTimestamp;
   const activationPoint = view.getBigUint64(472, true);
   if (data[481] !== 0 || currentPoint < activationPoint) {
-    invalidAccount(request.pool, "Meteora DAMM v2 swaps are disabled or not activated");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Meteora DAMM v2 swaps are disabled or not activated",
+    });
   }
 
   // Evaluate the native fee schedule at the caller's activation clock.
@@ -128,7 +136,10 @@ function decodePool(request: SwapRequest): PoolState {
   const reduction = view.getBigUint64(32, true);
   const staticFee = periodCount === 0n && periodFrequency === 0n && reduction === 0n;
   if (!staticFee && (periodCount === 0n || periodFrequency === 0n || reduction === 0n)) {
-    invalidAccount(request.pool, "Malformed Meteora DAMM v2 fee scheduler");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Malformed Meteora DAMM v2 fee scheduler",
+    });
   }
   if (data[16] === 1 && !staticFee) {
     unsupported("exponential fee scheduler");
@@ -142,7 +153,10 @@ function decodePool(request: SwapRequest): PoolState {
     data[50]! > 100 ||
     view.getUint16(54, true) !== 0
   ) {
-    invalidAccount(request.pool, "Invalid Meteora DAMM v2 fee configuration");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Meteora DAMM v2 fee configuration",
+    });
   }
 
   const elapsedPeriods = staticFee
@@ -168,7 +182,10 @@ function decodePool(request: SwapRequest): PoolState {
     feeNumerator: cliffFee - appliedPeriods * reduction,
   };
   if (pool.mintA === pool.mintB || pool.vaultA === pool.vaultB) {
-    invalidAccount(request.pool, "Pool token mints and vaults must be distinct");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Pool token mints and vaults must be distinct",
+    });
   }
   if (
     pool.sqrtMinPrice < MIN_SQRT_PRICE ||
@@ -177,14 +194,16 @@ function decodePool(request: SwapRequest): PoolState {
     pool.sqrtPrice < pool.sqrtMinPrice ||
     pool.sqrtPrice > pool.sqrtMaxPrice
   ) {
-    invalidAccount(request.pool, "Invalid Meteora DAMM v2 sqrt price range");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Meteora DAMM v2 sqrt price range",
+    });
   }
   if (!(
     (request.inputMint === pool.mintA && request.outputMint === pool.mintB) ||
     (request.inputMint === pool.mintB && request.outputMint === pool.mintA)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested token pair does not match the pool",
     });
@@ -303,10 +322,16 @@ async function build(
   ] as const) {
     const expectedVault = await getMeteoraDammV2TokenVaultAddress(mint, request.pool);
     if (vault !== expectedVault) {
-      invalidAccount(vault, "Invalid Meteora DAMM v2 vault address");
+      throw new InvalidAccountError({
+        address: vault,
+        message: "Invalid Meteora DAMM v2 vault address",
+      });
     }
     if (readMint(request.snapshot, mint).tokenProgram !== program) {
-      invalidAccount(request.pool, "Pool token program flag does not match its mint");
+      throw new InvalidAccountError({
+        address: request.pool,
+        message: "Pool token program flag does not match its mint",
+      });
     }
   }
 
@@ -325,16 +350,19 @@ async function build(
     POOL_AUTHORITY,
   );
   if (vaultA.amount < pool.protocolFeeA || vaultB.amount < pool.protocolFeeB) {
-    invalidAccount(request.pool, "Accrued protocol fees exceed pool vault balances");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Accrued protocol fees exceed pool vault balances",
+    });
   }
   if (
     (pool.reserveA !== null && pool.reserveA > vaultA.amount - pool.protocolFeeA) ||
     (pool.reserveB !== null && pool.reserveB > vaultB.amount - pool.protocolFeeB)
   ) {
-    invalidAccount(
-      request.pool,
-      "Recorded pool reserves exceed available vault balances",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Recorded pool reserves exceed available vault balances",
+    });
   }
 
   // Check settlement against both observed balances and any recorded reserve limits.

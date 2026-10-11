@@ -41,16 +41,14 @@ const workerScript = `
   for (const request of workerData.requests) {
     const discovery = await (request.hops ? sdk.getRouteRequirements(request) : sdk.getSwapRequirements(request));
     const build = await (request.hops ? sdk.buildRouteInstructions(request) : sdk.buildSwapInstructions(request));
-    const compiled = build.ok
-      ? sdk.compileTransaction({
-          instructions: build.value.instructions,
+    const compiled = sdk.compileTransaction({
+          instructions: build.instructions,
           feePayer: request.payer,
           lifetime: {
             blockhash: "11111111111111111111111111111111",
             lastValidBlockHeight: 1n,
           },
-        })
-      : undefined;
+        });
     results.push({ discovery, build, compiled });
   }
   parentPort.postMessage(results);
@@ -184,22 +182,15 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
       index,
       { discovery, build: built, compiled },
     ] of originalResults.entries()) {
-      for (const result of [discovery, built, compiled]) {
-        assert.equal(
-          result?.ok,
-          true,
-          JSON.stringify(result, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-        );
-      }
-      assert.equal(discovery.value.complete, true);
-      assert.equal(built.value.protocol, fixtures[index][0]);
-      assert.equal(built.value.quote.kind, "exactIn");
-      assert.ok(built.value.instructions[0].data instanceof Uint8Array);
-      assert.ok(compiled.value.wireBytes instanceof Uint8Array);
-      assert.ok(compiled.value.byteLength <= 1232);
-      assert.deepEqual(compiled.value.requiredSigners, [fixtures[index][1].owner]);
+      assert.equal(discovery.complete, true);
+      assert.equal(built.protocol, fixtures[index][0]);
+      assert.equal(built.quote.kind, "exactIn");
+      assert.ok(built.instructions[0].data instanceof Uint8Array);
+      assert.ok(compiled.wireBytes instanceof Uint8Array);
+      assert.ok(compiled.byteLength <= 1232);
+      assert.deepEqual(compiled.requiredSigners, [fixtures[index][1].owner]);
       assert.ok(
-        Object.values(compiled.value.transaction.signatures).every(
+        Object.values(compiled.transaction.signatures).every(
           (signature) => signature === null,
         ),
       );
@@ -259,4 +250,40 @@ test("root sender exports bundle for a browser worker without Node shims", async
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("worker consumers explicitly serialize named error metadata for the receiving application", async () => {
+  const sdkModule = new URL("../../dist/index.js", import.meta.url).href;
+  const result = await new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL(
+        `data:text/javascript,${encodeURIComponent(`
+      import { parentPort, workerData } from "node:worker_threads";
+      const sdk = await import(workerData.module);
+      try {
+        await sdk.buildSwapInstructions({});
+      } catch (error) {
+        if (!(error instanceof sdk.InvalidRequestError)) throw error;
+        parentPort.postMessage({
+          clonedError: error,
+          serialized: { name: error.name, message: error.message, code: error.code, field: error.field },
+        });
+      }
+    `)}`,
+      ),
+      { workerData: { module: sdkModule } },
+    );
+    worker.once("message", resolve);
+    worker.once("error", reject);
+    worker.once("exit", (code) => {
+      if (code !== 0) reject(new Error(`Worker exited ${code}`));
+    });
+  });
+  assert.ok(result.clonedError instanceof Error);
+  assert.equal(result.clonedError.code, undefined);
+  assert.equal(result.clonedError.field, undefined);
+  assert.equal(result.serialized.name, "InvalidRequestError");
+  assert.equal(result.serialized.code, "INVALID_REQUEST");
+  assert.equal(typeof result.serialized.field, "string");
+  assert.equal(typeof result.serialized.message, "string");
 });

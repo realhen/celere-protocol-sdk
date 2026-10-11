@@ -4,7 +4,7 @@ Celere-authored code is licensed under MIT. Components adapted or redistributed 
 
 ## Raydium CPMM
 
-The native account layout, instruction layout, and integer fee/swap arithmetic in `src/protocols/raydium/cpmm.ts` were adapted to a stateless TypeScript interface from [raydium-io/raydium-cp-swap](https://github.com/raydium-io/raydium-cp-swap/tree/b3187ae53a1b95a201f855a59024a12ca8f5b51a), revision `b3187ae53a1b95a201f855a59024a12ca8f5b51a`. This component remains subject to Apache-2.0; see `licenses/RAYDIUM-LICENSE`. Changes include caller-owned snapshots, structured errors, protocol-neutral requests, and portable instruction output.
+The native account layout, instruction layout, and integer fee/swap arithmetic in `src/protocols/raydium/cpmm.ts` were adapted to a stateless TypeScript interface from [raydium-io/raydium-cp-swap](https://github.com/raydium-io/raydium-cp-swap/tree/b3187ae53a1b95a201f855a59024a12ca8f5b51a), revision `b3187ae53a1b95a201f855a59024a12ca8f5b51a`. This component remains subject to Apache-2.0; see `licenses/RAYDIUM-LICENSE`. Changes include caller-owned snapshots, typed error classes, protocol-neutral requests, and portable instruction output.
 
 ## Raydium AMM v4 and CLMM
 
@@ -20,7 +20,7 @@ The layouts, vault share conversions, locked-profit accounting, and constant-pro
 
 ## Meteora DAMM v2
 
-The native layout and integer formulas in `src/protocols/meteora/damm-v2.ts` are adapted from [MeteoraAg/damm-v2-sdk](https://github.com/MeteoraAg/damm-v2-sdk/tree/79ebbfe59a225e641a2f37cd03404f26de1b0c8e), revision `79ebbfe59a225e641a2f37cd03404f26de1b0c8e`, under MIT. See `licenses/METEORA-LICENSE`. Changes include bigint arithmetic, stateless raw-account decoding, portable instructions, structured errors, and explicit rejection of unqualified fee models. The SDK is not a runtime dependency; no code from the separately licensed on-chain program is redistributed.
+The native layout and integer formulas in `src/protocols/meteora/damm-v2.ts` are adapted from [MeteoraAg/damm-v2-sdk](https://github.com/MeteoraAg/damm-v2-sdk/tree/79ebbfe59a225e641a2f37cd03404f26de1b0c8e), revision `79ebbfe59a225e641a2f37cd03404f26de1b0c8e`, under MIT. See `licenses/METEORA-LICENSE`. Changes include bigint arithmetic, stateless raw-account decoding, portable instructions, typed error classes, and explicit rejection of unqualified fee models. The SDK is not a runtime dependency; no code from the separately licensed on-chain program is redistributed.
 
 ## Meteora DLMM
 
@@ -30,7 +30,7 @@ The account layouts, bin traversal, integer prices, and fee formulas in `src/pro
 
 The layouts and integer arithmetic in `src/protocols/pump/` reference the MIT-declared official packages `@pump-fun/pump-sdk` version `4.0.0` (package gitHead `b168cc2e819e18b5e38c40ac62682153013db71b`) and `@pump-fun/pump-swap-sdk` version `2.1.0` (package gitHead `0bc59090bbd0b8d6c27b8df72d52e30bfc069c3b`). Public ABI facts reference [Pump's protocol documentation](https://github.com/pump-fun/pump-public-docs/tree/2293f9a66c654e9fe82dc5e8f4618538f24bb35f) at revision `2293f9a66c654e9fe82dc5e8f4618538f24bb35f`. This includes v3 curve trades, v2 pool trades, retained fee sweeps, synthetic migration, and native multi-hop fee allocation.
 
-The reviewed npm distributions declare MIT and identify Pump Fun as author, but contain no standalone license file; `licenses/PUMP-LICENSE` records attribution and standard MIT terms. Neither upstream SDK is a runtime dependency and no full IDL is redistributed. Adaptations use native bigint, strict caller-owned snapshots, deterministic account selection, structured errors, and native execution guarantees. Fee rounding and version behavior are qualified against deployed programs in Surfpool, including cases where the published quote helper differs from execution.
+The reviewed npm distributions declare MIT and identify Pump Fun as author, but contain no standalone license file; `licenses/PUMP-LICENSE` records attribution and standard MIT terms. Neither upstream SDK is a runtime dependency and no full IDL is redistributed. Adaptations use native bigint, strict caller-owned snapshots, deterministic account selection, typed error classes, and native execution guarantees. Fee rounding and version behavior are qualified against deployed programs in Surfpool, including cases where the published quote helper differs from execution.
 
 ## Moonshot / Moonit
 

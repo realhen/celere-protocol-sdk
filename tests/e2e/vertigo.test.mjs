@@ -1,19 +1,18 @@
+import {
+  InvalidAccountError,
+  UnsupportedSwapModeError,
+  InsufficientLiquidityError,
+  MissingAccountsError,
+  UnsupportedPoolFeatureError,
+  buildSwapInstructions,
+  getSwapRequirements,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { generateKeyPairSigner } from "@solana/kit";
-import { buildSwapInstructions, getSwapRequirements } from "../../dist/index.js";
+
 import { vertigoFixture, putU128, VERTIGO_PROGRAM } from "../fixtures/vertigo.mjs";
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
 
 test("offline Vertigo consumer discovers account snapshots and builds portable native exact-input instructions", async () => {
   const signer = await generateKeyPairSigner();
@@ -24,12 +23,10 @@ test("offline Vertigo consumer discovers account snapshots and builds portable n
   try {
     for (const reverse of [false, true]) {
       const fixture = await vertigoFixture(signer.address, { reverse });
-      const unknown = value(
-        await getSwapRequirements({
-          ...fixture.request,
-          snapshot: { ...fixture.request.snapshot, accounts: {} },
-        }),
-      );
+      const unknown = await getSwapRequirements({
+        ...fixture.request,
+        snapshot: { ...fixture.request.snapshot, accounts: {} },
+      });
       assert.equal(unknown.protocol, null);
       assert.equal(unknown.missing[0].address, fixture.pool);
       const partial = {
@@ -39,7 +36,7 @@ test("offline Vertigo consumer discovers account snapshots and builds portable n
           accounts: { [fixture.pool]: fixture.request.snapshot.accounts[fixture.pool] },
         },
       };
-      const discovered = value(await getSwapRequirements(partial));
+      const discovered = await getSwapRequirements(partial);
       assert.equal(discovered.protocol, "vertigo");
       for (const address of [
         fixture.mintA,
@@ -48,11 +45,16 @@ test("offline Vertigo consumer discovers account snapshots and builds portable n
         fixture.vaultB,
       ])
         assert.ok(discovered.missing.some((item) => item.address === address));
-      const missing = await buildSwapInstructions(partial);
-      assert.equal(missing.ok, false);
-      assert.equal(missing.error.code, "MISSING_ACCOUNTS");
-      assert.equal(value(await getSwapRequirements(fixture.request)).complete, true);
-      const build = value(await buildSwapInstructions(fixture.request));
+      await assert.rejects(
+        () => buildSwapInstructions(partial),
+        (error) => {
+          assert.ok(error instanceof MissingAccountsError);
+          assert.equal(error.code, "MISSING_ACCOUNTS");
+          return true;
+        },
+      );
+      assert.equal((await getSwapRequirements(fixture.request)).complete, true);
+      const build = await buildSwapInstructions(fixture.request);
       assert.equal(build.protocol, "vertigo");
       assert.equal(build.quote.kind, "exactIn");
       assert.equal(build.execution.mayPartiallyFill, false);
@@ -211,21 +213,55 @@ test("Vertigo consumer rejects unsupported execution modes, launch fees and inva
   ]) {
     const fixture = await vertigoFixture(signer.address);
     change(fixture);
-    const result = await buildSwapInstructions(fixture.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, expected, result.error.message);
-    assert.deepEqual(structuredClone(result), result);
+    await assert.rejects(
+      () => buildSwapInstructions(fixture.request),
+      (error) => {
+        assert.equal(error.code, expected, error.message);
+        const expectedClass = {
+          INVALID_ACCOUNT: InvalidAccountError,
+          INSUFFICIENT_LIQUIDITY: InsufficientLiquidityError,
+          UNSUPPORTED_POOL_FEATURE: UnsupportedPoolFeatureError,
+          UNSUPPORTED_SWAP_MODE: UnsupportedSwapModeError,
+        }[expected];
+        assert.ok(error instanceof expectedClass);
+        if (error instanceof InvalidAccountError) {
+          assert.ok(error.address in fixture.request.snapshot.accounts);
+        } else {
+          assert.equal(error.protocol, "vertigo");
+        }
+        if (error instanceof UnsupportedPoolFeatureError) {
+          assert.equal(typeof error.feature, "string");
+          assert.ok(error.feature.length > 0);
+        }
+        if (error instanceof UnsupportedSwapModeError) {
+          assert.equal(error.mode, "exactOut");
+        }
+        const serialized = { ...error, message: error.message };
+        assert.deepEqual(structuredClone(serialized), serialized);
+        return true;
+      },
+    );
   }
   const token2022 = await vertigoFixture(signer.address);
   for (const address of [token2022.mintA, token2022.vaultA, token2022.userA])
     token2022.request.snapshot.accounts[address].owner = TOKEN_2022_PROGRAM_ADDRESS;
-  const unsupported = await buildSwapInstructions(token2022.request);
-  assert.equal(unsupported.ok, false);
-  assert.equal(unsupported.error.code, "UNSUPPORTED_POOL_FEATURE");
-  assert.equal(unsupported.error.feature, "token-2022");
+  await assert.rejects(
+    () => buildSwapInstructions(token2022.request),
+    (error) => {
+      assert.ok(error instanceof UnsupportedPoolFeatureError);
+      assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+      assert.equal(error.feature, "token-2022");
+      return true;
+    },
+  );
   const reverse = await vertigoFixture(signer.address, { reverse: true });
   putU128(reverse.request.snapshot.accounts[reverse.pool].data, 105, 0n);
-  const depleted = await buildSwapInstructions(reverse.request);
-  assert.equal(depleted.ok, false);
-  assert.equal(depleted.error.code, "INSUFFICIENT_LIQUIDITY");
+  await assert.rejects(
+    () => buildSwapInstructions(reverse.request),
+    (error) => {
+      assert.ok(error instanceof InsufficientLiquidityError);
+      assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+      return true;
+    },
+  );
 });

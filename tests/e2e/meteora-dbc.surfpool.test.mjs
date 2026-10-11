@@ -17,16 +17,7 @@ import { meteoraDbcFixture, METEORA_DBC_PROGRAM } from "../fixtures/meteora-dbc.
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native Meteora DBC tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -67,16 +58,14 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -128,7 +117,7 @@ test(
               ? { kind, amountIn: 300000003n }
               : { kind, amountOut: 200000003n };
           await install(f, signer);
-          const built = value(await buildSwapInstructions({ ...f.request, amount }));
+          const built = await buildSwapInstructions({ ...f.request, amount });
           const signature = await send(built, signer);
           const receipt = await rpc("getTransaction", [
             signature,
@@ -206,7 +195,7 @@ test(
             kind === "exactIn"
               ? { kind, amountIn: 1000003n }
               : { kind, amountOut: 1000003n };
-          const built = value(await buildSwapInstructions({ ...f.request, amount }));
+          const built = await buildSwapInstructions({ ...f.request, amount });
           if (failure === "slippage")
             putU128(
               f.request.snapshot.accounts[f.pool].data,
@@ -269,7 +258,7 @@ test(
         label: `linear:${reverse}`,
       });
       await install(f, signer);
-      const built = value(await buildSwapInstructions(f.request));
+      const built = await buildSwapInstructions(f.request);
       const signature = await send(built, signer);
       const receipt = await rpc("getTransaction", [
         signature,
@@ -325,7 +314,7 @@ test(
           snapshot: { ...f.request.snapshot, slot, unixTimestamp },
         };
         await install(f, signer);
-        const built = value(await buildSwapInstructions(request));
+        const built = await buildSwapInstructions(request);
         const signature = await send(built, signer);
         const receipt = await rpc("getTransaction", [
           signature,

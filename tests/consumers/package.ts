@@ -5,6 +5,12 @@ import { boopAdapter } from "celere-protocol-sdk/protocols/boop";
 import { heavenAdapter } from "celere-protocol-sdk/protocols/heaven";
 import { metadaoAdapter } from "celere-protocol-sdk/protocols/metadao";
 import { meteoraDbcAdapter } from "celere-protocol-sdk/protocols/meteora-dbc";
+import type {
+  ProtocolError,
+  ProtocolErrorCode,
+  ValidationErrorCode,
+  TransactionErrorCode,
+} from "celere-protocol-sdk";
 import {
   address,
   buildSwapInstructions,
@@ -12,11 +18,12 @@ import {
   getSwapRequirements,
   fetchSwapInstructions,
   getPumpBondingCurveAddress,
-  SwapBuildError,
+  InvalidRequestError,
+  MissingAccountsError,
+  TransactionTooLargeError,
   type SwapRequest,
-  type BuildError,
 } from "celere-protocol-sdk";
-import { createProtocolSdk } from "celere-protocol-sdk/core";
+import { createProtocolSdk } from "celere-protocol-sdk/protocols";
 import { raydiumCpmmAdapter } from "celere-protocol-sdk/protocols/raydium-cpmm";
 import { createSolanaRpc } from "@solana/kit";
 import { getPumpBondingCurveAddress as getCurveFromPump } from "celere-protocol-sdk/protocols/pump";
@@ -55,9 +62,9 @@ const subset = createProtocolSdk([
   meteoraDlmmAdapter,
 ]);
 const requirements = await getSwapRequirements(request);
-const result = await buildSwapInstructions(request);
-if (result.ok) {
-  const quote = result.value.quote;
+try {
+  const result = await buildSwapInstructions(request);
+  const quote = result.quote;
   if (quote.kind === "exactOut") {
     const limit: bigint = quote.maximumAmountIn;
     void limit;
@@ -65,17 +72,22 @@ if (result.ok) {
   const tx = compileTransaction({
     feePayer: address("11111111111111111111111111111111"),
     lifetime: { blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1n },
-    instructions: result.value.instructions,
+    instructions: result.instructions,
   });
-  if (tx.ok) {
-    const bytes: Uint8Array = tx.value.wireBytes;
-    void bytes;
-  }
-} else {
-  const error: BuildError = result.error;
-  if (error.code === "MISSING_ACCOUNTS") {
+  const bytes: Uint8Array = tx.wireBytes;
+  void bytes;
+} catch (error) {
+  if (error instanceof MissingAccountsError) {
     const role: string | undefined = error.accounts[0]?.role;
-    void role;
+    const code: ProtocolErrorCode.MissingAccounts = error.code;
+    void [role, code];
+  } else if (error instanceof TransactionTooLargeError) {
+    const size: number = error.size;
+    const limit: number = error.limit;
+    const code: TransactionErrorCode.TransactionTooLarge = error.code;
+    void [size, limit, code];
+  } else {
+    throw error;
   }
 }
 // @ts-expect-error Atomic quantities must never accept floating-point numbers.
@@ -115,7 +127,7 @@ const invalidNativeArgs: RaydiumCpmmSwapBaseInputArgs = {
 };
 void invalidNativeArgs;
 
-import { createRouteSdk, type RouteRequest } from "celere-protocol-sdk/core";
+import { createRouteSdk, type RouteRequest } from "celere-protocol-sdk/protocols";
 import { pumpRouteAdapter } from "celere-protocol-sdk/protocols/pump-routes";
 import { buildRouteInstructions, getRouteRequirements } from "celere-protocol-sdk";
 import {
@@ -132,15 +144,13 @@ declare const routeRequest: RouteRequest;
 const routeSubset = createRouteSdk([pumpRouteAdapter]);
 const routeRequirements = await getRouteRequirements(routeRequest);
 const route = await buildRouteInstructions(routeRequest);
-if (route.ok) {
-  const amount: bigint | undefined = route.value.hops[0]?.quote.expectedAmountOut;
-  compiler({
-    feePayer: routeRequest.payer,
-    instructions: route.value.instructions,
-    lifetime: { blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1n },
-  });
-  void amount;
-}
+const amount: bigint | undefined = route.hops[0]?.quote.expectedAmountOut;
+compiler({
+  feePayer: routeRequest.payer,
+  instructions: route.instructions,
+  lifetime: { blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1n },
+});
+void amount;
 declare const curveSweepAccounts: PumpSweepCreatorFeeAccounts;
 declare const poolSweepAccounts: PumpAmmSweepProtocolFeeAccounts;
 void [
@@ -204,8 +214,37 @@ void [unusedSnapshot, fetched.instructions, pool, samePool];
 try {
   await fetchSwapInstructions(createSolanaRpc("http://localhost:8899"), intent);
 } catch (error) {
-  if (error instanceof SwapBuildError && error.detail.code === "INVALID_REQUEST") {
-    const field: string = error.detail.field;
+  if (error instanceof InvalidRequestError) {
+    const field: string = error.field;
     void field;
+  } else {
+    throw error;
   }
 }
+
+// Error constructors retain identity and direct metadata across focused imports.
+import type { InvalidRequestError as ProtocolInvalidRequestError } from "celere-protocol-sdk/protocols";
+import { MissingAccountsError as FocusedMissingAccountsError } from "celere-protocol-sdk/protocols";
+import {
+  TransactionTooLargeError as FocusedTransactionTooLargeError,
+  InvalidRequestError as TransactionInvalidRequestError,
+} from "celere-protocol-sdk/transactions";
+const protocolError: ProtocolError = new FocusedMissingAccountsError({
+  message: "Missing pool",
+  accounts: [],
+});
+const rootMissing: MissingAccountsError = new FocusedMissingAccountsError({
+  message: "Missing pool",
+  accounts: [],
+});
+const transactionError: TransactionTooLargeError = new FocusedTransactionTooLargeError({
+  message: "Too large",
+  size: 1233,
+  limit: 1232,
+});
+const invalidRequest: ProtocolInvalidRequestError = new TransactionInvalidRequestError({
+  field: "amount",
+  message: "Invalid amount",
+});
+const validationCode: ValidationErrorCode.InvalidRequest = invalidRequest.code;
+void [protocolError, rootMissing, transactionError, validationCode];

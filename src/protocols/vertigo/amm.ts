@@ -1,23 +1,30 @@
 /** Uses the official Vertigo SDK's MIT-declared account and instruction schema; see NOTICE.md. */
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  UnsupportedSwapModeError,
+} from "../errors";
 import type { Address } from "@solana/kit";
-import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
-import { minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../accounts/tokens";
+import { minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import {
-  invalidAccount,
   accountDataView,
   readAddress,
   readU128,
   matchesDiscriminator,
-} from "../shared/accounts";
+} from "../accounts/bytes";
 import * as instructions from "./instructions/index";
 import { VERTIGO_PROGRAM } from "./constants";
 import { getVertigoPoolAddresses } from "./pda";
@@ -41,11 +48,11 @@ interface Pool {
 }
 
 function unsupported(feature: string, message: string): never {
-  fail({ code: "UNSUPPORTED_POOL_FEATURE", protocol: "vertigo", feature, message });
+  throw new UnsupportedPoolFeatureError({ protocol: "vertigo", feature, message });
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "vertigo", message });
+  throw new InsufficientLiquidityError({ protocol: "vertigo", message });
 }
 
 function readPool(request: SwapRequest): Pool {
@@ -57,13 +64,16 @@ function readPool(request: SwapRequest): Pool {
   );
 
   if (data.length !== 229 || !matchesDiscriminator(data, POOL_DISCRIMINATOR)) {
-    invalidAccount(request.pool, "Unsupported Vertigo pool layout or discriminator");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported Vertigo pool layout or discriminator",
+    });
   }
   if (data[8] !== 1) {
-    invalidAccount(
-      request.pool,
-      "Vertigo pool is disabled or has an invalid enable flag",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Vertigo pool is disabled or has an invalid enable flag",
+    });
   }
 
   const view = accountDataView(data);
@@ -94,7 +104,10 @@ function readPool(request: SwapRequest): Pool {
     pool.mintA === pool.mintB ||
     data[196]! > 1
   ) {
-    invalidAccount(request.pool, "Invalid Vertigo curve or fee parameters");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Vertigo curve or fee parameters",
+    });
   }
   if (data[196] !== 0) {
     unsupported(
@@ -115,15 +128,13 @@ function readPool(request: SwapRequest): Pool {
     (request.inputMint === pool.mintA && request.outputMint === pool.mintB) ||
     (request.inputMint === pool.mintB && request.outputMint === pool.mintA)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested token pair does not match the Vertigo pool",
     });
   }
   if (request.amount.kind === "exactOut") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "vertigo",
       mode: "exactOut",
       message: "Vertigo buy and sell instructions only support exact input",
@@ -142,7 +153,10 @@ async function poolAddresses(request: SwapRequest, pool: Pool) {
   } = await getVertigoPoolAddresses(pool.owner, pool.mintA, pool.mintB);
 
   if (expected !== request.pool || bump !== pool.bump) {
-    invalidAccount(request.pool, "Invalid Vertigo pool PDA or bump");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Vertigo pool PDA or bump",
+    });
   }
 
   return { vaultA, vaultB };
@@ -196,16 +210,19 @@ async function build(
       (vault) => vault === tokenAccounts.input || vault === tokenAccounts.output,
     )
   ) {
-    invalidAccount(request.pool, "User token accounts must differ from Vertigo vaults");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "User token accounts must differ from Vertigo vaults",
+    });
   }
   if (
     pool.reserveA + pool.royalties + pool.protocolFees > vaultAState.amount ||
     pool.reserveB > vaultBState.amount
   ) {
-    invalidAccount(
-      request.pool,
-      "Vertigo reserves and accrued fees exceed the observed vault balances",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Vertigo reserves and accrued fees exceed the observed vault balances",
+    });
   }
 
   const virtualA = pool.reserveA + pool.shift;
@@ -214,8 +231,7 @@ async function build(
     insufficient("Vertigo curve exceeds the native u128 arithmetic range");
   }
   if (request.amount.kind !== "exactIn") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "vertigo",
       mode: "exactOut",
       message: "Vertigo only supports exact input",

@@ -187,7 +187,7 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
           `
           import assert from "node:assert/strict";
           import { createSolanaRpc, createSolanaRpcFromTransport, createDefaultRpcTransport } from "@solana/kit";
-          import { fetchSwapInstructions, SwapBuildError, getPumpBondingCurveAddress } from "celere-protocol-sdk";
+          import { fetchSwapInstructions, InvalidRequestError, UnsupportedProtocolError, getPumpBondingCurveAddress } from "celere-protocol-sdk";
           import { getPumpBondingCurveAddress as getCurve } from "celere-protocol-sdk/protocols/pump";
           const rpc = createSolanaRpc(${JSON.stringify(endpoint)});
           const request = {
@@ -199,11 +199,11 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
           };
           assert.equal(await getCurve(request.outputMint), await getPumpBondingCurveAddress(request.outputMint));
           await assert.rejects(fetchSwapInstructions(rpc, { ...request, slippageBps: 10001 }),
-            error => error instanceof SwapBuildError && error.code === "INVALID_REQUEST" && error.detail.field === "slippageBps");
+            error => error instanceof InvalidRequestError && error.code === "INVALID_REQUEST" && error.field === "slippageBps");
           // This wallet exists but is owned by System, so discovery must preserve the
           // unsupported-program detail from the offline builder after an actual RPC read.
           await assert.rejects(fetchSwapInstructions(rpc, { ...request, pool: request.owner }),
-            error => error instanceof SwapBuildError && error.code === "UNSUPPORTED_PROTOCOL");
+            error => error instanceof UnsupportedProtocolError && error.code === "UNSUPPORTED_PROTOCOL");
           // Observe real RPC discovery, then cancel just after the final batch.
           // PDA derivation yields during final discovery/build after network I/O ends.
           const transport = createDefaultRpcTransport({ url: ${JSON.stringify(endpoint)} });

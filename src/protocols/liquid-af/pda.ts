@@ -1,9 +1,9 @@
-import { WRAPPED_SOL_MINT } from "../../accounts/tokens";
+import { WRAPPED_SOL_MINT } from "../accounts/tokens";
 import {
   associatedTokenAddress,
   TOKEN_PROGRAM,
   TOKEN_2022_PROGRAM,
-} from "../../accounts/tokens";
+} from "../accounts/tokens";
 import {
   getAddressEncoder,
   getProgramDerivedAddress,

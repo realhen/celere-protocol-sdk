@@ -1,4 +1,4 @@
-import { associatedTokenAddress, TOKEN_PROGRAM } from "../../accounts/tokens";
+import { associatedTokenAddress, TOKEN_PROGRAM } from "../accounts/tokens";
 import {
   getAddressEncoder,
   getProgramDerivedAddress,

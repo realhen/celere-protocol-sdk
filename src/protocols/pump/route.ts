@@ -1,4 +1,12 @@
-import { invalidAccount } from "../shared/accounts";
+import { InvalidAccountError } from "../errors";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  UnsupportedProtocolError,
+  UnsupportedSwapModeError,
+  InsufficientLiquidityError,
+} from "../errors";
+
 import type { Instruction } from "@solana/kit";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
@@ -9,24 +17,24 @@ import {
   readMint,
   readTokenAccount,
   WRAPPED_SOL_MINT,
-} from "../../accounts/tokens";
-import { minimumOutput } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/tokens";
+import { minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   RouteAdapter,
   RouteHop,
   RouteHopQuote,
   RouteRequest,
   ProtocolRoute,
-} from "../../core/route-types";
+} from "../route-types";
 import type {
   AccountRequirement,
   ResolvedTokenAccounts,
   SwapFee,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import { quotePumpAmm } from "./amm-math";
 import { readAmmFees, readAmmGlobal, readAmmPool, type PumpAmmPool } from "./amm-state";
 import { PUMP_AMM_PROGRAM, PUMP_PROGRAM } from "./constants";
@@ -95,7 +103,10 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
       !isBuy &&
       !(hop.inputMint === state.baseMint && hop.outputMint === state.quoteMint)
     ) {
-      invalidAccount(hop.pool, "Route hop mints do not match the pool");
+      throw new InvalidAccountError({
+        address: hop.pool,
+        message: "Route hop mints do not match the pool",
+      });
     }
 
     const creator = await getPumpPoolAuthorityAddress(state.baseMint);
@@ -111,8 +122,7 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
       hop.pool !== expected ||
       state.bump !== bump
     ) {
-      fail({
-        code: "UNSUPPORTED_POOL_FEATURE",
+      throw new UnsupportedPoolFeatureError({
         protocol: "pump-amm",
         feature: "noncanonical-route-pool",
         message: "Native Pump routes require canonical migrated pools at index zero",
@@ -132,8 +142,7 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
   }
 
   if (account.owner !== PUMP_PROGRAM) {
-    fail({
-      code: "UNSUPPORTED_PROTOCOL",
+    throw new UnsupportedProtocolError({
       programAddress: account.owner,
       message: "Native Pump routes support only Pump curves and canonical PumpSwap pools",
     });
@@ -146,10 +155,10 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
     (!isBuy && hop.outputMint !== state.quoteMint) ||
     (await getPumpBondingCurveAddress(baseMint)) !== hop.pool
   ) {
-    invalidAccount(
-      hop.pool,
-      "Route hop mints or curve PDA do not match the bonding curve",
-    );
+    throw new InvalidAccountError({
+      address: hop.pool,
+      message: "Route hop mints or curve PDA do not match the bonding curve",
+    });
   }
 
   const base = readMint(request.snapshot, baseMint);
@@ -173,8 +182,7 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
 
 async function readVenues(request: RouteRequest): Promise<readonly Venue[]> {
   if (request.amount.kind !== "exactIn") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "pump-amm",
       mode: "exactOut",
       message: "Native Pump routes support exact input only",
@@ -182,8 +190,7 @@ async function readVenues(request: RouteRequest): Promise<readonly Venue[]> {
   }
 
   if (request.hops.length > 4) {
-    fail({
-      code: "UNSUPPORTED_POOL_FEATURE",
+    throw new UnsupportedPoolFeatureError({
       protocol: "pump-amm",
       feature: "route-size",
       message:
@@ -193,8 +200,7 @@ async function readVenues(request: RouteRequest): Promise<readonly Venue[]> {
 
   const venues = await Promise.all(request.hops.map((hop) => readVenue(request, hop)));
   if (venues.some((venue) => venue.isBuy !== venues[0]!.isBuy)) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "hops",
       message: "Every Pump route hop must have the same buy or sell direction",
     });
@@ -281,8 +287,7 @@ async function build(
   const pumpGlobal = readPumpGlobal(request.snapshot, common.pumpGlobal);
   const isBuy = venues[0]!.isBuy;
   if (global.disabled & (isBuy ? 8 : 16)) {
-    fail({
-      code: "UNSUPPORTED_POOL_FEATURE",
+    throw new UnsupportedPoolFeatureError({
       protocol: "pump-amm",
       feature: "disabled-swap-direction",
       message: "PumpSwap global disables this route direction",
@@ -329,10 +334,10 @@ async function build(
       associatedTokenAddress(venue.pool, venue.quoteMint, quote.tokenProgram),
     ]);
     if (baseVaultAddress !== venue.baseVault || quoteVaultAddress !== venue.quoteVault) {
-      invalidAccount(
-        venue.pool,
-        "Route vault addresses must be canonical ATAs of the venue",
-      );
+      throw new InvalidAccountError({
+        address: venue.pool,
+        message: "Route vault addresses must be canonical ATAs of the venue",
+      });
     }
 
     const baseVault = readTokenAccount(
@@ -366,8 +371,7 @@ async function build(
     let quoted: SwapQuote;
     if (venue.kind === "pool") {
       if (baseVault.amount === 0n) {
-        fail({
-          code: "INSUFFICIENT_LIQUIDITY",
+        throw new InsufficientLiquidityError({
           protocol: "pump-amm",
           message: "Route base reserve is empty",
         });
@@ -409,27 +413,27 @@ async function build(
         requireAccount(request.snapshot, venue.pool, "Pump curve").lamports <
           state.realSol + state.protocolFees + state.creatorFees
       ) {
-        invalidAccount(
-          venue.pool,
-          "Curve lamports are below its real SOL reserve and retained fees",
-        );
+        throw new InvalidAccountError({
+          address: venue.pool,
+          message: "Curve lamports are below its real SOL reserve and retained fees",
+        });
       }
 
       if (state.realTokens > baseVault.amount) {
-        invalidAccount(
-          venue.baseVault,
-          "Curve base balance is below its real token reserve",
-        );
+        throw new InvalidAccountError({
+          address: venue.baseVault,
+          message: "Curve base balance is below its real token reserve",
+        });
       }
 
       if (
         quoteVault &&
         quoteVault.amount < state.realSol + state.protocolFees + state.creatorFees
       ) {
-        invalidAccount(
-          venue.quoteVault,
-          "Curve quote balance is below its reserve and retained fees",
-        );
+        throw new InvalidAccountError({
+          address: venue.quoteVault,
+          message: "Curve quote balance is below its reserve and retained fees",
+        });
       }
 
       const rates = readFees(request.snapshot, common.pumpFeeConfig, state, pumpGlobal);
@@ -461,8 +465,7 @@ async function build(
 
   const minimumAmountOut = minimumOutput(amountIn, request.slippageBps);
   if (minimumAmountOut === 0n) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "slippageBps",
       message: "Native routes require a nonzero minimum output",
     });

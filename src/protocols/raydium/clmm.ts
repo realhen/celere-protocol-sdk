@@ -3,19 +3,26 @@
  * raydium-io/raydium-clmm Rust program, ed1eb41519d5355755f7df52b43fa9610938b60b.
  * See NOTICE.md. Runtime operations use caller-owned snapshots exclusively.
  */
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  MissingAccountsError,
+} from "../errors";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { getAddressEncoder, type Address } from "@solana/kit";
-import { readMint, readTokenAccount } from "../../accounts/tokens";
-import { maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
+import { readMint, readTokenAccount } from "../accounts/tokens";
+import { maximumInput, minimumOutput } from "../amounts";
+
 import {
-  invalidAccount,
   accountDataView,
   matchesDiscriminator,
   readAddress,
   readU128,
-} from "../shared/accounts";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/bytes";
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -24,7 +31,7 @@ import type {
   SnapshotAccount,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import {
   CLMM_MAX_SQRT_PRICE,
   CLMM_MAX_TICK,
@@ -92,8 +99,7 @@ interface Traversal {
 }
 
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "raydium-clmm",
     feature,
     message: `Raydium CLMM feature is not qualified: ${feature}`,
@@ -101,7 +107,7 @@ function unsupported(feature: string): never {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "raydium-clmm", message });
+  throw new InsufficientLiquidityError({ protocol: "raydium-clmm", message });
 }
 
 function layout(
@@ -113,10 +119,10 @@ function layout(
     account.data.length !== length ||
     !matchesDiscriminator(account.data, discriminator)
   ) {
-    invalidAccount(
-      account.address,
-      "Unsupported Raydium CLMM account layout or discriminator",
-    );
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Unsupported Raydium CLMM account layout or discriminator",
+    });
   }
 }
 
@@ -147,7 +153,10 @@ async function decodePool(request: SwapRequest): Promise<Pool> {
     unsupported("unknown pool version or reserved fields");
   }
   if (data[389]! > 63) {
-    invalidAccount(request.pool, "Invalid pool status flags");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid pool status flags",
+    });
   }
   if ((data[389]! & 16) !== 0) {
     unsupported("swaps disabled");
@@ -179,14 +188,16 @@ async function decodePool(request: SwapRequest): Promise<Pool> {
     mint0Bytes[comparison]! > mint1Bytes[comparison]! ||
     pool.vault0 === pool.vault1
   ) {
-    invalidAccount(request.pool, "Invalid CLMM mint ordering or duplicate vaults");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid CLMM mint ordering or duplicate vaults",
+    });
   }
   if (!(
     (request.inputMint === pool.mint0 && request.outputMint === pool.mint1) ||
     (request.inputMint === pool.mint1 && request.outputMint === pool.mint0)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested mints do not match the CLMM pool",
     });
@@ -199,13 +210,19 @@ async function decodePool(request: SwapRequest): Promise<Pool> {
     pool.sqrtPrice <= CLMM_MIN_SQRT_PRICE ||
     pool.sqrtPrice >= CLMM_MAX_SQRT_PRICE
   ) {
-    invalidAccount(request.pool, "Invalid CLMM tick spacing, tick, or sqrt price");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid CLMM tick spacing, tick, or sqrt price",
+    });
   }
   if (
     pool.sqrtPrice < clmmSqrtPriceAtTick(pool.tick) ||
     pool.sqrtPrice > clmmSqrtPriceAtTick(pool.tick + 1)
   ) {
-    invalidAccount(request.pool, "CLMM sqrt price is inconsistent with its current tick");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "CLMM sqrt price is inconsistent with its current tick",
+    });
   }
 
   const [expected, bump] = await findRaydiumClmmPoolPda(
@@ -215,7 +232,10 @@ async function decodePool(request: SwapRequest): Promise<Pool> {
   );
 
   if (request.pool !== expected || data[8] !== bump) {
-    invalidAccount(request.pool, "Invalid CLMM pool PDA or bump");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid CLMM pool PDA or bump",
+    });
   }
   for (const [actual, mint] of [
     [pool.vault0, pool.mint0],
@@ -224,14 +244,20 @@ async function decodePool(request: SwapRequest): Promise<Pool> {
     const expectedVault = await getRaydiumClmmVaultAddress(request.pool, mint);
 
     if (actual !== expectedVault) {
-      invalidAccount(actual, "Invalid CLMM vault PDA");
+      throw new InvalidAccountError({
+        address: actual,
+        message: "Invalid CLMM vault PDA",
+      });
     }
   }
 
   const expectedObservation = await getRaydiumClmmObservationAddress(request.pool);
 
   if (pool.observation !== expectedObservation) {
-    invalidAccount(pool.observation, "Invalid CLMM observation PDA");
+    throw new InvalidAccountError({
+      address: pool.observation,
+      message: "Invalid CLMM observation PDA",
+    });
   }
 
   return pool;
@@ -254,7 +280,10 @@ async function feeRate(request: SwapRequest, pool: Pool): Promise<bigint> {
     data[8] !== bump ||
     bytes.getUint16(51, true) !== pool.spacing
   ) {
-    invalidAccount(pool.config, "Invalid CLMM config PDA, bump, or tick spacing");
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "Invalid CLMM config PDA, bump, or tick spacing",
+    });
   }
 
   const rate = bytes.getUint32(47, true);
@@ -263,7 +292,10 @@ async function feeRate(request: SwapRequest, pool: Pool): Promise<bigint> {
     rate >= 1_000_000 ||
     bytes.getUint32(43, true) + bytes.getUint32(53, true) > 1_000_000
   ) {
-    invalidAccount(pool.config, "Invalid CLMM fee rates");
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "Invalid CLMM fee rates",
+    });
   }
   if (
     data.subarray(57, 61).some((byte) => byte !== 0) ||
@@ -283,7 +315,10 @@ function initializedArrays(
   layout(bitmap, 1832, BITMAP_DISCRIMINATOR);
 
   if (readAddress(bitmap.data, 8) !== request.pool) {
-    invalidAccount(bitmap.address, "CLMM bitmap belongs to another pool");
+    throw new InvalidAccountError({
+      address: bitmap.address,
+      message: "CLMM bitmap belongs to another pool",
+    });
   }
 
   const starts: number[] = [];
@@ -303,10 +338,10 @@ function initializedArrays(
       const start = (firstIndex + bit) * width;
 
       if (start < Math.floor(CLMM_MIN_TICK / width) * width || start > CLMM_MAX_TICK) {
-        invalidAccount(
-          bitmap.address,
-          "Initialized CLMM bitmap bit is outside the tick domain",
-        );
+        throw new InvalidAccountError({
+          address: bitmap.address,
+          message: "Initialized CLMM bitmap bit is outside the tick domain",
+        });
       }
 
       starts.push(start);
@@ -340,7 +375,10 @@ function decodeTicks(
     readAddress(account.data, 8) !== request.pool ||
     accountDataView(account.data).getInt32(40, true) !== start
   ) {
-    invalidAccount(account.address, "CLMM tick array pool or start index mismatch");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "CLMM tick array pool or start index mismatch",
+    });
   }
 
   const ticks: Tick[] = [];
@@ -358,7 +396,10 @@ function decodeTicks(
     }
     if (gross === 0n) {
       if (net !== 0n) {
-        invalidAccount(account.address, "Uninitialized tick has net liquidity");
+        throw new InvalidAccountError({
+          address: account.address,
+          message: "Uninitialized tick has net liquidity",
+        });
       }
 
       continue;
@@ -369,16 +410,19 @@ function decodeTicks(
       index > CLMM_MAX_TICK ||
       (net < 0n ? -net : net) > gross
     ) {
-      invalidAccount(account.address, "Invalid initialized CLMM tick index or liquidity");
+      throw new InvalidAccountError({
+        address: account.address,
+        message: "Invalid initialized CLMM tick index or liquidity",
+      });
     }
 
     ticks.push({ index, net });
   }
   if (ticks.length !== account.data[10124] || ticks.length === 0) {
-    invalidAccount(
-      account.address,
-      "CLMM initialized tick count disagrees with its bitmap",
-    );
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "CLMM initialized tick count disagrees with its bitmap",
+    });
   }
 
   return pool.zeroForOne ? ticks.reverse() : ticks;
@@ -467,7 +511,10 @@ async function traverse(
         liquidity += pool.zeroForOne ? -tick.net : tick.net;
 
         if (liquidity < 0n || liquidity > U128_MAX) {
-          invalidAccount(account.address, "Tick crossing overflows CLMM liquidity");
+          throw new InvalidAccountError({
+            address: account.address,
+            message: "Tick crossing overflows CLMM liquidity",
+          });
         }
       }
       if (remaining === 0n) {
@@ -497,7 +544,10 @@ function validateMints(request: SwapRequest, pool: Pool): void {
       unsupported("Token-2022 mints");
     }
     if (state.decimals !== decimals) {
-      invalidAccount(mint, "CLMM pool and mint decimals differ");
+      throw new InvalidAccountError({
+        address: mint,
+        message: "CLMM pool and mint decimals differ",
+      });
     }
   }
 }
@@ -564,14 +614,16 @@ async function build(
     accountDataView(observation.data).getUint16(17, true) >= 100 ||
     readAddress(observation.data, 19) !== request.pool
   ) {
-    invalidAccount(pool.observation, "Invalid CLMM observation state");
+    throw new InvalidAccountError({
+      address: pool.observation,
+      message: "Invalid CLMM observation state",
+    });
   }
 
   const result = await traverse(request, pool, rate, bitmap);
 
   if (!result.complete) {
-    fail({
-      code: "MISSING_ACCOUNTS",
+    throw new MissingAccountsError({
       accounts: result.requirements.filter(
         (item) => request.snapshot.accounts[item.address] === undefined,
       ),

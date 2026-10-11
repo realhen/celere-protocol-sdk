@@ -1,22 +1,25 @@
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  UnsupportedSwapModeError,
+} from "../errors";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import type { Address } from "@solana/kit";
-import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
-import { assertAmount, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../accounts/tokens";
+import { assertAmount, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
-import {
-  invalidAccount,
-  accountDataView,
-  readAddress,
-  matchesDiscriminator,
-} from "../shared/accounts";
+} from "../types";
+import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { HEAVEN_PROGRAM } from "./constants";
 import * as instructions from "./instructions/index";
 import {
@@ -28,8 +31,7 @@ export * from "./pda";
 export * from "./constants";
 
 function unsupported(feature: string): never {
-  return fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "heaven",
     feature,
     message: `Heaven ${feature} is not qualified`,
@@ -37,15 +39,14 @@ function unsupported(feature: string): never {
 }
 
 function exhausted(message: string): never {
-  return fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "heaven", message });
+  throw new InsufficientLiquidityError({ protocol: "heaven", message });
 }
 
 function direction(request: SwapRequest) {
   const buy = request.inputMint === WRAPPED_SOL_MINT;
 
   if (buy === (request.outputMint === WRAPPED_SOL_MINT)) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Heaven requires one wrapped SOL side",
     });
@@ -71,7 +72,10 @@ function decodeState(
     account.data.length !== size ||
     !matchesDiscriminator(account.data, discriminator)
   ) {
-    invalidAccount(address, "Invalid Heaven account size or discriminator");
+    throw new InvalidAccountError({
+      address: address,
+      message: "Invalid Heaven account size or discriminator",
+    });
   }
 
   const bytes = account.data;
@@ -141,8 +145,7 @@ async function build(
   accounts: ResolvedTokenAccounts,
 ): Promise<ProtocolSwap> {
   if (request.amount.kind !== "exactIn") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "heaven",
       mode: request.amount.kind,
       message: "Heaven exposes native exact-input swaps only",
@@ -174,7 +177,10 @@ async function build(
     pool.bytes[91] !== bump ||
     config.view.getUint16(452, true) !== version
   ) {
-    invalidAccount(request.pool, "Heaven pool/configuration PDA or authority mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Heaven pool/configuration PDA or authority mismatch",
+    });
   }
   if (pool.bytes[90] !== 2) {
     unsupported("nonstandard pools");
@@ -232,7 +238,10 @@ async function build(
     }
   }
   if (protocolBps + creatorBps >= 10_000n) {
-    invalidAccount(configKey, "Heaven aggregate fees must be below 100 percent");
+    throw new InvalidAccountError({
+      address: configKey,
+      message: "Heaven aggregate fees must be below 100 percent",
+    });
   }
   for (const [offset, expected, decimals] of [
     [792, mint, 824],
@@ -248,7 +257,10 @@ async function build(
       readAddress(pool.bytes, offset + 33) !== info.tokenProgram ||
       pool.bytes[decimals] !== info.decimals
     ) {
-      invalidAccount(request.pool, "Heaven mint/program/decimal mismatch");
+      throw new InvalidAccountError({
+        address: request.pool,
+        message: "Heaven mint/program/decimal mismatch",
+      });
     }
   }
 
@@ -259,7 +271,10 @@ async function build(
     vaultA !== (await getHeavenTokenVaultAddress(configKey, mint)) ||
     vaultB !== (await getHeavenTokenVaultAddress(configKey, WRAPPED_SOL_MINT))
   ) {
-    invalidAccount(request.pool, "Heaven vault PDA mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Heaven vault PDA mismatch",
+    });
   }
 
   const tokenVault = readTokenAccount(
@@ -304,7 +319,10 @@ async function build(
     pool.view.getBigUint64(584, true) + creatorFee > U64_MAX ||
     (buy && config.view.getBigUint64(32, true) + amountIn > U64_MAX)
   ) {
-    invalidAccount(request.pool, "Heaven reserve or accrued fees would overflow u64");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Heaven reserve or accrued fees would overflow u64",
+    });
   }
 
   const minimumAmountOut = minimumOutput(amountOut, request.slippageBps);

@@ -47,10 +47,10 @@ test(
       fillPolicy: "requireFull",
     });
     const prepared = await buildSwapInstructions(request);
-    assert.equal(prepared.ok, true);
+
     // Provision the ATA and resolve the shared legacy account set through the public workflow.
-    await submitInstructions(endpoint, prepared.value.instructions, user);
-    const metas = prepared.value.swapInstructions[0].accounts;
+    await submitInstructions(endpoint, prepared.instructions, user);
+    const metas = prepared.swapInstructions[0].accounts;
     const names = [
       "global",
       "feeRecipient",

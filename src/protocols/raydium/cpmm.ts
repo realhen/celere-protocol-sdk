@@ -1,16 +1,19 @@
 /** Adapted from raydium-io/raydium-cp-swap (Apache-2.0); see NOTICE.md. */
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InsufficientLiquidityError } from "../errors";
+import { InvalidRequestError } from "../../shared/errors";
 import type { Address } from "@solana/kit";
-import { readMint, readTokenAccount } from "../../accounts/tokens";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
+import { readMint, readTokenAccount } from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
 import {
-  invalidAccount,
   accountDataView,
   matchesDiscriminator,
   readAddress,
   readU64,
-} from "../shared/accounts";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/bytes";
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -20,7 +23,7 @@ import type {
   SwapFee,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import { swap_base_input, swap_base_output } from "./instructions/cpmm/index";
 import { RAYDIUM_CPMM_PROGRAM } from "./constants";
 export { RAYDIUM_CPMM_PROGRAM } from "./constants";
@@ -83,10 +86,10 @@ function validateLayout(
     account.data.length !== length ||
     !matchesDiscriminator(account.data, discriminator)
   ) {
-    invalidAccount(
-      account.address,
-      "Unsupported Raydium CPMM account layout or discriminator",
-    );
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Unsupported Raydium CPMM account layout or discriminator",
+    });
   }
 }
 
@@ -102,7 +105,10 @@ function decodePool(request: SwapRequest): PoolState {
   const creatorFeeOn = data[389]!;
 
   if (creatorFeeOn > 2 || data[390]! > 1 || data[329]! > 7) {
-    invalidAccount(request.pool, "Unsupported Raydium CPMM pool flags");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported Raydium CPMM pool flags",
+    });
   }
 
   const pool: PoolState = {
@@ -126,14 +132,16 @@ function decodePool(request: SwapRequest): PoolState {
   };
 
   if (pool.mint0 === pool.mint1 || pool.vault0 === pool.vault1) {
-    invalidAccount(request.pool, "Pool token mints and vaults must be distinct");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Pool token mints and vaults must be distinct",
+    });
   }
   if (!(
     (request.inputMint === pool.mint0 && request.outputMint === pool.mint1) ||
     (request.inputMint === pool.mint1 && request.outputMint === pool.mint0)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       message: "Requested token pair does not match the pool",
       field: "inputMint",
     });
@@ -156,7 +164,10 @@ async function readFees(request: SwapRequest, pool: PoolState): Promise<FeeRates
   );
 
   if (pool.config !== expectedConfig || data[8] !== bump || data[9]! > 1) {
-    invalidAccount(pool.config, "Invalid Raydium CPMM configuration address or flags");
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "Invalid Raydium CPMM configuration address or flags",
+    });
   }
 
   const trade = readU64(data, 12);
@@ -169,14 +180,17 @@ async function readFees(request: SwapRequest, pool: PoolState): Promise<FeeRates
     trade + creator === 0n ||
     protocol + fund > FEE_DENOMINATOR
   ) {
-    invalidAccount(pool.config, "Invalid Raydium CPMM fee rates");
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "Invalid Raydium CPMM fee rates",
+    });
   }
 
   return { trade, creator };
 }
 
 function insufficientLiquidity(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", message, protocol: "raydium-cpmm" });
+  throw new InsufficientLiquidityError({ message, protocol: "raydium-cpmm" });
 }
 
 function fee(amount: bigint, rate: bigint): bigint {
@@ -274,22 +288,28 @@ async function build(
   const pool = decodePool(request);
 
   if ((pool.status & 4) !== 0 || request.snapshot.unixTimestamp < pool.openTime) {
-    invalidAccount(
-      request.pool,
-      "Raydium CPMM swaps are disabled or the pool has not opened",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Raydium CPMM swaps are disabled or the pool has not opened",
+    });
   }
 
   const [authority, authorityBump] = await findRaydiumCpmmAuthorityPda();
 
   if (pool.authorityBump !== authorityBump) {
-    invalidAccount(request.pool, "Invalid pool authority bump");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid pool authority bump",
+    });
   }
 
   const observationAddress = await getRaydiumCpmmObservationAddress(request.pool);
 
   if (pool.observation !== observationAddress) {
-    invalidAccount(pool.observation, "Invalid observation address");
+    throw new InvalidAccountError({
+      address: pool.observation,
+      message: "Invalid observation address",
+    });
   }
 
   const observation = requireAccount(
@@ -306,7 +326,10 @@ async function build(
     observation.data[8]! > 1 ||
     observationIndex >= 100
   ) {
-    invalidAccount(pool.observation, "Invalid observation state pool link or index");
+    throw new InvalidAccountError({
+      address: pool.observation,
+      message: "Invalid observation state pool link or index",
+    });
   }
 
   const mint0 = readMint(request.snapshot, pool.mint0);
@@ -318,7 +341,10 @@ async function build(
     mint0.decimals !== pool.decimals0 ||
     mint1.decimals !== pool.decimals1
   ) {
-    invalidAccount(request.pool, "Pool token program or decimals do not match its mints");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Pool token program or decimals do not match its mints",
+    });
   }
 
   const vault0 = readTokenAccount(
@@ -337,7 +363,10 @@ async function build(
   );
 
   if (pool.fees0 > vault0.amount || pool.fees1 > vault1.amount) {
-    invalidAccount(request.pool, "Accrued pool fees exceed vault balances");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Accrued pool fees exceed vault balances",
+    });
   }
 
   const reserve0 = vault0.amount - pool.fees0;

@@ -1,11 +1,17 @@
-import { isValidAddress as isAddress } from "./addresses";
+import {
+  InvalidSnapshotContextError,
+  InvalidAccountError,
+  UnsupportedProtocolError,
+  MissingAccountsError,
+  UnsupportedFillPolicyError,
+} from "./errors";
+import { InvalidRequestError } from "../shared/errors";
+import { isValidAddress as isAddress } from "../shared/addresses";
 import { AccountRole } from "@solana/kit";
 import type { Address } from "@solana/kit";
-import { planTokenAccounts, tokenRequirements } from "../accounts/plan";
+import { planTokenAccounts, tokenRequirements } from "./accounts/plan";
 import { assertAmount, basisPoints } from "./amounts";
-import { BuildFailure, fail, failureResult } from "./errors";
-import type { Result } from "./errors";
-import { missingAccounts, requireAccount } from "./snapshot";
+import { missingAccounts, requireAccount } from "./accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -16,86 +22,89 @@ import type {
 
 /** Validate caller intent and immutable observation metadata without performing I/O. */
 export function validateRequest(request: SwapRequest): void {
-  if (request === null || typeof request !== "object")
-    fail({
-      code: "INVALID_REQUEST",
+  if (request === null || typeof request !== "object") {
+    throw new InvalidRequestError({
       message: "A swap request object is required",
       field: "request",
     });
+  }
   for (const field of ["pool", "owner", "payer", "inputMint", "outputMint"] as const) {
-    if (!isAddress(request[field]))
-      fail({
-        code: "INVALID_REQUEST",
+    if (!isAddress(request[field])) {
+      throw new InvalidRequestError({
         message: "Expected a valid Solana address",
         field,
       });
+    }
   }
-  if (request.inputMint === request.outputMint)
-    fail({
-      code: "INVALID_REQUEST",
+  if (request.inputMint === request.outputMint) {
+    throw new InvalidRequestError({
       message: "Input and output mints must differ",
       field: "outputMint",
     });
-  if (request.amount?.kind === "exactIn")
+  }
+  if (request.amount?.kind === "exactIn") {
     assertAmount(request.amount.amountIn, "amountIn");
-  else if (request.amount?.kind === "exactOut")
+  } else if (request.amount?.kind === "exactOut") {
     assertAmount(request.amount.amountOut, "amountOut");
-  else
-    fail({
-      code: "INVALID_REQUEST",
+  } else {
+    throw new InvalidRequestError({
       message: "Unknown swap amount mode",
       field: "amount.kind",
     });
+  }
   basisPoints(request.slippageBps);
   if (
     request.fillPolicy !== undefined &&
     request.fillPolicy !== "requireFull" &&
     request.fillPolicy !== "allowPartial"
-  )
-    fail({
-      code: "INVALID_REQUEST",
+  ) {
+    throw new InvalidRequestError({
       message: "Unknown fill policy",
       field: "fillPolicy",
     });
-  if (request.tokenAccounts)
+  }
+  if (request.tokenAccounts) {
     for (const field of ["input", "output"] as const) {
-      if (!isAddress(request.tokenAccounts[field]))
-        fail({
-          code: "INVALID_REQUEST",
+      if (!isAddress(request.tokenAccounts[field])) {
+        throw new InvalidRequestError({
           message: "Invalid token account address",
           field: `tokenAccounts.${field}`,
         });
+      }
     }
+  }
   if (
     request.maxAccountAgeSlots !== undefined &&
     (typeof request.maxAccountAgeSlots !== "bigint" || request.maxAccountAgeSlots < 0n)
-  )
-    fail({
-      code: "INVALID_REQUEST",
+  ) {
+    throw new InvalidRequestError({
       message: "Account age must be a nonnegative bigint",
       field: "maxAccountAgeSlots",
     });
+  }
   const snapshot = request.snapshot;
   for (const field of ["slot", "epoch", "unixTimestamp"] as const) {
-    if (typeof snapshot?.[field] !== "bigint" || snapshot[field] < 0n)
-      fail({
-        code: "INVALID_SNAPSHOT_CONTEXT",
+    if (typeof snapshot?.[field] !== "bigint" || snapshot[field] < 0n) {
+      throw new InvalidSnapshotContextError({
         message: `A nonnegative chain ${field} is required`,
       });
+    }
   }
-  if (!snapshot.accounts || typeof snapshot.accounts !== "object")
-    fail({
-      code: "INVALID_SNAPSHOT_CONTEXT",
+  if (!snapshot.accounts || typeof snapshot.accounts !== "object") {
+    throw new InvalidSnapshotContextError({
       message: "An account observation map is required",
     });
+  }
   for (const [key, account] of Object.entries(snapshot.accounts)) {
-    if (!isAddress(key))
-      fail({
-        code: "INVALID_REQUEST",
+    if (!isAddress(key)) {
+      throw new InvalidRequestError({
         message: "Invalid snapshot map address",
         field: "snapshot.accounts",
       });
-    if (account === null || account === undefined) continue;
+    }
+    if (account === null || account === undefined) {
+      continue;
+    }
     if (
       account.address !== key ||
       !isAddress(account.owner) ||
@@ -103,24 +112,24 @@ export function validateRequest(request: SwapRequest): void {
       typeof account.lamports !== "bigint" ||
       account.lamports < 0n ||
       typeof account.executable !== "boolean"
-    )
-      fail({
-        code: "INVALID_ACCOUNT",
+    ) {
+      throw new InvalidAccountError({
         address: key,
         message: "Malformed account observation",
       });
+    }
     if (
       typeof account.slot !== "bigint" ||
       account.slot < 0n ||
       account.slot > snapshot.slot ||
       (request.maxAccountAgeSlots !== undefined &&
         snapshot.slot - account.slot > request.maxAccountAgeSlots)
-    )
-      fail({
-        code: "INVALID_SNAPSHOT_CONTEXT",
+    ) {
+      throw new InvalidSnapshotContextError({
         message:
           "Account observation is future-dated or older than the supplied age policy",
       });
+    }
   }
 }
 
@@ -132,12 +141,12 @@ function selectAdapter(
   const adapter = adapters.find((candidate) =>
     candidate.programAddresses.includes(pool.owner),
   );
-  if (!adapter)
-    fail({
-      code: "UNSUPPORTED_PROTOCOL",
+  if (!adapter) {
+    throw new UnsupportedProtocolError({
       message: "No native adapter is registered for this pool owner",
       programAddress: pool.owner,
     });
+  }
   return adapter;
 }
 
@@ -156,22 +165,24 @@ async function discover(
   adapters: readonly ProtocolAdapter[],
 ): Promise<SwapRequirements> {
   const poolRequirement = { address: request.pool, role: "pool" };
-  if (request.snapshot.accounts[request.pool] === undefined)
+  if (request.snapshot.accounts[request.pool] === undefined) {
     return {
       protocol: null,
       accounts: [poolRequirement],
       missing: [poolRequirement],
       complete: false,
     };
+  }
   const adapter = selectAdapter(request, adapters);
   const requirements: AccountRequirement[] = [poolRequirement];
   try {
     requirements.push(...(await adapter.requirements(request)));
     requirements.push(...(await tokenRequirements(request, adapter)));
   } catch (error) {
-    if (!(error instanceof BuildFailure) || error.detail.code !== "MISSING_ACCOUNTS")
+    if (!(error instanceof MissingAccountsError)) {
       throw error;
-    requirements.push(...error.detail.accounts);
+    }
+    requirements.push(...error.accounts);
     const accounts = uniqueRequirements(requirements);
     return {
       protocol: adapter.id,
@@ -187,14 +198,26 @@ async function discover(
 
 /** Public build-only surface. Its registry is fixed at creation and owns no account cache. */
 export interface ProtocolSdk {
-  getSwapRequirements(request: SwapRequest): Promise<Result<SwapRequirements>>;
-  buildSwapInstructions(request: SwapRequest): Promise<Result<SwapBuild>>;
+  /**
+   * Discover required observations, returning an incomplete list when accounts are missing.
+   * @throws A `ProtocolError` subclass or `InvalidRequestError` for invalid input or
+   * unsupported state. Unexpected adapter errors propagate unchanged.
+   */
+  getSwapRequirements(request: SwapRequest): Promise<SwapRequirements>;
+  /**
+   * Build unsigned swap instructions from a complete caller-owned snapshot.
+   * @throws A `ProtocolError` subclass or `InvalidRequestError` for expected failures.
+   * `MissingAccountsError.accounts` identifies observations required before retrying.
+   * Unexpected adapter errors propagate unchanged.
+   */
+  buildSwapInstructions(request: SwapRequest): Promise<SwapBuild>;
 }
 
 /**
  * Create an offline SDK from selected adapters, allowing browser consumers to trim dependencies.
  * @remarks Adapter promises perform local computation only. Caller-owned snapshots must remain
- * immutable while an operation is running. Results contain no private state or object identity tokens.
+ * immutable while an operation is running. Builds contain no private state or object identity tokens.
+ * @throws {@link InvalidRequestError} when protocol programs or identities are duplicated.
  */
 export function createProtocolSdk(protocols: readonly ProtocolAdapter[]): ProtocolSdk {
   const adapters = [...protocols];
@@ -202,85 +225,76 @@ export function createProtocolSdk(protocols: readonly ProtocolAdapter[]): Protoc
   if (
     new Set(programs).size !== programs.length ||
     new Set(adapters.map((adapter) => adapter.id)).size !== adapters.length
-  )
-    throw new TypeError(
-      "Protocol registries cannot contain duplicate programs or identities",
-    );
+  ) {
+    throw new InvalidRequestError({
+      field: "protocols",
+      message: "Protocol registries cannot contain duplicate programs or identities",
+    });
+  }
   return {
     async getSwapRequirements(request) {
-      try {
-        validateRequest(request);
-        return { ok: true, value: await discover(request, adapters) };
-      } catch (error) {
-        return failureResult(error);
-      }
+      validateRequest(request);
+      return discover(request, adapters);
     },
     async buildSwapInstructions(request) {
-      try {
-        validateRequest(request);
-        const requirements = await discover(request, adapters);
-        if (!requirements.complete)
-          fail({
-            code: "MISSING_ACCOUNTS",
-            message: "Supply the discovered account observations before building",
-            accounts: requirements.missing,
-          });
-        const adapter = selectAdapter(request, adapters);
-        const tokenPlan = await planTokenAccounts(request, adapter);
-        const swap = await adapter.build(request, tokenPlan.accounts);
-        if (
-          (request.fillPolicy ?? "requireFull") === "requireFull" &&
-          swap.mayPartiallyFill
-        )
-          fail({
-            code: "UNSUPPORTED_FILL_POLICY",
-            message: "This native instruction cannot guarantee a complete fill",
-            protocol: adapter.id,
-          });
-        const setupInstructions = [...tokenPlan.setup, ...(swap.setupInstructions ?? [])];
-        const instructions = [...setupInstructions, ...swap.instructions];
-        const requiredSigners = [
-          ...new Set(
-            instructions.flatMap(
-              (instruction) =>
-                instruction.accounts
-                  ?.filter(
-                    (account) =>
-                      account.role === AccountRole.READONLY_SIGNER ||
-                      account.role === AccountRole.WRITABLE_SIGNER,
-                  )
-                  .map((account) => account.address) ?? [],
-            ),
-          ),
-        ] as Address[];
-        return {
-          ok: true,
-          value: {
-            protocol: adapter.id,
-            pool: request.pool,
-            inputMint: request.inputMint,
-            outputMint: request.outputMint,
-            quote: swap.quote,
-            instructions,
-            setupInstructions,
-            swapInstructions: swap.instructions,
-            cleanupInstructions: [],
-            requiredSigners,
-            context: {
-              slot: request.snapshot.slot,
-              epoch: request.snapshot.epoch,
-              unixTimestamp: request.snapshot.unixTimestamp,
-            },
-            execution: { mayPartiallyFill: swap.mayPartiallyFill },
-            assets: adapter.tokenAccountKinds?.(request) ?? {
-              input: "spl",
-              output: "spl",
-            },
-          },
-        };
-      } catch (error) {
-        return failureResult(error);
+      validateRequest(request);
+      const requirements = await discover(request, adapters);
+      if (!requirements.complete) {
+        throw new MissingAccountsError({
+          message: "Supply the discovered account observations before building",
+          accounts: requirements.missing,
+        });
       }
+      const adapter = selectAdapter(request, adapters);
+      const tokenPlan = await planTokenAccounts(request, adapter);
+      const swap = await adapter.build(request, tokenPlan.accounts);
+      if (
+        (request.fillPolicy ?? "requireFull") === "requireFull" &&
+        swap.mayPartiallyFill
+      ) {
+        throw new UnsupportedFillPolicyError({
+          message: "This native instruction cannot guarantee a complete fill",
+          protocol: adapter.id,
+        });
+      }
+      const setupInstructions = [...tokenPlan.setup, ...(swap.setupInstructions ?? [])];
+      const instructions = [...setupInstructions, ...swap.instructions];
+      const requiredSigners = [
+        ...new Set(
+          instructions.flatMap(
+            (instruction) =>
+              instruction.accounts
+                ?.filter(
+                  (account) =>
+                    account.role === AccountRole.READONLY_SIGNER ||
+                    account.role === AccountRole.WRITABLE_SIGNER,
+                )
+                .map((account) => account.address) ?? [],
+          ),
+        ),
+      ] as Address[];
+      return {
+        protocol: adapter.id,
+        pool: request.pool,
+        inputMint: request.inputMint,
+        outputMint: request.outputMint,
+        quote: swap.quote,
+        instructions,
+        setupInstructions,
+        swapInstructions: swap.instructions,
+        cleanupInstructions: [],
+        requiredSigners,
+        context: {
+          slot: request.snapshot.slot,
+          epoch: request.snapshot.epoch,
+          unixTimestamp: request.snapshot.unixTimestamp,
+        },
+        execution: { mayPartiallyFill: swap.mayPartiallyFill },
+        assets: adapter.tokenAccountKinds?.(request) ?? {
+          input: "spl",
+          output: "spl",
+        },
+      };
     },
   };
 }

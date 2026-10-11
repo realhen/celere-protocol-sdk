@@ -1,6 +1,8 @@
 /** Bigint adaptation of Meteora's MIT DBC SDK curve math; see NOTICE.md. */
-import { ceilDiv, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InsufficientLiquidityError } from "../errors";
+import { ceilDiv } from "../amounts";
+
 const Q128 = 1n << 128n;
 const U128_MAX = Q128 - 1n;
 
@@ -11,7 +13,7 @@ export interface CurvePoint {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "meteora-dbc", message });
+  throw new InsufficientLiquidityError({ protocol: "meteora-dbc", message });
 }
 
 function deltaBase(

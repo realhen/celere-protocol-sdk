@@ -1,7 +1,12 @@
+import {
+  InsufficientLiquidityError,
+  InvalidAccountError,
+  UnsupportedPoolFeatureError,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
-import { createProtocolSdk } from "../../dist/core/index.js";
+import { createProtocolSdk } from "../../dist/protocols/index.js";
 import { meteoraDammV2Adapter } from "../../dist/protocols/meteora/damm-v2.js";
 import {
   meteoraDammV2Fixture,
@@ -10,16 +15,6 @@ import {
 } from "../fixtures/meteora-damm-v2.mjs";
 
 const sdk = createProtocolSdk([meteoraDammV2Adapter]);
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
 
 test("offline Meteora consumer discovers snapshots and builds native full-fill swap modes", async () => {
   const signer = await generateKeyPairSigner();
@@ -34,17 +29,15 @@ test("offline Meteora consumer discovers snapshots and builds native full-fill s
           reverse,
           collectFeeMode,
         });
-        const discovered = value(
-          await sdk.getSwapRequirements({
-            ...fixture.request,
-            snapshot: {
-              ...fixture.request.snapshot,
-              accounts: {
-                [fixture.pool]: fixture.request.snapshot.accounts[fixture.pool],
-              },
+        const discovered = await sdk.getSwapRequirements({
+          ...fixture.request,
+          snapshot: {
+            ...fixture.request.snapshot,
+            accounts: {
+              [fixture.pool]: fixture.request.snapshot.accounts[fixture.pool],
             },
-          }),
-        );
+          },
+        });
         assert.equal(discovered.complete, false);
         assert.equal(discovered.protocol, "meteora-damm-v2");
         assert.ok(
@@ -57,9 +50,7 @@ test("offline Meteora consumer discovers snapshots and builds native full-fill s
           { kind: "exactIn", amountIn: 1_000_001n },
           { kind: "exactOut", amountOut: 1_000_001n },
         ]) {
-          const built = value(
-            await sdk.buildSwapInstructions({ ...fixture.request, amount }),
-          );
+          const built = await sdk.buildSwapInstructions({ ...fixture.request, amount });
           assert.equal(built.execution.mayPartiallyFill, false);
           assert.equal(built.quote.kind, amount.kind);
           assert.ok(built.quote.expectedAmountIn > 0n);
@@ -92,7 +83,7 @@ test("offline Meteora consumer discovers snapshots and builds native full-fill s
   }
 });
 
-test("Meteora consumer receives structured errors for unsupported fees, malformed state and exhausted ranges", async () => {
+test("Meteora consumer receives typed errors for unsupported fees, malformed state and exhausted ranges", async () => {
   const signer = await generateKeyPairSigner();
   for (const [offset, setting] of [
     [56, 1],
@@ -102,30 +93,50 @@ test("Meteora consumer receives structured errors for unsupported fees, malforme
   ]) {
     const fixture = await meteoraDammV2Fixture(signer.address);
     fixture.request.snapshot.accounts[fixture.pool].data[offset] = setting;
-    const result = await sdk.buildSwapInstructions(fixture.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, "UNSUPPORTED_POOL_FEATURE");
+    await assert.rejects(
+      () => sdk.buildSwapInstructions(fixture.request),
+      (error) => {
+        assert.ok(error instanceof UnsupportedPoolFeatureError);
+        assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+        return true;
+      },
+    );
   }
   for (const offset of [480, 482, 486, 696]) {
     const fixture = await meteoraDammV2Fixture(signer.address);
     fixture.request.snapshot.accounts[fixture.pool].data[offset] = 255;
-    const result = await sdk.buildSwapInstructions(fixture.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, "INVALID_ACCOUNT");
+    await assert.rejects(
+      () => sdk.buildSwapInstructions(fixture.request),
+      (error) => {
+        assert.ok(error instanceof InvalidAccountError);
+        assert.equal(error.code, "INVALID_ACCOUNT");
+        return true;
+      },
+    );
   }
   const fixture = await meteoraDammV2Fixture(signer.address);
   for (const amount of [
     { kind: "exactIn", amountIn: 3_000_000_000n },
     { kind: "exactOut", amountOut: 1_000_000_000n },
   ]) {
-    const result = await sdk.buildSwapInstructions({ ...fixture.request, amount });
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, "INSUFFICIENT_LIQUIDITY");
+    await assert.rejects(
+      () => sdk.buildSwapInstructions({ ...fixture.request, amount }),
+      (error) => {
+        assert.ok(error instanceof InsufficientLiquidityError);
+        assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+        return true;
+      },
+    );
   }
   putU128(fixture.request.snapshot.accounts[fixture.pool].data, 456, 0n);
-  const malformedPrice = await sdk.buildSwapInstructions(fixture.request);
-  assert.equal(malformedPrice.ok, false);
-  assert.equal(malformedPrice.error.code, "INVALID_ACCOUNT");
+  await assert.rejects(
+    () => sdk.buildSwapInstructions(fixture.request),
+    (error) => {
+      assert.ok(error instanceof InvalidAccountError);
+      assert.equal(error.code, "INVALID_ACCOUNT");
+      return true;
+    },
+  );
 });
 
 test("Meteora consumer quotes linear fees at the caller's chain point and rejects exponential schedules", async () => {
@@ -133,18 +144,21 @@ test("Meteora consumer quotes linear fees at the caller's chain point and reject
   const fixture = await meteoraDammV2Fixture(signer.address, { linearFee: true });
   const data = fixture.request.snapshot.accounts[fixture.pool].data;
   new DataView(data.buffer).setBigUint64(24, 20n, true);
-  const active = value(await sdk.buildSwapInstructions(fixture.request));
-  const matured = value(
-    await sdk.buildSwapInstructions({
-      ...fixture.request,
-      snapshot: { ...fixture.request.snapshot, slot: 200n },
-    }),
-  );
+  const active = await sdk.buildSwapInstructions(fixture.request);
+  const matured = await sdk.buildSwapInstructions({
+    ...fixture.request,
+    snapshot: { ...fixture.request.snapshot, slot: 200n },
+  });
   assert.ok(active.quote.fees[0].amount > matured.quote.fees[0].amount);
   assert.ok(active.quote.expectedAmountOut < matured.quote.expectedAmountOut);
   data[16] = 1;
-  const unsupported = await sdk.buildSwapInstructions(fixture.request);
-  assert.equal(unsupported.ok, false);
-  assert.equal(unsupported.error.code, "UNSUPPORTED_POOL_FEATURE");
-  assert.equal(unsupported.error.feature, "exponential fee scheduler");
+  await assert.rejects(
+    () => sdk.buildSwapInstructions(fixture.request),
+    (error) => {
+      assert.ok(error instanceof UnsupportedPoolFeatureError);
+      assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+      assert.equal(error.feature, "exponential fee scheduler");
+      return true;
+    },
+  );
 });

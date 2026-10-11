@@ -13,16 +13,7 @@ import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
 import { orcaWhirlpoolFixture } from "../fixtures/orca-whirlpool.mjs";
 
 const endpoint = process.env.CELERE_SURFPOOL_URL;
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -64,17 +55,15 @@ async function installFixture(fixture, signer) {
 }
 async function sendPlan(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-      computeBudget: { units: 400000 },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+    computeBudget: { units: 400000 },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -102,9 +91,11 @@ test(
           label: `${signer.address}:${reverse}:${amount.kind}`,
         });
         await installFixture(fixture, signer);
-        const build = value(
-          await buildSwapInstructions({ ...fixture.request, amount, slippageBps: 0 }),
-        );
+        const build = await buildSwapInstructions({
+          ...fixture.request,
+          amount,
+          slippageBps: 0,
+        });
         const inputBefore = await tokenAmount(fixture.request.tokenAccounts.input);
         const outputBefore = await tokenAmount(fixture.request.tokenAccounts.output);
         const signature = await sendPlan(build, signer);

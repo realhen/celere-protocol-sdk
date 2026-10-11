@@ -1,22 +1,26 @@
 /** Bigint adaptation of Meteora's MIT-declared DAMM v1 and vault SDKs; see NOTICE.md. */
-import type { Address } from "@solana/kit";
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
 import {
-  invalidAccount,
-  accountDataView,
-  readAddress,
-  matchesDiscriminator,
-} from "../shared/accounts";
-import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
-import { ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  InvalidSnapshotContextError,
+  UnsupportedSwapModeError,
+} from "../errors";
+import type { Address } from "@solana/kit";
+import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
+import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../accounts/tokens";
+import { ceilDiv, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 
 import { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants";
 
@@ -73,8 +77,7 @@ interface VaultBalances {
 }
 
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "meteora-damm-v1",
     feature,
     message: `Meteora DAMM v1 ${feature} is not qualified for this release`,
@@ -82,19 +85,17 @@ function unsupported(feature: string): never {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "meteora-damm-v1", message });
+  throw new InsufficientLiquidityError({ protocol: "meteora-damm-v1", message });
 }
 
 function readPool(request: SwapRequest): Pool {
   if (request.snapshot.unixTimestamp > U64_MAX || request.snapshot.slot > U64_MAX) {
-    fail({
-      code: "INVALID_SNAPSHOT_CONTEXT",
+    throw new InvalidSnapshotContextError({
       message: "Meteora chain time and slot must fit u64",
     });
   }
   if (request.amount.kind === "exactOut") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "meteora-damm-v1",
       mode: "exactOut",
       message: "Meteora DAMM v1 only exposes a native exact-input swap",
@@ -108,7 +109,10 @@ function readPool(request: SwapRequest): Pool {
     METEORA_DAMM_V1_PROGRAM,
   ).data;
   if (data.length !== 1387 || !matchesDiscriminator(data, POOL_DISCRIMINATOR)) {
-    invalidAccount(request.pool, "Unsupported Meteora DAMM v1 pool layout");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported Meteora DAMM v1 pool layout",
+    });
   }
 
   const view = accountDataView(data);
@@ -116,18 +120,30 @@ function readPool(request: SwapRequest): Pool {
     unsupported("stable or unknown curves");
   }
   if (data[362] !== 0 && data[362] !== 1) {
-    invalidAccount(request.pool, "Unknown Meteora pool type");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown Meteora pool type",
+    });
   }
   if (data[233] !== 1) {
-    invalidAccount(request.pool, "Meteora DAMM v1 pool is disabled");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Meteora DAMM v1 pool is disabled",
+    });
   }
   if (data[475] !== 0 && data[475] !== 1) {
-    invalidAccount(request.pool, "Unknown activation type");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown activation type",
+    });
   }
 
   const point = data[475] === 0 ? request.snapshot.slot : request.snapshot.unixTimestamp;
   if (point < view.getBigUint64(403, true)) {
-    invalidAccount(request.pool, "Meteora DAMM v1 pool has not activated");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Meteora DAMM v1 pool has not activated",
+    });
   }
   if (
     view.getBigUint64(476, true) !== 0n ||
@@ -158,7 +174,10 @@ function readPool(request: SwapRequest): Pool {
     pool.shareA === pool.shareB ||
     pool.feeA === pool.feeB
   ) {
-    invalidAccount(request.pool, "Pool asset accounts must be distinct");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Pool asset accounts must be distinct",
+    });
   }
   if (
     pool.tradeDenominator === 0n ||
@@ -166,14 +185,16 @@ function readPool(request: SwapRequest): Pool {
     pool.protocolDenominator === 0n ||
     pool.protocolNumerator > pool.protocolDenominator
   ) {
-    invalidAccount(request.pool, "Invalid Meteora fee fractions");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Meteora fee fractions",
+    });
   }
   if (!(
     (request.inputMint === pool.mintA && request.outputMint === pool.mintB) ||
     (request.inputMint === pool.mintB && request.outputMint === pool.mintA)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested mints do not match the DAMM v1 pool",
     });
@@ -194,16 +215,25 @@ function readVault(request: SwapRequest, key: Address, mint: Address): Vault {
     data.length > 10240 ||
     !matchesDiscriminator(data, VAULT_DISCRIMINATOR)
   ) {
-    invalidAccount(key, "Unsupported Meteora vault layout");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Unsupported Meteora vault layout",
+    });
   }
   if (data[8] !== 1) {
-    invalidAccount(key, "Meteora vault deposits are disabled");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Meteora vault deposits are disabled",
+    });
   }
   if (data.subarray(147, 1107).some((b) => b !== 0)) {
     unsupported("vault strategies");
   }
   if (readAddress(data, 83) !== mint) {
-    invalidAccount(key, "Vault mint does not match the pool");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Vault mint does not match the pool",
+    });
   }
 
   const view = accountDataView(data);
@@ -216,7 +246,10 @@ function readVault(request: SwapRequest, key: Address, mint: Address): Vault {
     degradation > PROFIT_DENOMINATOR ||
     locked > total
   ) {
-    invalidAccount(key, "Invalid vault locked-profit state or chain timestamp");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Invalid vault locked-profit state or chain timestamp",
+    });
   }
 
   // Release locked profit using the caller's chain timestamp before pricing vault shares.
@@ -297,7 +330,10 @@ async function balances(
     fee !== expectedFee ||
     (share === pool.shareA && shareBump !== pool.authorityBump)
   ) {
-    invalidAccount(key, "Vault or pool share PDA mismatch");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Vault or pool share PDA mismatch",
+    });
   }
 
   const lp = readMint(request.snapshot, vault.lpMint);
@@ -315,7 +351,10 @@ async function balances(
     readAddress(lpData, 4) !== key ||
     lpView.getUint32(46, true) !== 0
   ) {
-    invalidAccount(vault.lpMint, "Invalid vault share mint authority");
+    throw new InvalidAccountError({
+      address: vault.lpMint,
+      message: "Invalid vault share mint authority",
+    });
   }
 
   const reserve = readTokenAccount(
@@ -334,7 +373,10 @@ async function balances(
   ).amount;
   readTokenAccount(request.snapshot, fee, mint, TOKEN_PROGRAM, pool.shareA);
   if (vault.total > reserve || shares > lp.supply) {
-    invalidAccount(key, "Vault total or pool shares exceed supplied backing");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Vault total or pool shares exceed supplied backing",
+    });
   }
   if (lp.supply === 0n || vault.unlocked === 0n || shares === 0n) {
     insufficient("Meteora vault has no unlocked pool liquidity");
@@ -470,7 +512,10 @@ async function build(
     b.vault.token,
   ];
   if (reserved.includes(tokenAccounts.input) || reserved.includes(tokenAccounts.output)) {
-    invalidAccount(request.pool, "User token accounts cannot alias protocol accounts");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "User token accounts cannot alias protocol accounts",
+    });
   }
 
   const reverse = request.inputMint === pool.mintB;

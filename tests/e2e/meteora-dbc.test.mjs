@@ -1,18 +1,16 @@
+import {
+  MissingAccountsError,
+  createProtocolSdk,
+  compileTransaction,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
-import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
+
 import { meteoraDbcAdapter } from "../../dist/protocols/meteora-dbc/adapter.js";
 import { meteoraDbcFixture } from "../fixtures/meteora-dbc.mjs";
 const sdk = createProtocolSdk([meteoraDbcAdapter]);
-function value(r) {
-  assert.equal(
-    r.ok,
-    true,
-    JSON.stringify(r, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return r.value;
-}
+
 function write(data, o, n) {
   new DataView(data.buffer).setBigUint64(o, n, true);
 }
@@ -37,18 +35,18 @@ test("offline Meteora DBC consumer discovers config and builds both native full-
           },
         };
         assert.ok(
-          value(await sdk.getSwapRequirements(partial)).missing.some(
+          (await sdk.getSwapRequirements(partial)).missing.some(
             (x) => x.address === fixture.config,
           ),
         );
-        assert.equal(
-          (await sdk.buildSwapInstructions(partial)).error.code,
-          "MISSING_ACCOUNTS",
+        await assert.rejects(
+          () => sdk.buildSwapInstructions(partial),
+          MissingAccountsError,
         );
         partial.snapshot.accounts[fixture.config] =
           fixture.request.snapshot.accounts[fixture.config];
         assert.ok(
-          value(await sdk.getSwapRequirements(partial)).missing.some(
+          (await sdk.getSwapRequirements(partial)).missing.some(
             (x) => x.address === fixture.quoteMint,
           ),
         );
@@ -58,23 +56,19 @@ test("offline Meteora DBC consumer discovers config and builds both native full-
           { kind: "exactIn", amountIn: 300_000_003n },
           { kind: "exactOut", amountOut: 200_000_003n },
         ]) {
-          const built = value(
-            await sdk.buildSwapInstructions({ ...fixture.request, amount }),
-          );
+          const built = await sdk.buildSwapInstructions({ ...fixture.request, amount });
           assert.equal(built.execution.mayPartiallyFill, false);
           assert.equal(built.instructions[0].data[24], amount.kind === "exactIn" ? 0 : 2);
           assert.equal(built.instructions[0].accounts.length, 15);
           assert.deepEqual(structuredClone(built), built);
-          const tx = value(
-            compileTransaction({
-              instructions: built.instructions,
-              feePayer: signer.address,
-              lifetime: {
-                blockhash: "11111111111111111111111111111111",
-                lastValidBlockHeight: 100n,
-              },
-            }),
-          );
+          const tx = compileTransaction({
+            instructions: built.instructions,
+            feePayer: signer.address,
+            lifetime: {
+              blockhash: "11111111111111111111111111111111",
+              lastValidBlockHeight: 100n,
+            },
+          });
           assert.ok(tx.byteLength <= 1232);
           assert.ok(Object.values(tx.transaction.signatures).every((x) => x === null));
         }
@@ -83,7 +77,7 @@ test("offline Meteora DBC consumer discovers config and builds both native full-
     globalThis.fetch = original;
   }
 });
-test("Meteora DBC reports malformed, unqualified and exhausted snapshots with structured errors", async () => {
+test("Meteora DBC reports malformed, unqualified and exhausted snapshots with typed errors", async () => {
   const signer = await generateKeyPairSigner();
   for (const [change, code] of [
     [
@@ -125,8 +119,12 @@ test("Meteora DBC reports malformed, unqualified and exhausted snapshots with st
   ]) {
     const f = await meteoraDbcFixture(signer.address);
     change(f);
-    const result = await sdk.buildSwapInstructions(f.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, code, result.error.message);
+    await assert.rejects(
+      () => sdk.buildSwapInstructions(f.request),
+      (error) => {
+        assert.equal(error.code, code, error.message);
+        return true;
+      },
+    );
   }
 });

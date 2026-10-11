@@ -3,7 +3,7 @@
  * sqrt-price, and swap arithmetic, revision ed1eb41519d5355755f7df52b43fa9610938b60b.
  * See NOTICE.md. No Raydium JavaScript SDK implementation is included.
  */
-import { ceilDiv } from "../../core/amounts";
+import { ceilDiv } from "../amounts";
 
 export const CLMM_Q64 = 1n << 64n;
 export const CLMM_MIN_TICK = -443636;

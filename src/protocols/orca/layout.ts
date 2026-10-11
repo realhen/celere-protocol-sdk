@@ -1,14 +1,14 @@
+import { InvalidAccountError, UnsupportedPoolFeatureError } from "../errors";
 import type { Address } from "@solana/kit";
 import {
-  invalidAccount,
   accountDataView,
   readAddress,
   readU128,
   matchesDiscriminator,
-} from "../shared/accounts";
+} from "../accounts/bytes";
 import type { TickArrayFacade, WhirlpoolFacade } from "@orca-so/whirlpools-core";
-import { fail } from "../../core/errors";
-import type { SnapshotAccount } from "../../core/types";
+
+import type { SnapshotAccount } from "../types";
 
 export { WHIRLPOOL_PROGRAM } from "./constants";
 
@@ -32,7 +32,10 @@ export function decodePool(account: SnapshotAccount): Pool {
     account.data.length !== 653 ||
     !matchesDiscriminator(account.data, POOL_DISCRIMINATOR)
   ) {
-    invalidAccount(account.address, "Invalid Whirlpool layout or discriminator");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid Whirlpool layout or discriminator",
+    });
   }
 
   const data = accountDataView(account.data);
@@ -68,8 +71,7 @@ export function decodeFixedArray(
   startTickIndex: number,
 ): TickArrayFacade {
   if (matchesDiscriminator(account.data, DYNAMIC_TICK_DISCRIMINATOR)) {
-    fail({
-      code: "UNSUPPORTED_POOL_FEATURE",
+    throw new UnsupportedPoolFeatureError({
       protocol: "orca-whirlpool",
       feature: "dynamicTickArrays",
       message: "Dynamic Whirlpool tick arrays are not qualified in this release",
@@ -79,10 +81,10 @@ export function decodeFixedArray(
     account.data.length !== 9988 ||
     !matchesDiscriminator(account.data, FIXED_TICK_DISCRIMINATOR)
   ) {
-    invalidAccount(
-      account.address,
-      "Invalid fixed Whirlpool tick-array layout or discriminator",
-    );
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid fixed Whirlpool tick-array layout or discriminator",
+    });
   }
 
   const data = accountDataView(account.data);
@@ -90,10 +92,10 @@ export function decodeFixedArray(
     data.getInt32(8, true) !== startTickIndex ||
     readAddress(account.data, 9956) !== pool
   ) {
-    invalidAccount(
-      account.address,
-      "Tick array does not match its pool and derived tick range",
-    );
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Tick array does not match its pool and derived tick range",
+    });
   }
 
   return {
@@ -101,7 +103,10 @@ export function decodeFixedArray(
     ticks: Array.from({ length: 88 }, (_, index) => {
       const offset = 12 + index * 113;
       if (account.data[offset]! > 1) {
-        invalidAccount(account.address, "Invalid tick initialization flag");
+        throw new InvalidAccountError({
+          address: account.address,
+          message: "Invalid tick initialization flag",
+        });
       }
 
       // Interpret the stored u128 bits as the native signed liquidity delta.

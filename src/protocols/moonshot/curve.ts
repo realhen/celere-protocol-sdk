@@ -1,13 +1,17 @@
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import { UnsupportedPoolFeatureError, InsufficientLiquidityError } from "../errors";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
 import type { Address, Instruction } from "@solana/kit";
-import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
-import { assertAmount, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../accounts/tokens";
+import { assertAmount, maximumInput, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -15,14 +19,9 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 
-import {
-  invalidAccount,
-  accountDataView,
-  readAddress,
-  matchesDiscriminator,
-} from "../shared/accounts";
+import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { MOONSHOT_PROGRAM } from "./constants";
 import * as instructions from "./instructions/index";
 import {
@@ -36,8 +35,7 @@ export { MOONSHOT_PROGRAM } from "./constants";
 const TOTAL_SUPPLY = 1_000_000_000_000_000_000n;
 
 function unsupported(feature: string): never {
-  return fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "moonshot",
     feature,
     message: `Moonshot ${feature} is not qualified`,
@@ -45,15 +43,14 @@ function unsupported(feature: string): never {
 }
 
 function exhausted(message: string): never {
-  return fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "moonshot", message });
+  throw new InsufficientLiquidityError({ protocol: "moonshot", message });
 }
 
 function direction(request: SwapRequest) {
   const buy = request.inputMint === WRAPPED_SOL_MINT;
 
   if (buy === (request.outputMint === WRAPPED_SOL_MINT)) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Moonshot requires exactly one native SOL side",
     });
@@ -76,13 +73,19 @@ function data(
   );
 
   if (account.data.length < size || !matchesDiscriminator(account.data, discriminator)) {
-    invalidAccount(key, "Invalid Moonshot state size or discriminator");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Invalid Moonshot state size or discriminator",
+    });
   }
   if (account.data.subarray(size).some((byte) => byte !== 0)) {
     unsupported("nonzero state extension");
   }
   if (account.lamports > U64_MAX) {
-    invalidAccount(key, "Moonshot lamports exceed u64");
+    throw new InvalidAccountError({
+      address: key,
+      message: "Moonshot lamports exceed u64",
+    });
   }
 
   return {
@@ -144,7 +147,10 @@ async function build(
   const keys = await getMoonshotCurveAddresses(mint);
 
   if (keys.curve !== request.pool) {
-    invalidAccount(request.pool, "Moonshot curve PDA does not match mint");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Moonshot curve PDA does not match mint",
+    });
   }
 
   const curve = data(request, request.pool, 84, [8, 91, 83, 28, 132, 216, 248, 22]);
@@ -155,7 +161,10 @@ async function build(
     curve.bytes[80] !== keys.curveBump ||
     config.bytes[206] !== keys.configBump
   ) {
-    invalidAccount(request.pool, "Moonshot mint or PDA bump mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Moonshot mint or PDA bump mismatch",
+    });
   }
 
   const curveType = curve.bytes[58]!;
@@ -184,16 +193,19 @@ async function build(
     curve.view.getBigUint64(8, true) !== TOTAL_SUPPLY ||
     mintInfo.supply !== TOTAL_SUPPLY
   ) {
-    invalidAccount(
-      mint,
-      "Constant product curves require nine decimals and one billion tokens",
-    );
+    throw new InvalidAccountError({
+      address: mint,
+      message: "Constant product curves require nine decimals and one billion tokens",
+    });
   }
 
   const remaining = curve.view.getBigUint64(16, true);
 
   if (remaining > TOTAL_SUPPLY) {
-    invalidAccount(request.pool, "Curve amount exceeds total supply");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Curve amount exceeds total supply",
+    });
   }
 
   const position = TOTAL_SUPPLY - remaining;
@@ -208,7 +220,10 @@ async function build(
   const threshold = curve.view.getBigUint64(59, true);
 
   if (threshold === 0n) {
-    invalidAccount(request.pool, "Moonshot market-cap threshold must be positive");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Moonshot market-cap threshold must be positive",
+    });
   }
   if ((virtualSol * position) / virtualTokens >= threshold) {
     exhausted("Moonshot migration threshold has been reached");
@@ -217,7 +232,10 @@ async function build(
   const feeBps = BigInt(config.view.getUint16(168, true));
 
   if (feeBps >= 10_000n || config.bytes[170]! > 100) {
-    invalidAccount(keys.config, "Invalid Moonshot fee configuration");
+    throw new InvalidAccountError({
+      address: keys.config,
+      message: "Invalid Moonshot fee configuration",
+    });
   }
 
   const vault = await getMoonshotTokenVaultAddress(request.pool, mint);
@@ -230,7 +248,10 @@ async function build(
   );
 
   if (vaultState.amount < remaining) {
-    invalidAccount(vault, "Moonshot token vault is below the curve amount");
+    throw new InvalidAccountError({
+      address: vault,
+      message: "Moonshot token vault is below the curve amount",
+    });
   }
 
   const dexFee = readAddress(config.bytes, 136);
@@ -269,17 +290,17 @@ async function build(
       (account) => account.data.length !== 0 || account.lamports > U64_MAX,
     )
   ) {
-    invalidAccount(
-      keys.config,
-      "Moonshot owner and fee recipients must be plain system accounts with u64 lamports",
-    );
+    throw new InvalidAccountError({
+      address: keys.config,
+      message:
+        "Moonshot owner and fee recipients must be plain system accounts with u64 lamports",
+    });
   }
 
   const userToken = buy ? accounts.output : accounts.input;
 
   if (userToken !== (await getMoonshotUserTokenAddress(request.owner, mint))) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "tokenAccounts",
       message: "Moonshot requires the owner's associated token account",
     });
@@ -348,13 +369,22 @@ async function build(
     dexState.lamports + dexFeeAmount > U64_MAX ||
     helioState.lamports + helioFeeAmount > U64_MAX
   ) {
-    invalidAccount(keys.config, "Moonshot fee recipient balance would overflow u64");
+    throw new InvalidAccountError({
+      address: keys.config,
+      message: "Moonshot fee recipient balance would overflow u64",
+    });
   }
   if (buy && curve.account.lamports + collateralAmount - fee > U64_MAX) {
-    invalidAccount(request.pool, "Moonshot curve balance would overflow u64");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Moonshot curve balance would overflow u64",
+    });
   }
   if (!buy && ownerState.lamports + collateralAmount > U64_MAX) {
-    invalidAccount(request.owner, "Moonshot owner balance would overflow u64");
+    throw new InvalidAccountError({
+      address: request.owner,
+      message: "Moonshot owner balance would overflow u64",
+    });
   }
 
   const userTokenState = request.snapshot.accounts[userToken];
@@ -372,7 +402,10 @@ async function build(
       tokenAmount >
       U64_MAX
   ) {
-    invalidAccount(userToken, "Moonshot output token balance would overflow u64");
+    throw new InvalidAccountError({
+      address: userToken,
+      message: "Moonshot output token balance would overflow u64",
+    });
   }
 
   const expectedAmountIn = buy ? collateralAmount : tokenAmount;

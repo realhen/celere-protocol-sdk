@@ -1,21 +1,24 @@
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  UnsupportedSwapModeError,
+} from "../errors";
 import type { Address } from "@solana/kit";
-import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
-import { minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../accounts/tokens";
+import { minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
-import {
-  invalidAccount,
-  accountDataView,
-  readAddress,
-  matchesDiscriminator,
-} from "../shared/accounts";
+} from "../types";
+import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { METADAO_PROGRAM } from "./constants";
 import { spot_swap } from "./instructions/index";
 import {
@@ -43,11 +46,11 @@ interface SpotPool {
 }
 
 function unsupported(feature: string, message: string): never {
-  fail({ code: "UNSUPPORTED_POOL_FEATURE", protocol: "metadao", feature, message });
+  throw new UnsupportedPoolFeatureError({ protocol: "metadao", feature, message });
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "metadao", message });
+  throw new InsufficientLiquidityError({ protocol: "metadao", message });
 }
 
 function readPool(request: SwapRequest): SpotPool {
@@ -59,7 +62,10 @@ function readPool(request: SwapRequest): SpotPool {
   );
 
   if (data.length < 9 || !matchesDiscriminator(data, DAO_DISCRIMINATOR)) {
-    invalidAccount(request.pool, "Invalid MetaDAO DAO account discriminator");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid MetaDAO DAO account discriminator",
+    });
   }
   if (data[8] === 1) {
     unsupported(
@@ -68,7 +74,10 @@ function readPool(request: SwapRequest): SpotPool {
     );
   }
   if (data[8] !== 0 || data.length < 569) {
-    invalidAccount(request.pool, "Unsupported or truncated MetaDAO v0.6 DAO layout");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported or truncated MetaDAO v0.6 DAO layout",
+    });
   }
 
   const view = accountDataView(data);
@@ -91,10 +100,10 @@ function readPool(request: SwapRequest): SpotPool {
     readAddress(data, 390) !== pool.baseMint ||
     readAddress(data, 422) !== pool.quoteMint
   ) {
-    invalidAccount(
-      request.pool,
-      "The DAO and embedded AMM must describe the same distinct mints",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "The DAO and embedded AMM must describe the same distinct mints",
+    });
   }
   if (view.getBigUint64(141, true) === 0n && view.getBigUint64(149, true) === 0n) {
     insufficient("MetaDAO spot pool has no liquidity shares");
@@ -108,10 +117,10 @@ function readPool(request: SwapRequest): SpotPool {
     updatedAt < createdAt ||
     updatedAt > request.snapshot.unixTimestamp
   ) {
-    invalidAccount(
-      request.pool,
-      "MetaDAO oracle timestamps are inconsistent with the supplied chain time",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "MetaDAO oracle timestamps are inconsistent with the supplied chain time",
+    });
   }
 
   validateGovernanceLayout(data, request.pool);
@@ -120,15 +129,13 @@ function readPool(request: SwapRequest): SpotPool {
     (request.inputMint === pool.baseMint && request.outputMint === pool.quoteMint) ||
     (request.inputMint === pool.quoteMint && request.outputMint === pool.baseMint)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested pair does not match the MetaDAO spot pool",
     });
   }
   if (request.amount.kind === "exactOut") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "metadao",
       mode: "exactOut",
       message: "MetaDAO spotSwap only supports native exact-input execution",
@@ -146,19 +153,28 @@ function validateGovernanceLayout(data: Uint8Array, account: Address): void {
 
   if (spendingLimit === 1) {
     if (offset + 12 > data.length) {
-      invalidAccount(account, "Truncated MetaDAO spending limit");
+      throw new InvalidAccountError({
+        address: account,
+        message: "Truncated MetaDAO spending limit",
+      });
     }
 
     const members = view.getUint32(offset + 8, true);
     offset += 12 + members * 32;
   } else if (spendingLimit !== 0) {
-    invalidAccount(account, "Invalid MetaDAO spending-limit option");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Invalid MetaDAO spending-limit option",
+    });
   }
 
   offset += 34;
 
   if (offset >= data.length) {
-    invalidAccount(account, "Truncated MetaDAO governance fields");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Truncated MetaDAO governance fields",
+    });
   }
 
   const optimisticProposal = data[offset++];
@@ -166,10 +182,16 @@ function validateGovernanceLayout(data: Uint8Array, account: Address): void {
   if (optimisticProposal === 1) {
     offset += 40;
   } else if (optimisticProposal !== 0) {
-    invalidAccount(account, "Invalid MetaDAO optimistic-proposal option");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Invalid MetaDAO optimistic-proposal option",
+    });
   }
   if (offset >= data.length || data[offset]! > 1) {
-    invalidAccount(account, "Truncated or invalid MetaDAO governance flag");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Truncated or invalid MetaDAO governance flag",
+    });
   }
 }
 
@@ -188,10 +210,10 @@ async function validateAddresses(request: SwapRequest, pool: SpotPool): Promise<
     baseVault !== pool.baseVault ||
     quoteVault !== pool.quoteVault
   ) {
-    invalidAccount(
-      request.pool,
-      "MetaDAO DAO PDA, bump, or vault addresses do not match their derivation",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "MetaDAO DAO PDA, bump, or vault addresses do not match their derivation",
+    });
   }
 
   return eventAuthority;
@@ -245,20 +267,22 @@ async function build(
       (vault) => vault === tokenAccounts.input || vault === tokenAccounts.output,
     )
   ) {
-    invalidAccount(request.pool, "User accounts must differ from MetaDAO vaults");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "User accounts must differ from MetaDAO vaults",
+    });
   }
   if (
     pool.baseReserves + pool.baseProtocolFees > baseVault.amount ||
     pool.quoteReserves + pool.quoteProtocolFees > quoteVault.amount
   ) {
-    invalidAccount(
-      request.pool,
-      "MetaDAO reserves and accrued fees exceed the supplied vault balances",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "MetaDAO reserves and accrued fees exceed the supplied vault balances",
+    });
   }
   if (request.amount.kind !== "exactIn") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "metadao",
       mode: "exactOut",
       message: "MetaDAO spotSwap only supports exact input",

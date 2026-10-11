@@ -1,19 +1,14 @@
+import {
+  InsufficientLiquidityError,
+  InvalidAccountError,
+  buildSwapInstructions,
+  getSwapRequirements,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
-import { buildSwapInstructions, getSwapRequirements } from "../../dist/index.js";
-import { raydiumCpmmFixture, CPMM_PROGRAM } from "../fixtures/raydium-cpmm.mjs";
 
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+import { raydiumCpmmFixture, CPMM_PROGRAM } from "../fixtures/raydium-cpmm.mjs";
 
 test("offline consumer discovers CPMM accounts and builds both native swap modes in both directions", async () => {
   const signer = await generateKeyPairSigner();
@@ -41,7 +36,7 @@ test("offline consumer discovers CPMM accounts and builds both native swap modes
             accounts: { [fixture.pool]: fixture.request.snapshot.accounts[fixture.pool] },
           },
         };
-        const discovered = value(await getSwapRequirements(incomplete));
+        const discovered = await getSwapRequirements(incomplete);
         assert.equal(discovered.protocol, "raydium-cpmm");
         assert.equal(discovered.complete, false);
         assert.ok(
@@ -54,9 +49,7 @@ test("offline consumer discovers CPMM accounts and builds both native swap modes
           { kind: "exactIn", amountIn: 1_000_001n },
           { kind: "exactOut", amountOut: 1_000_001n },
         ]) {
-          const built = value(
-            await buildSwapInstructions({ ...fixture.request, amount }),
-          );
+          const built = await buildSwapInstructions({ ...fixture.request, amount });
           assert.equal(built.protocol, "raydium-cpmm");
           assert.equal(built.execution.mayPartiallyFill, false);
           assert.equal(built.swapInstructions.length, 1);
@@ -93,17 +86,28 @@ test("offline consumer discovers CPMM accounts and builds both native swap modes
   }
 });
 
-test("consumer receives structured failures for closed CPMM markets and impossible output", async () => {
+test("consumer receives typed failures for closed CPMM markets and impossible output", async () => {
   const signer = await generateKeyPairSigner();
   const fixture = await raydiumCpmmFixture(signer.address);
-  const exhausted = await buildSwapInstructions({
-    ...fixture.request,
-    amount: { kind: "exactOut", amountOut: 2_000_000_000n },
-  });
-  assert.equal(exhausted.ok, false);
-  assert.equal(exhausted.error.code, "INSUFFICIENT_LIQUIDITY");
+  await assert.rejects(
+    () =>
+      buildSwapInstructions({
+        ...fixture.request,
+        amount: { kind: "exactOut", amountOut: 2_000_000_000n },
+      }),
+    (error) => {
+      assert.ok(error instanceof InsufficientLiquidityError);
+      assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+      return true;
+    },
+  );
   fixture.request.snapshot.accounts[fixture.pool].data[329] = 4;
-  const disabled = await buildSwapInstructions(fixture.request);
-  assert.equal(disabled.ok, false);
-  assert.equal(disabled.error.code, "INVALID_ACCOUNT");
+  await assert.rejects(
+    () => buildSwapInstructions(fixture.request),
+    (error) => {
+      assert.ok(error instanceof InvalidAccountError);
+      assert.equal(error.code, "INVALID_ACCOUNT");
+      return true;
+    },
+  );
 });

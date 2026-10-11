@@ -7,7 +7,7 @@ import {
 import { TOKEN_PROGRAM_ADDRESS, findAssociatedTokenPda } from "@solana-program/token";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { HEAVEN_PROGRAM } from "../../dist/protocols/heaven/constants.js";
-import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { WRAPPED_SOL_MINT } from "../../dist/protocols/accounts/tokens.js";
 const encoder = getAddressEncoder(),
   decoder = getAddressDecoder(),
   utf8 = new TextEncoder();

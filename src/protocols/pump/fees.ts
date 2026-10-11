@@ -1,8 +1,9 @@
+import { InvalidAccountError } from "../errors";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { address, type Address } from "@solana/kit";
-import { WRAPPED_SOL_MINT, TOKEN_2022_NATIVE_MINT } from "../../accounts/tokens";
-import type { SnapshotAccount } from "../../core/types";
-import { invalidAccount, readU64, readU128, accountDataView } from "../shared/accounts";
+import { WRAPPED_SOL_MINT, TOKEN_2022_NATIVE_MINT } from "../accounts/tokens";
+import type { SnapshotAccount } from "../types";
+import { readU64, readU128, accountDataView } from "../accounts/bytes";
 
 const USDC_MINT = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
@@ -25,13 +26,19 @@ export function readPumpFeeSchedule(
   quoteMint: Address,
 ): PumpFeeRates {
   if (account.data.length < 2512) {
-    invalidAccount(account.address, "Truncated Pump fee configuration");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Truncated Pump fee configuration",
+    });
   }
 
   const data = accountDataView(account.data);
   const readRates = (offset: number): PumpFeeRates => {
     if (offset + 24 > account.data.length) {
-      invalidAccount(account.address, "Truncated Pump fee schedule");
+      throw new InvalidAccountError({
+        address: account.address,
+        message: "Truncated Pump fee schedule",
+      });
     }
 
     return {
@@ -43,12 +50,18 @@ export function readPumpFeeSchedule(
 
   const readTiers = (offset: number) => {
     if (offset + 4 > account.data.length) {
-      invalidAccount(account.address, "Truncated Pump fee tier vector");
+      throw new InvalidAccountError({
+        address: account.address,
+        message: "Truncated Pump fee tier vector",
+      });
     }
 
     const count = data.getUint32(offset, true);
     if (count > 50 || offset + 4 + count * 40 > account.data.length) {
-      invalidAccount(account.address, "Invalid Pump fee tier vector");
+      throw new InvalidAccountError({
+        address: account.address,
+        message: "Invalid Pump fee tier vector",
+      });
     }
 
     let previous = -1n;
@@ -57,7 +70,10 @@ export function readPumpFeeSchedule(
       const start = offset + 4 + index * 40;
       const threshold = readU128(data, start);
       if (threshold <= previous) {
-        invalidAccount(account.address, "Pump fee tiers must be strictly ordered");
+        throw new InvalidAccountError({
+          address: account.address,
+          message: "Pump fee tiers must be strictly ordered",
+        });
       }
 
       previous = threshold;
@@ -83,14 +99,20 @@ export function readPumpFeeSchedule(
       quoteMint === SYSTEM_PROGRAM_ADDRESS
     ) {
       if (!solTiers.selected) {
-        invalidAccount(account.address, "Missing Pump SOL fee tiers");
+        throw new InvalidAccountError({
+          address: account.address,
+          message: "Missing Pump SOL fee tiers",
+        });
       }
 
       rates = solTiers.selected;
     } else if (quoteMint === USDC_MINT) {
       const selected = stableTiers?.selected;
       if (!selected) {
-        invalidAccount(account.address, "Missing Pump stable fee tiers");
+        throw new InvalidAccountError({
+          address: account.address,
+          message: "Missing Pump stable fee tiers",
+        });
       }
 
       rates = selected;

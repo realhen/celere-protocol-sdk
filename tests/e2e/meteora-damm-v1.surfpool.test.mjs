@@ -1,3 +1,9 @@
+import {
+  InsufficientLiquidityError,
+  InvalidAccountError,
+  buildSwapInstructions,
+  compileTransaction,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -8,7 +14,7 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
+
 import { SYSVAR_CLOCK_ADDRESS } from "@solana/sysvars";
 import {
   meteoraDammV1Fixture,
@@ -19,16 +25,7 @@ import {
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native DAMM v1 tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -68,16 +65,14 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -100,7 +95,7 @@ function roundedFee(amount, numerator) {
 }
 async function execute(fixture, signer, context) {
   await install(fixture, signer);
-  const build = value(await buildSwapInstructions(fixture.request));
+  const build = await buildSwapInstructions(fixture.request);
   const reverse = fixture.request.inputMint === fixture.mintB;
   const input = fixture.vaults[reverse ? 1 : 0],
     output = fixture.vaults[reverse ? 0 : 1];
@@ -238,7 +233,7 @@ test(
         label: `stale:${reverse}`,
         unixTimestamp: await chainTimestamp(),
       });
-      const build = value(await buildSwapInstructions(stale.request));
+      const build = await buildSwapInstructions(stale.request);
       const output = stale.vaults[reverse ? 0 : 1];
       write(stale.request.snapshot.accounts[output.vault], 11, output.total / 2n);
       write(stale.request.snapshot.accounts[output.tokenVault], 64, output.total / 2n);
@@ -254,12 +249,12 @@ test(
         label: `empty:${reverse}`,
         unixTimestamp: await chainTimestamp(),
       });
-      const emptyBuild = value(await buildSwapInstructions(empty.request));
+      const emptyBuild = await buildSwapInstructions(empty.request);
       const drained = empty.vaults[reverse ? 0 : 1];
       write(empty.request.snapshot.accounts[drained.tokenVault], 64, 0n);
-      assert.equal(
-        (await buildSwapInstructions(empty.request)).error.code,
-        "INVALID_ACCOUNT",
+      await assert.rejects(
+        () => buildSwapInstructions(empty.request),
+        InvalidAccountError,
       );
       await install(empty, signer);
       await unchangedUserBalances(
@@ -273,7 +268,7 @@ test(
         label: `dust:${reverse}`,
         unixTimestamp: await chainTimestamp(),
       });
-      const dustBuild = value(await buildSwapInstructions(dust.request));
+      const dustBuild = await buildSwapInstructions(dust.request);
       const dustData = dustBuild.instructions[0].data;
       new DataView(
         dustData.buffer,
@@ -285,11 +280,18 @@ test(
         dustData.byteOffset,
         dustData.byteLength,
       ).setBigUint64(16, 0n, true);
-      const dustResult = await buildSwapInstructions({
-        ...dust.request,
-        amount: { kind: "exactIn", amountIn: 1n },
-      });
-      assert.equal(dustResult.error.code, "INSUFFICIENT_LIQUIDITY");
+      await assert.rejects(
+        () =>
+          buildSwapInstructions({
+            ...dust.request,
+            amount: { kind: "exactIn", amountIn: 1n },
+          }),
+        (error) => {
+          assert.ok(error instanceof InsufficientLiquidityError);
+          assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+          return true;
+        },
+      );
       await install(dust, signer);
       await unchangedUserBalances(
         dust,

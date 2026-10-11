@@ -1,23 +1,26 @@
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  UnsupportedSwapModeError,
+} from "../errors";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import type { Address } from "@solana/kit";
-import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
-import { minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../accounts/tokens";
+import { minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
-import {
-  invalidAccount,
-  accountDataView,
-  readAddress,
-  matchesDiscriminator,
-} from "../shared/accounts";
+} from "../types";
+import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { BOOP_PROGRAM } from "./constants";
 import { buy_token, sell_token } from "./instructions/index";
 import { getBoopCurveAddresses, getBoopUserTokenAddress } from "./pda";
@@ -37,8 +40,7 @@ interface Curve {
 }
 
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "boop",
     feature,
     message: `Boop ${feature} is not qualified`,
@@ -46,7 +48,7 @@ function unsupported(feature: string): never {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "boop", message });
+  throw new InsufficientLiquidityError({ protocol: "boop", message });
 }
 
 function direction(request: SwapRequest): {
@@ -56,8 +58,7 @@ function direction(request: SwapRequest): {
   const isBuy = request.inputMint === WRAPPED_SOL_MINT;
 
   if (isBuy === (request.outputMint === WRAPPED_SOL_MINT)) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Boop curves require one native SOL side",
     });
@@ -79,10 +80,16 @@ function readCurve(request: SwapRequest): Curve {
     !matchesDiscriminator(data, [23, 183, 248, 55, 96, 216, 172, 96]) ||
     data.subarray(125).some((byte) => byte !== 0)
   ) {
-    invalidAccount(request.pool, "Unknown Boop curve layout");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown Boop curve layout",
+    });
   }
   if (data[124] !== 0) {
-    invalidAccount(request.pool, "Boop curve has graduated or migrated");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Boop curve has graduated or migrated",
+    });
   }
   if (data[120] !== 31) {
     unsupported(`curve selector ${data[120]}`);
@@ -99,7 +106,10 @@ function readCurve(request: SwapRequest): Curve {
   };
 
   if (curve.mint !== direction(request).mint) {
-    invalidAccount(request.pool, "Boop curve mint mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Boop curve mint mismatch",
+    });
   }
   if (
     curve.virtualSol === 0n ||
@@ -110,7 +120,10 @@ function readCurve(request: SwapRequest): Curve {
     view.getBigUint64(96, true) > curve.target ||
     view.getUint16(122, true) > 10000
   ) {
-    invalidAccount(request.pool, "Invalid Boop reserve or graduation state");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Boop reserve or graduation state",
+    });
   }
 
   return curve;
@@ -145,7 +158,10 @@ function readConfig(request: SwapRequest, config: Address): void {
     data.length < 189 ||
     !matchesDiscriminator(data, [155, 12, 170, 224, 30, 250, 204, 130])
   ) {
-    invalidAccount(config, "Unknown Boop configuration layout");
+    throw new InvalidAccountError({
+      address: config,
+      message: "Unknown Boop configuration layout",
+    });
   }
 
   const view = accountDataView(data);
@@ -156,10 +172,13 @@ function readConfig(request: SwapRequest, config: Address): void {
     data.subarray(end).some((byte) => byte !== 0) ||
     data[8]! > 1
   ) {
-    invalidAccount(config, "Malformed Boop configuration");
+    throw new InvalidAccountError({
+      address: config,
+      message: "Malformed Boop configuration",
+    });
   }
   if (data[8] !== 0) {
-    invalidAccount(config, "Boop swaps are paused");
+    throw new InvalidAccountError({ address: config, message: "Boop swaps are paused" });
   }
 }
 
@@ -222,8 +241,7 @@ async function build(
   accounts: ResolvedTokenAccounts,
 ): Promise<ProtocolSwap> {
   if (request.amount.kind !== "exactIn") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "boop",
       mode: request.amount.kind,
       message: "Boop exposes native exact-input swaps only",
@@ -235,7 +253,10 @@ async function build(
   const derived = await getBoopCurveAddresses(curve.mint);
 
   if (derived.pool !== request.pool) {
-    invalidAccount(request.pool, "Boop curve PDA mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Boop curve PDA mismatch",
+    });
   }
 
   readConfig(request, derived.config);
@@ -279,10 +300,10 @@ async function build(
     feeData.getUint32(109, true) !== 1 ||
     feeVault.lamports !== feeBalance + feeData.getBigUint64(113, true)
   ) {
-    invalidAccount(
-      derived.feesVault,
-      "Boop fee vault must contain synchronized native WSOL",
-    );
+    throw new InvalidAccountError({
+      address: derived.feesVault,
+      message: "Boop fee vault must contain synchronized native WSOL",
+    });
   }
 
   const solVault = requireAccount(
@@ -298,22 +319,28 @@ async function build(
     tokenBalance < curve.tokens ||
     mint.supply < curve.tokens
   ) {
-    invalidAccount(request.pool, "Boop reserves exceed observed backing");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Boop reserves exceed observed backing",
+    });
   }
 
   const userToken = isBuy ? accounts.output : accounts.input;
 
   if ([derived.tokenVault, derived.feesVault].includes(userToken)) {
-    invalidAccount(userToken, "User token account aliases a Boop vault");
+    throw new InvalidAccountError({
+      address: userToken,
+      message: "User token account aliases a Boop vault",
+    });
   }
   if (!isBuy) {
     const ata = await getBoopUserTokenAddress(request.owner, curve.mint);
 
     if (accounts.input !== ata) {
-      invalidAccount(
-        accounts.input,
-        "Boop sells require the owner's associated token account",
-      );
+      throw new InvalidAccountError({
+        address: accounts.input,
+        message: "Boop sells require the owner's associated token account",
+      });
     }
   }
 

@@ -126,7 +126,6 @@ export class AstralaneSender implements SenderRoute {
    */
   constructor(options: AstralaneSenderOptions) {
     const configuration = configureProvider(options, ENDPOINTS, Region.Global);
-    if (!configuration.ok) throw configuration.error;
     const tier = options.tier ?? AstralaneTier.Free;
     const floors = {
       [AstralaneTier.Free]: 1_000_000n,
@@ -136,7 +135,7 @@ export class AstralaneSender implements SenderRoute {
     };
     if (!Object.values(AstralaneTier).includes(tier))
       throw new SenderConfigurationError("Unsupported Astralane fee tier");
-    const { url, name, timeoutMs } = configuration.value;
+    const { url, name, timeoutMs } = configuration;
     if (name !== undefined) this.name = name;
     this.timeoutMs = timeoutMs;
     this.minimumTipLamports = floors[tier];

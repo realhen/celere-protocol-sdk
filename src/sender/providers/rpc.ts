@@ -47,11 +47,9 @@ export class RpcSender implements SenderRoute {
 
   constructor(options: RpcRouteOptions) {
     const endpoint = validateEndpoint(options.url);
-    if (!endpoint.ok) throw endpoint.error;
     const timeout = validateTimeout(options.timeoutMs);
-    if (!timeout.ok) throw timeout.error;
-    this.url = endpoint.value.toString();
-    this.timeoutMs = timeout.value;
+    this.url = endpoint.toString();
+    this.timeoutMs = timeout;
     Object.freeze(this);
   }
 

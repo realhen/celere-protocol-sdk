@@ -1,3 +1,7 @@
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import { InsufficientLiquidityError, UnsupportedSwapModeError } from "../errors";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import type { Address } from "@solana/kit";
 import {
@@ -5,18 +9,18 @@ import {
   WRAPPED_SOL_MINT,
   readMint,
   readTokenAccount,
-} from "../../accounts/tokens";
-import { U64_MAX, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
-import { accountDataView, readAddress } from "../shared/accounts";
+} from "../types";
+import { accountDataView, readAddress } from "../accounts/bytes";
 import { LIQUID_AF_PROGRAM } from "./constants";
 import {
   buy_exact_in_native,
@@ -25,7 +29,6 @@ import {
   type LiquidAfNativeSwapAccounts,
 } from "./instructions/index";
 import {
-  invalidLiquidAccount,
   liquidAccount,
   readLiquidSolPrice,
   unsupportedLiquidFeature,
@@ -48,7 +51,7 @@ interface Curve {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "liquid-af", message });
+  throw new InsufficientLiquidityError({ protocol: "liquid-af", message });
 }
 
 function readCurve(request: SwapRequest): Curve {
@@ -69,10 +72,16 @@ function readCurve(request: SwapRequest): Curve {
     );
   }
   if (data[72] !== 0 || data.length !== 147) {
-    invalidLiquidAccount(request.pool, "Invalid LiquidAF native curve layout");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid LiquidAF native curve layout",
+    });
   }
   if (data[113]! > 2) {
-    invalidLiquidAccount(request.pool, "Invalid LiquidAF lifecycle state");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid LiquidAF lifecycle state",
+    });
   }
   if (data[113] !== 0) {
     unsupportedLiquidFeature(
@@ -91,15 +100,13 @@ function readCurve(request: SwapRequest): Curve {
       ? request.outputMint !== mint
       : request.inputMint !== mint || request.outputMint !== WRAPPED_SOL_MINT
   ) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "LiquidAF native curves require the pool mint and native SOL",
     });
   }
   if (buy && request.amount.kind === "exactOut") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "liquid-af",
       mode: "exactOut",
       message:
@@ -127,7 +134,10 @@ function readCurve(request: SwapRequest): Curve {
     curve.realTokenReserves > curve.virtualTokenReserves ||
     curve.realTokenReserves > curve.totalSupply
   ) {
-    invalidLiquidAccount(request.pool, "Invalid LiquidAF virtual or real reserves");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid LiquidAF virtual or real reserves",
+    });
   }
 
   return curve;
@@ -151,13 +161,19 @@ function readGlobal(request: SwapRequest, account: Address, expectedBump: number
     view.getUint16(82, true) > 10_000 ||
     view.getUint16(84, true) > 10_000
   ) {
-    invalidLiquidAccount(account, "Invalid LiquidAF fee basis points");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Invalid LiquidAF fee basis points",
+    });
   }
 
   let offset = 380 + view.getUint32(376, true) * 32;
 
   if (offset >= data.length) {
-    invalidLiquidAccount(account, "Truncated LiquidAF quote-mint list");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Truncated LiquidAF quote-mint list",
+    });
   }
 
   const pendingAdmin = data[offset++];
@@ -165,14 +181,20 @@ function readGlobal(request: SwapRequest, account: Address, expectedBump: number
   if (pendingAdmin === 1) {
     offset += 32;
   } else if (pendingAdmin !== 0) {
-    invalidLiquidAccount(account, "Invalid LiquidAF pending-admin option");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Invalid LiquidAF pending-admin option",
+    });
   }
   if (
     offset + 2 > data.length ||
     data[offset]! > 1 ||
     data[offset + 1] !== expectedBump
   ) {
-    invalidLiquidAccount(account, "Invalid LiquidAF global flags or PDA bump");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Invalid LiquidAF global flags or PDA bump",
+    });
   }
   if (data[offset] !== 0) {
     unsupportedLiquidFeature("liquid-af", "paused", "LiquidAF trading is paused");
@@ -215,7 +237,10 @@ async function resolve(request: SwapRequest, curve: Curve) {
   } = await getLiquidAfCurveAddresses(curve.mint, request.owner, curve.creator);
 
   if (pool !== request.pool || bump !== curve.bump) {
-    invalidLiquidAccount(request.pool, "Invalid LiquidAF curve PDA or bump");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid LiquidAF curve PDA or bump",
+    });
   }
 
   const config = readGlobal(request, globalConfig, configBump);
@@ -299,10 +324,10 @@ async function build(
     solVault.lamports < curve.realQuoteReserves + 890_880n ||
     vault.amount < curve.realTokenReserves
   ) {
-    invalidLiquidAccount(
-      request.pool,
-      "LiquidAF recorded reserves exceed spendable vault balances",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LiquidAF recorded reserves exceed spendable vault balances",
+    });
   }
   for (const account of [
     resolved.shared.feeVault,
@@ -317,20 +342,20 @@ async function build(
     );
 
     if (observation.data.length !== 0) {
-      invalidLiquidAccount(
-        account,
-        "LiquidAF native fee destinations must be plain system accounts",
-      );
+      throw new InvalidAccountError({
+        address: account,
+        message: "LiquidAF native fee destinations must be plain system accounts",
+      });
     }
   }
   if (
     resolved.tokenVault === tokenAccounts.input ||
     resolved.tokenVault === tokenAccounts.output
   ) {
-    invalidLiquidAccount(
-      request.pool,
-      "User token accounts must differ from LiquidAF reserve vaults",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "User token accounts must differ from LiquidAF reserve vaults",
+    });
   }
 
   validateLiquidSharedState(

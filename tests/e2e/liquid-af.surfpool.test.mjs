@@ -1,3 +1,8 @@
+import {
+  UnsupportedSwapModeError,
+  compileTransaction,
+  buildSwapInstructions,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -8,19 +13,12 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { compileTransaction, buildSwapInstructions } from "../../dist/index.js";
+
 import { liquidAfFixture, LIQUID_AF_PROGRAM } from "../fixtures/liquid-af.mjs";
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native LiquidAF tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const r = await fetch(endpoint, {
     method: "POST",
@@ -61,19 +59,17 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: [
-        getSetComputeUnitLimitInstruction({ units: 600_000 }),
-        ...build.instructions,
-      ],
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: [
+      getSetComputeUnitLimitInstruction({ units: 600_000 }),
+      ...build.instructions,
+    ],
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -148,7 +144,7 @@ test(
           : { kind: "exactIn", amountIn: amount },
         slippageBps: 0,
       };
-      const build = value(await buildSwapInstructions(request));
+      const build = await buildSwapInstructions(request);
       await install(f, signer);
       const beforeToken = await tokenAmount(f.userToken),
         beforeSol = await lamports(signer.address);
@@ -230,14 +226,17 @@ test(
         500_000n,
         true,
       );
-      const publicResult = await buildSwapInstructions({
+      const request = {
         ...f.request,
         amount: exactOut ? { kind: "exactOut", amountOut: 1_000_001n } : f.request.amount,
-      });
+      };
       if (exactOut) {
-        assert.equal(publicResult.ok, false);
-        assert.equal(publicResult.error.code, "UNSUPPORTED_SWAP_MODE");
+        await assert.rejects(
+          () => buildSwapInstructions(request),
+          UnsupportedSwapModeError,
+        );
       }
+      const publicResult = exactOut ? undefined : await buildSwapInstructions(request);
       const instructions = exactOut
         ? [
             raw.buy_exact_out_native(f.instructionAccounts, {
@@ -245,7 +244,7 @@ test(
               maximumAmountIn: 10_000_000n,
             }),
           ]
-        : value(publicResult).instructions;
+        : publicResult.instructions;
       await install(f, signer);
       const beforeToken = await tokenAmount(f.userToken),
         beforeSol = await lamports(signer.address);
@@ -262,8 +261,8 @@ test(
       );
       assert.equal((await poolData(f))[113], 1);
       if (!exactOut) {
-        assert.equal(publicResult.value.quote.expectedAmountIn, 335_909n);
-        assert.equal(publicResult.value.quote.expectedAmountOut, 500_000n);
+        assert.equal(publicResult.quote.expectedAmountIn, 335_909n);
+        assert.equal(publicResult.quote.expectedAmountOut, 500_000n);
       }
       context.diagnostic(
         `clipped raw ${exactOut ? "exactOut" : "exactIn"} input=335909 output=500000 signature=${signature}`,
@@ -296,7 +295,7 @@ test(
             ? { kind: "exactOut", amountOut: 1_000_001n }
             : f.request.amount,
         };
-        const build = value(await buildSwapInstructions(request));
+        const build = await buildSwapInstructions(request);
         const view = new DataView(f.request.snapshot.accounts[f.pool].data.buffer);
         if (reverse) {
           view.setBigUint64(89, exhausted ? 100_000n : 500_000_000n, true);

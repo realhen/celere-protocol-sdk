@@ -49,10 +49,10 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
         fillPolicy: "requireFull",
       });
       const build = await buildSwapInstructions(request);
-      assert.ok(build.ok);
+
       const baseBefore = await balance(userBase),
         quoteBefore = await balance(userQuote);
-      const signature = await submitInstructions(url, build.value.instructions, user);
+      const signature = await submitInstructions(url, build.instructions, user);
       const baseAfter = await balance(userBase),
         quoteAfter = await balance(userQuote);
       const transaction = await rpc(url, "getTransaction", [
@@ -73,15 +73,15 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
         tradeFee: event.readBigUInt64LE(80) + event.readBigUInt64LE(96),
         creatorFee: event.readBigUInt64LE(352),
       };
-      assert.equal(actual.amountIn, build.value.quote.expectedAmountIn);
-      assert.equal(actual.amountOut, build.value.quote.expectedAmountOut);
+      assert.equal(actual.amountIn, build.quote.expectedAmountIn);
+      assert.equal(actual.amountOut, build.quote.expectedAmountOut);
       assert.equal(
         actual.tradeFee,
-        build.value.quote.fees.find((fee) => fee.kind === "trade").amount,
+        build.quote.fees.find((fee) => fee.kind === "trade").amount,
       );
       assert.equal(
         actual.creatorFee,
-        build.value.quote.fees.find((fee) => fee.kind === "creator").amount,
+        build.quote.fees.find((fee) => fee.kind === "creator").amount,
       );
       observations.push({ tokenProgram, kind, request, actual, signature });
     }

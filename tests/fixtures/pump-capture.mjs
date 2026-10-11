@@ -47,19 +47,19 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
       fillPolicy: "requireFull",
     });
     const built = await buildSwapInstructions(request);
-    assert.ok(built.ok);
-    const signature = await submitInstructions(url, built.value.instructions, owner);
+
+    const signature = await submitInstructions(url, built.instructions, owner);
     const nextTokens = BigInt(
       (await rpc(url, "getTokenAccountBalance", [token])).value.amount,
     );
     assert.equal(
       isBuy ? nextTokens - previousTokens : previousTokens - nextTokens,
-      isBuy ? built.value.quote.expectedAmountOut : built.value.quote.expectedAmountIn,
+      isBuy ? built.quote.expectedAmountOut : built.quote.expectedAmountIn,
     );
     observations.push({
       tokenProgram,
       request,
-      quote: built.value.quote,
+      quote: built.quote,
       signature,
       observedTokenDelta: nextTokens - previousTokens,
     });

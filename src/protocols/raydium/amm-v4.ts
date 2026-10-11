@@ -1,10 +1,14 @@
 /** Modified offline adaptation of raydium-io/raydium-amm (Apache-2.0); see NOTICE.md. */
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import { InsufficientLiquidityError, UnsupportedPoolFeatureError } from "../errors";
 import type { Address } from "@solana/kit";
-import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { invalidAccount, accountDataView, readAddress } from "../shared/accounts";
-import { requireAccount } from "../../core/snapshot";
+import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import { accountDataView, readAddress } from "../accounts/bytes";
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -12,7 +16,7 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import { swap_base_in_v2, swap_base_out_v2 } from "./instructions/amm-v4/index";
 import { RAYDIUM_AMM_V4_PROGRAM } from "./constants";
 export { RAYDIUM_AMM_V4_PROGRAM } from "./constants";
@@ -38,7 +42,7 @@ interface PoolState {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "raydium-amm-v4", message });
+  throw new InsufficientLiquidityError({ protocol: "raydium-amm-v4", message });
 }
 
 function readPool(request: SwapRequest): PoolState {
@@ -50,7 +54,10 @@ function readPool(request: SwapRequest): PoolState {
   );
 
   if (account.data.length !== 752) {
-    invalidAccount(request.pool, "Unsupported Raydium AMM v4 pool layout");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported Raydium AMM v4 pool layout",
+    });
   }
 
   const data = account.data;
@@ -72,21 +79,23 @@ function readPool(request: SwapRequest): PoolState {
   };
 
   if (pool.status === 1n || pool.status === 5n) {
-    fail({
-      code: "UNSUPPORTED_POOL_FEATURE",
+    throw new UnsupportedPoolFeatureError({
       protocol: "raydium-amm-v4",
       feature: "orderbook-active-status",
       message: "Only vault-backed SwapOnly and opened WaitingTrade pools are qualified",
     });
   }
   if (pool.status !== 6n && pool.status !== 7n) {
-    invalidAccount(
-      request.pool,
-      "Raydium AMM v4 swaps are disabled or the status is invalid",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Raydium AMM v4 swaps are disabled or the status is invalid",
+    });
   }
   if (pool.status === 7n && request.snapshot.unixTimestamp < pool.openTime) {
-    invalidAccount(request.pool, "Raydium AMM v4 pool has not opened");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Raydium AMM v4 pool has not opened",
+    });
   }
   if (
     pool.nonce > 255n ||
@@ -97,14 +106,16 @@ function readPool(request: SwapRequest): PoolState {
     pool.mint0 === pool.mint1 ||
     pool.vault0 === pool.vault1
   ) {
-    invalidAccount(request.pool, "Invalid Raydium AMM v4 pool parameters");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Raydium AMM v4 pool parameters",
+    });
   }
   if (!(
     (request.inputMint === pool.mint0 && request.outputMint === pool.mint1) ||
     (request.inputMint === pool.mint1 && request.outputMint === pool.mint0)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested token pair does not match the AMM v4 pool",
     });
@@ -209,7 +220,10 @@ async function build(
   const [authority, nonce] = await findRaydiumAmmV4AuthorityPda();
 
   if (pool.nonce !== BigInt(nonce)) {
-    invalidAccount(request.pool, "Invalid AMM v4 authority nonce");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid AMM v4 authority nonce",
+    });
   }
   for (const [mint, decimals] of [
     [pool.mint0, pool.decimals0],
@@ -218,15 +232,17 @@ async function build(
     const info = readMint(request.snapshot, mint);
 
     if (info.tokenProgram !== TOKEN_PROGRAM) {
-      fail({
-        code: "UNSUPPORTED_POOL_FEATURE",
+      throw new UnsupportedPoolFeatureError({
         protocol: "raydium-amm-v4",
         feature: "token-2022",
         message: "Raydium AMM v4 native swaps require classic SPL Token mints",
       });
     }
     if (BigInt(info.decimals) !== decimals) {
-      invalidAccount(mint, "Mint decimals do not match the AMM v4 pool");
+      throw new InvalidAccountError({
+        address: mint,
+        message: "Mint decimals do not match the AMM v4 pool",
+      });
     }
   }
 
@@ -246,14 +262,20 @@ async function build(
   );
 
   if (pool.pendingPnl0 > vault0.amount || pool.pendingPnl1 > vault1.amount) {
-    invalidAccount(request.pool, "Pending PnL exceeds an AMM v4 vault balance");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Pending PnL exceeds an AMM v4 vault balance",
+    });
   }
   if (
     [pool.vault0, pool.vault1].some(
       (vault) => vault === tokenAccounts.input || vault === tokenAccounts.output,
     )
   ) {
-    invalidAccount(request.pool, "User token accounts must differ from pool vaults");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "User token accounts must differ from pool vaults",
+    });
   }
 
   const zeroForOne = request.inputMint === pool.mint0;

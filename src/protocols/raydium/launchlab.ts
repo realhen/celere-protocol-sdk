@@ -1,21 +1,28 @@
 /** Native LaunchLab interface facts: raydium-io/raydium-idl e7e0c96; independent implementation. */
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  UnsupportedSwapModeError,
+} from "../errors";
 import type { Address, Instruction } from "@solana/kit";
 import {
   readMint,
   readTokenAccount,
   TOKEN_PROGRAM,
   TOKEN_2022_PROGRAM,
-} from "../../accounts/tokens";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
+} from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
 import {
-  invalidAccount,
   accountDataView,
   matchesDiscriminator,
   readAddress,
   readU64,
-} from "../shared/accounts";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/bytes";
+import { requireAccount } from "../accounts/snapshot";
 import type {
   ProtocolAdapter,
   ProtocolSwap,
@@ -23,7 +30,7 @@ import type {
   ResolvedTokenAccounts,
   SnapshotAccount,
   SwapFee,
-} from "../../core/types";
+} from "../types";
 import {
   buy_exact_in,
   sell_exact_in,
@@ -82,8 +89,7 @@ interface Rates {
 }
 
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "launchlab",
     feature,
     message: `Unsupported LaunchLab feature: ${feature}`,
@@ -91,8 +97,7 @@ function unsupported(feature: string): never {
 }
 
 function liquidity(): never {
-  fail({
-    code: "INSUFFICIENT_LIQUIDITY",
+  throw new InsufficientLiquidityError({
     protocol: "launchlab",
     message: "Requested amount exceeds the active LaunchLab curve's liquidity",
   });
@@ -108,10 +113,10 @@ function layout(
     (exact ? account.data.length !== length : account.data.length < length) ||
     !matchesDiscriminator(account.data, discriminator)
   ) {
-    invalidAccount(
-      account.address,
-      "Unsupported LaunchLab account layout or discriminator",
-    );
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Unsupported LaunchLab account layout or discriminator",
+    });
   }
 
   return account.data;
@@ -133,7 +138,10 @@ function poolState(request: SwapRequest): Pool {
     unsupported("closed or migrated pool");
   }
   if (data[20]! > 1 || data[365]! > 3 || data[366]! > 1) {
-    invalidAccount(request.pool, "Invalid LaunchLab pool flags");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid LaunchLab pool flags",
+    });
   }
 
   const pool: Pool = {
@@ -167,14 +175,16 @@ function poolState(request: SwapRequest): Pool {
     pool.totalSell >= pool.virtualBase ||
     pool.raised >= pool.target
   ) {
-    invalidAccount(request.pool, "Inconsistent LaunchLab pool state");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Inconsistent LaunchLab pool state",
+    });
   }
   if (!(
     (request.inputMint === pool.baseMint && request.outputMint === pool.quoteMint) ||
     (request.inputMint === pool.quoteMint && request.outputMint === pool.baseMint)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested pair does not match the LaunchLab pool",
     });
@@ -203,10 +213,10 @@ async function readRates(request: SwapRequest, pool: Pool): Promise<Rates> {
   const expected = await getRaydiumLaunchlabGlobalConfigAddress(pool.quoteMint, index);
 
   if (expected !== pool.config || readAddress(config, 83) !== pool.quoteMint) {
-    invalidAccount(
-      pool.config,
-      "LaunchLab global config does not match its quote mint and PDA",
-    );
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "LaunchLab global config does not match its quote mint and PDA",
+    });
   }
 
   const platform = layout(
@@ -231,7 +241,10 @@ async function readRates(request: SwapRequest, pool: Pool): Promise<Rates> {
     rates.platform > 50_000n ||
     rates.creator > 5_000n
   ) {
-    invalidAccount(pool.platform, "Invalid LaunchLab fee rates");
+    throw new InvalidAccountError({
+      address: pool.platform,
+      message: "Invalid LaunchLab fee rates",
+    });
   }
 
   return rates;
@@ -265,8 +278,7 @@ async function build(
   const buy = request.inputMint === pool.quoteMint;
 
   if (buy && request.amount.kind === "exactOut") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "launchlab",
       mode: "exactOut",
       message:
@@ -282,7 +294,10 @@ async function build(
   );
 
   if (expectedPool !== request.pool || bump !== pool.bump) {
-    invalidAccount(request.pool, "LaunchLab pool or authority PDA mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab pool or authority PDA mismatch",
+    });
   }
 
   const base = readMint(request.snapshot, pool.baseMint);
@@ -294,14 +309,20 @@ async function build(
     base.tokenProgram !== (pool.tokenFlags & 1 ? TOKEN_2022_PROGRAM : TOKEN_PROGRAM) ||
     quote.tokenProgram !== (pool.tokenFlags & 2 ? TOKEN_2022_PROGRAM : TOKEN_PROGRAM)
   ) {
-    invalidAccount(request.pool, "LaunchLab mint metadata does not match pool state");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab mint metadata does not match pool state",
+    });
   }
 
   const baseVault = await getRaydiumLaunchlabVaultAddress(request.pool, pool.baseMint);
   const quoteVault = await getRaydiumLaunchlabVaultAddress(request.pool, pool.quoteMint);
 
   if (baseVault !== pool.baseVault || quoteVault !== pool.quoteVault) {
-    invalidAccount(request.pool, "LaunchLab vault PDA mismatch");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab vault PDA mismatch",
+    });
   }
 
   const baseBalance = readTokenAccount(
@@ -323,13 +344,16 @@ async function build(
     baseBalance < pool.totalSell - pool.sold ||
     quoteBalance < pool.raised + pool.pendingFees
   ) {
-    invalidAccount(
-      request.pool,
-      "LaunchLab vault does not back the recorded curve reserves",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab vault does not back the recorded curve reserves",
+    });
   }
   if (pool.virtualBase <= pool.sold || pool.virtualQuote + pool.raised > U64_MAX) {
-    invalidAccount(request.pool, "Invalid LaunchLab effective reserves");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid LaunchLab effective reserves",
+    });
   }
 
   // Price against virtual reserves after validating the vault-backed sale balances.
@@ -337,7 +361,10 @@ async function build(
   const y = pool.virtualQuote + pool.raised;
 
   if (y === 0n) {
-    invalidAccount(request.pool, "LaunchLab effective quote reserve is zero");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab effective quote reserve is zero",
+    });
   }
 
   let input: bigint;

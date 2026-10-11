@@ -28,16 +28,7 @@ import { sugarFixture } from "../fixtures/sugar.mjs";
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native Sugar tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -129,16 +120,14 @@ test(
     ];
     for (const instruction of historicalInstructions) {
       const latest = (await rpc("getLatestBlockhash")).value;
-      const built = value(
-        compileTransaction({
-          instructions: [instruction],
-          feePayer: signer.address,
-          lifetime: {
-            blockhash: latest.blockhash,
-            lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-          },
-        }),
-      );
+      const built = compileTransaction({
+        instructions: [instruction],
+        feePayer: signer.address,
+        lifetime: {
+          blockhash: latest.blockhash,
+          lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+        },
+      });
       const signed = await signTransaction([signer.keyPair], built.transaction);
       const before = (await rpc("getAccountInfo", [f.pool, { encoding: "base64" }]))
         .value;

@@ -3,11 +3,11 @@ import {
   fetchSwapWithSdk,
   type FetchSwapRequest,
   type FetchSwapConfig,
-} from "./fetch-swap";
-import type { SwapBuild } from "./core/types";
-import { createRouteSdk } from "./core/routes";
+} from "./protocols/fetch-swap";
+import type { SwapBuild } from "./protocols/types";
+import { createRouteSdk } from "./protocols/routes";
 import { pumpRouteAdapter } from "./protocols/pump/route";
-import { createProtocolSdk } from "./core/sdk";
+import { createProtocolSdk } from "./protocols/sdk";
 import { boopAdapter } from "./protocols/boop/adapter";
 import { heavenAdapter } from "./protocols/heaven/amm";
 import { liquidAfAmmAdapter } from "./protocols/liquid-af-amm/amm";
@@ -61,14 +61,14 @@ export const buildRouteInstructions = routeSdk.buildRouteInstructions;
 export const getSwapRequirements = sdk.getSwapRequirements;
 /** Build native swap instructions from caller-owned immutable account snapshots. */
 export const buildSwapInstructions = sdk.buildSwapInstructions;
-export * from "./core/index";
+export * from "./protocols/index";
 export * from "./transactions/index";
 export { PROTOCOL_COVERAGE, type ProtocolCoverage } from "./protocols/coverage";
 
 export * from "./sender/index";
 
 export * from "./protocols/pump/pda";
-export type { FetchSwapRequest, FetchSwapConfig } from "./fetch-swap";
+export type { FetchSwapRequest, FetchSwapConfig } from "./protocols/fetch-swap";
 
 /**
  * Fetch the accounts needed for a swap, quote it, and return unsigned instructions.
@@ -77,9 +77,10 @@ export type { FetchSwapRequest, FetchSwapConfig } from "./fetch-swap";
  * @param request - Swap intent; pool ownership selects the protocol automatically.
  * @param config - Optional commitment and cancellation signal.
  * @returns The quote and ordered instructions, including required token-account setup.
- * @throws {@link SwapBuildError} for expected protocol or request failures, preserving
- * the offline builder's structured error in `detail`. RPC and cancellation failures
- * propagate unchanged. Invalid RPC batches and discovery limits raise `Error`.
+ * @throws A {@link ProtocolError} subclass or {@link InvalidRequestError} for expected
+ * protocol or request failures, with context available directly on the error.
+ * RPC, cancellation, and unexpected builder failures propagate unchanged.
+ * Invalid RPC batches and discovery limits raise {@link SwapAccountFetchError}.
  * @remarks Each discovery round refetches all known accounts and Clock together at
  * one bank context, up to 99 swap accounts and 20 RPC rounds. No accounts are cached.
  * For an application-maintained cache or feed, use `buildSwapInstructions` with your

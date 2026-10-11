@@ -1,12 +1,13 @@
-import { assertAmount, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import type { SwapQuote, SwapRequest } from "../../core/types";
+import { InvalidRequestError } from "../../shared/errors";
+import { InsufficientLiquidityError, UnsupportedSwapModeError } from "../errors";
+import { assertAmount, ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import type { SwapQuote, SwapRequest } from "../types";
 import type { Address } from "@solana/kit";
 import { AMM_QUOTE_MINT, type PumpAmmFeeRates } from "./amm-state";
 
 function insufficientLiquidity(): never {
-  fail({
-    code: "INSUFFICIENT_LIQUIDITY",
+  throw new InsufficientLiquidityError({
     protocol: "pump-amm",
     message: "Swap exceeds usable Pump AMM reserves or rounds to zero",
   });
@@ -52,8 +53,7 @@ export function quotePumpAmm(
 
   if (request.amount.kind === "exactOut") {
     if (!isBuy) {
-      fail({
-        code: "UNSUPPORTED_SWAP_MODE",
+      throw new UnsupportedSwapModeError({
         protocol: "pump-amm",
         mode: "exactOut",
         message:
@@ -123,8 +123,7 @@ export function quotePumpAmm(
 
   const minimumAmountOut = minimumOutput(expectedAmountOut, request.slippageBps);
   if (minimumAmountOut === 0n) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "slippageBps",
       message: "Slippage would permit zero output",
     });

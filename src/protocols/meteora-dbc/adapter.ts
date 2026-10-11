@@ -1,16 +1,19 @@
 /** Offline adaptation of Meteora's MIT DBC SDK and public IDL; see NOTICE.md. */
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import { UnsupportedPoolFeatureError, InsufficientLiquidityError } from "../errors";
 import type { Address } from "@solana/kit";
 import {
-  invalidAccount,
   accountDataView,
   readAddress,
   readU128,
   matchesDiscriminator,
-} from "../shared/accounts";
-import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/bytes";
+import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -18,7 +21,7 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants";
 
 import {
@@ -62,8 +65,7 @@ interface Config {
 }
 
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "meteora-dbc",
     feature,
     message: `Meteora DBC ${feature} is not qualified for this release`,
@@ -71,7 +73,7 @@ function unsupported(feature: string): never {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "meteora-dbc", message });
+  throw new InsufficientLiquidityError({ protocol: "meteora-dbc", message });
 }
 
 function readPool(request: SwapRequest): Pool {
@@ -87,16 +89,25 @@ function readPool(request: SwapRequest): Pool {
     data.length !== 424 ||
     !matchesDiscriminator(data, [213, 224, 5, 209, 98, 69, 119, 92])
   ) {
-    invalidAccount(request.pool, "Unknown Meteora DBC pool layout");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown Meteora DBC pool layout",
+    });
   }
   if (data[304] !== 0) {
     unsupported("Token-2022 base tokens");
   }
   if (data[305] !== 0 || data[308] !== 0 || view.getBigUint64(344, true) !== 0n) {
-    invalidAccount(request.pool, "DBC pool has completed its curve or migration");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "DBC pool has completed its curve or migration",
+    });
   }
   if (data[370]! > 1) {
-    invalidAccount(request.pool, "Unknown DBC swap status");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown DBC swap status",
+    });
   }
 
   return {
@@ -130,7 +141,10 @@ function readConfig(request: SwapRequest, pool: Pool): Config {
     data.length !== 1048 ||
     !matchesDiscriminator(data, [26, 108, 14, 123, 116, 230, 129, 43])
   ) {
-    invalidAccount(pool.config, "Unknown Meteora DBC config layout");
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "Unknown Meteora DBC config layout",
+    });
   }
 
   const view = accountDataView(data);
@@ -147,15 +161,24 @@ function readConfig(request: SwapRequest, pool: Pool): Config {
     unsupported("rate limiter or unknown base fee mode");
   }
   if (data[232]! > 1 || data[234]! > 1 || data[236]! > 1 || data[245]! > 100) {
-    invalidAccount(pool.config, "Unknown DBC config flags or creator fee percentage");
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "Unknown DBC config flags or creator fee percentage",
+    });
   }
 
   const point = data[234] === 0 ? request.snapshot.slot : request.snapshot.unixTimestamp;
   if (point < 0n || point > U64_MAX) {
-    invalidAccount(request.pool, "DBC chain context must fit a native u64");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "DBC chain context must fit a native u64",
+    });
   }
   if (point < pool.activationPoint) {
-    invalidAccount(request.pool, "DBC pool has not activated");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "DBC pool has not activated",
+    });
   }
 
   // Apply the fee schedule using the configured slot or timestamp activation clock.
@@ -167,7 +190,10 @@ function readConfig(request: SwapRequest, pool: Pool): Config {
     unsupported("exponential fee scheduler");
   }
   if (cliff > 990_000_000n || cliff - periods * reduction < 0n) {
-    invalidAccount(pool.config, "Invalid DBC fee schedule");
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "Invalid DBC fee schedule",
+    });
   }
 
   const elapsed = frequency === 0n ? 0n : (point - pool.activationPoint) / frequency;
@@ -178,8 +204,7 @@ function readConfig(request: SwapRequest, pool: Pool): Config {
     (request.inputMint === pool.baseMint && request.outputMint === quoteMint) ||
     (request.inputMint === quoteMint && request.outputMint === pool.baseMint)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested mints do not match the DBC pool",
     });
@@ -198,7 +223,10 @@ function readConfig(request: SwapRequest, pool: Pool): Config {
       continue;
     }
     if (ended || sqrtPrice <= previous || sqrtPrice > MAX_PRICE || liquidity === 0n) {
-      invalidAccount(pool.config, "Malformed piecewise DBC curve");
+      throw new InvalidAccountError({
+        address: pool.config,
+        message: "Malformed piecewise DBC curve",
+      });
     }
 
     points.push({ sqrtPrice, liquidity });
@@ -216,10 +244,16 @@ function readConfig(request: SwapRequest, pool: Pool): Config {
     pool.sqrtPrice < startPrice ||
     pool.sqrtPrice > migrationPrice
   ) {
-    invalidAccount(pool.config, "DBC curve price bounds do not cover the pool");
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "DBC curve price bounds do not cover the pool",
+    });
   }
   if (pool.quoteReserve >= migrationThreshold) {
-    invalidAccount(request.pool, "DBC pool reached its migration threshold");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "DBC pool reached its migration threshold",
+    });
   }
 
   return {
@@ -269,7 +303,10 @@ async function build(
     pool.baseMint === config.quoteMint ||
     pool.baseVault === pool.quoteVault
   ) {
-    invalidAccount(request.pool, "DBC pool PDA or asset identities are invalid");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "DBC pool PDA or asset identities are invalid",
+    });
   }
 
   for (const [mint, vault] of [
@@ -282,11 +319,17 @@ async function build(
 
     const expected = await getMeteoraDbcTokenVaultAddress(mint, request.pool);
     if (vault !== expected) {
-      invalidAccount(vault, "DBC vault PDA mismatch");
+      throw new InvalidAccountError({
+        address: vault,
+        message: "DBC vault PDA mismatch",
+      });
     }
   }
   if (readMint(request.snapshot, pool.baseMint).decimals !== config.decimals) {
-    invalidAccount(pool.baseMint, "DBC config mint decimals mismatch");
+    throw new InvalidAccountError({
+      address: pool.baseMint,
+      message: "DBC config mint decimals mismatch",
+    });
   }
 
   const baseBalance = readTokenAccount(
@@ -307,16 +350,19 @@ async function build(
     pool.baseReserve + pool.baseFees > baseBalance ||
     pool.quoteReserve + pool.quoteFees > quoteBalance
   ) {
-    invalidAccount(
-      request.pool,
-      "DBC reserves and accrued fees exceed observed vault balances",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "DBC reserves and accrued fees exceed observed vault balances",
+    });
   }
   if (
     [pool.baseVault, pool.quoteVault].includes(accounts.input) ||
     [pool.baseVault, pool.quoteVault].includes(accounts.output)
   ) {
-    invalidAccount(request.pool, "User accounts cannot alias DBC vaults");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "User accounts cannot alias DBC vaults",
+    });
   }
 
   const exactIn = request.amount.kind === "exactIn";

@@ -14,17 +14,6 @@ import { meteoraDlmmFixture } from "../fixtures/meteora-dlmm.mjs";
 
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
-
 async function rpc(method, params = []) {
   assert.ok(
     ["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname),
@@ -74,16 +63,14 @@ async function tokenAmount(account) {
 
 async function sendPlan(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -106,7 +93,7 @@ test(
           label: `native:${reverse}:${amount.kind}`,
         });
         await installFixture(fixture, signer);
-        const build = value(await buildSwapInstructions({ ...fixture.request, amount }));
+        const build = await buildSwapInstructions({ ...fixture.request, amount });
         const inputBefore = await tokenAmount(fixture.request.tokenAccounts.input);
         const outputBefore = await tokenAmount(fixture.request.tokenAccounts.output);
         const signature = await sendPlan(build, signer);
@@ -164,7 +151,7 @@ function binTotal(data, offset) {
 }
 async function executeAndCheck(fixture, signer, amount) {
   await installFixture(fixture, signer);
-  const build = value(await buildSwapInstructions({ ...fixture.request, amount }));
+  const build = await buildSwapInstructions({ ...fixture.request, amount });
   const inputBefore = await tokenAmount(fixture.request.tokenAccounts.input);
   const outputBefore = await tokenAmount(fixture.request.tokenAccounts.output);
   const signature = await sendPlan(build, signer);
@@ -272,9 +259,7 @@ test(
             label: `adverse:${reverse}:${amount.kind}:${change}`,
             bitmapExtension: true,
           });
-          const build = value(
-            await buildSwapInstructions({ ...fixture.request, amount }),
-          );
+          const build = await buildSwapInstructions({ ...fixture.request, amount });
           if (change === "fee")
             fixture.request.snapshot.accounts[fixture.pool].data[34] = 1;
           else {

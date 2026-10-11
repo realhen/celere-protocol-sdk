@@ -1,3 +1,8 @@
+import {
+  InvalidAccountError,
+  buildSwapInstructions,
+  compileTransaction,
+} from "../../dist/index.js";
 import { preservePumpConfiguration } from "../fixtures/pump-surfpool-state.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -6,21 +11,14 @@ import {
   signTransaction,
   getBase64EncodedWireTransaction,
 } from "@solana/kit";
-import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
+
 import { TOKEN, TOKEN_2022 } from "../fixtures/pump-amm.mjs";
 import { pumpAmmQuotesFixture } from "../fixtures/pump-amm-quotes.mjs";
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 preservePumpConfiguration(endpoint);
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw Error("Pump AMM tests require a loopback simulator");
-function value(r) {
-  assert.equal(
-    r.ok,
-    true,
-    JSON.stringify(r, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return r.value;
-}
+
 async function rpc(method, params = []) {
   const body = await (
     await fetch(endpoint, {
@@ -55,16 +53,14 @@ async function balance(k) {
 }
 async function send(b, signer, additionalSigners = []) {
   const latest = (await rpc("getLatestBlockhash")).value;
-  const c = value(
-    compileTransaction({
-      instructions: b.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const c = compileTransaction({
+    instructions: b.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction(
     [signer, ...additionalSigners].map((s) => s.keyPair),
     c.transaction,
@@ -78,7 +74,7 @@ function signed128(data, offset) {
   return data.readBigUInt64LE(offset) | (data.readBigInt64LE(offset + 8) << 64n);
 }
 async function verifySwap(f, signer, amount) {
-  const built = value(await buildSwapInstructions({ ...f.request, amount }));
+  const built = await buildSwapInstructions({ ...f.request, amount });
   await install(f);
   const isBuy = f.request.inputMint === f.quoteMint;
   const [baseBefore, quoteBefore, buybackBefore] = await Promise.all([
@@ -211,15 +207,13 @@ test(
           quoteTokenProgram,
           reverse: mode === "sell-in",
         });
-        const built = value(
-          await buildSwapInstructions({
-            ...f.request,
-            amount:
-              mode === "buy-out"
-                ? { kind: "exactOut", amountOut: 123456789n }
-                : f.request.amount,
-          }),
-        );
+        const built = await buildSwapInstructions({
+          ...f.request,
+          amount:
+            mode === "buy-out"
+              ? { kind: "exactOut", amountOut: 123456789n }
+              : f.request.amount,
+        });
         const stale = structuredClone(f);
         const reserve =
           stale.request.snapshot.accounts[mode === "sell-in" ? f.baseVault : f.quoteVault]
@@ -283,7 +277,7 @@ test(
       f.request.payer = payer.address;
       f.request.snapshot.accounts[f.buybackAta] = null;
       f.request.snapshot.accounts[f.userBase] = null;
-      const built = value(await buildSwapInstructions(f.request));
+      const built = await buildSwapInstructions(f.request);
       assert.equal(built.setupInstructions.length, 2);
       await install(f);
       await rpc("surfnet_setAccount", [payer.address, { lamports: 10000000000 }]);
@@ -312,7 +306,7 @@ test(
       label: "missing-stable",
       quote: "usdc",
     });
-    const built = value(await buildSwapInstructions(f.request));
+    const built = await buildSwapInstructions(f.request);
     for (const oldLength of [true, false]) {
       const bad = structuredClone(f);
       if (oldLength)
@@ -325,9 +319,14 @@ test(
           0,
           true,
         );
-      const rejected = await buildSwapInstructions(bad.request);
-      assert.equal(rejected.ok, false);
-      assert.equal(rejected.error.code, "INVALID_ACCOUNT");
+      await assert.rejects(
+        () => buildSwapInstructions(bad.request),
+        (error) => {
+          assert.ok(error instanceof InvalidAccountError);
+          assert.equal(error.code, "INVALID_ACCOUNT");
+          return true;
+        },
+      );
       await install(bad);
       const keys = [f.pool, f.userBase, f.userQuote, f.baseVault, f.quoteVault];
       const before = await Promise.all(keys.map(account));

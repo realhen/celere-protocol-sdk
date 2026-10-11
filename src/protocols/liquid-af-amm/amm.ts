@@ -1,3 +1,7 @@
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import { InsufficientLiquidityError, UnsupportedSwapModeError } from "../errors";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { address, type Address } from "@solana/kit";
 import {
@@ -6,20 +10,19 @@ import {
   WRAPPED_SOL_MINT,
   readMint,
   readTokenAccount,
-} from "../../accounts/tokens";
-import { U64_MAX, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
-import { accountDataView, readAddress } from "../shared/accounts";
+} from "../types";
+import { accountDataView, readAddress } from "../accounts/bytes";
 import {
-  invalidLiquidAccount,
   liquidAccount,
   readLiquidSolPrice,
   unsupportedLiquidFeature,
@@ -73,7 +76,7 @@ interface FeeTier {
 }
 
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "liquid-af-amm", message });
+  throw new InsufficientLiquidityError({ protocol: "liquid-af-amm", message });
 }
 
 function unsupported(feature: string, message: string): never {
@@ -91,7 +94,10 @@ function readPool(request: SwapRequest): Pool {
   );
 
   if (data.length !== 316) {
-    invalidLiquidAccount(request.pool, "Unsupported LiquidAF AMM pool layout");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported LiquidAF AMM pool layout",
+    });
   }
 
   const view = accountDataView(data);
@@ -105,15 +111,13 @@ function readPool(request: SwapRequest): Pool {
       ? request.outputMint !== baseMint
       : request.inputMint !== baseMint || request.outputMint !== quoteMint)
   ) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested token pair does not match the LiquidAF AMM pool",
     });
   }
   if (buy && request.amount.kind === "exactOut") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "liquid-af-amm",
       mode: "exactOut",
       message:
@@ -154,10 +158,10 @@ function readPool(request: SwapRequest): Pool {
     );
   }
   if (pool.quoteDecimals !== (quoteMint === WRAPPED_SOL_MINT ? 9 : 6)) {
-    invalidLiquidAccount(
-      request.pool,
-      "LiquidAF quote decimals do not match its qualified mint",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LiquidAF quote decimals do not match its qualified mint",
+    });
   }
 
   return pool;
@@ -182,7 +186,10 @@ function readConfig(
   let offset = 300 + quoteCount * 32;
 
   if (offset + 4 > data.length) {
-    invalidLiquidAccount(account, "Truncated LiquidAF AMM quote whitelist");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Truncated LiquidAF AMM quote whitelist",
+    });
   }
 
   let quoteAllowed = false;
@@ -193,17 +200,20 @@ function readConfig(
     }
   }
   if (!quoteAllowed) {
-    invalidLiquidAccount(
-      account,
-      "Pool quote mint is not in the current LiquidAF whitelist",
-    );
+    throw new InvalidAccountError({
+      address: account,
+      message: "Pool quote mint is not in the current LiquidAF whitelist",
+    });
   }
 
   const count = view.getUint32(offset, true);
   offset += 4;
 
   if (count === 0 || offset + count * 22 + 35 > data.length) {
-    invalidLiquidAccount(account, "Truncated or empty LiquidAF fee tiers");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Truncated or empty LiquidAF fee tiers",
+    });
   }
 
   const tiers: FeeTier[] = [];
@@ -223,10 +233,11 @@ function readConfig(
       tier.end <= tier.start ||
       tier.lpBps + tier.protocolBps + tier.creatorBps >= 10_000n
     ) {
-      invalidLiquidAccount(
-        account,
-        "LiquidAF fee tiers must be contiguous, increasing and below 100 percent",
-      );
+      throw new InvalidAccountError({
+        address: account,
+        message:
+          "LiquidAF fee tiers must be contiguous, increasing and below 100 percent",
+      });
     }
 
     tiers.push(tier);
@@ -242,10 +253,16 @@ function readConfig(
   if (pending === 1) {
     offset += 32;
   } else if (pending !== 0) {
-    invalidLiquidAccount(account, "Invalid LiquidAF AMM pending-admin option");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Invalid LiquidAF AMM pending-admin option",
+    });
   }
   if (offset + 2 > data.length || data[offset] !== bump || data[offset + 1]! > 1) {
-    invalidLiquidAccount(account, "Invalid LiquidAF AMM configuration flags or bump");
+    throw new InvalidAccountError({
+      address: account,
+      message: "Invalid LiquidAF AMM configuration flags or bump",
+    });
   }
   if (data[offset + 1] !== 0) {
     unsupported("paused", "LiquidAF AMM trading is paused");
@@ -294,10 +311,10 @@ async function resolve(request: SwapRequest, pool: Pool) {
     observation !== pool.observation ||
     authorityBump !== pool.authorityBump
   ) {
-    invalidLiquidAccount(
-      request.pool,
-      "LiquidAF AMM PDA relationships or vault-authority bump do not match",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LiquidAF AMM PDA relationships or vault-authority bump do not match",
+    });
   }
 
   const config = readConfig(request, globalConfig, configBump, pool.quoteMint);
@@ -380,10 +397,10 @@ async function build(
     baseMint.decimals !== pool.baseDecimals ||
     quoteMint.decimals !== pool.quoteDecimals
   ) {
-    invalidLiquidAccount(
-      request.pool,
-      "LiquidAF pool mint metadata does not match supplied mint accounts",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LiquidAF pool mint metadata does not match supplied mint accounts",
+    });
   }
 
   const base = readTokenAccount(
@@ -430,10 +447,10 @@ async function build(
   );
 
   if (feeAuthority.data.length !== 0) {
-    invalidLiquidAccount(
-      feeAuthority.address,
-      "LiquidAF fee authority must be a plain system account",
-    );
+    throw new InvalidAccountError({
+      address: feeAuthority.address,
+      message: "LiquidAF fee authority must be a plain system account",
+    });
   }
   if (
     [
@@ -446,10 +463,10 @@ async function build(
       (account) => account === tokenAccounts.input || account === tokenAccounts.output,
     )
   ) {
-    invalidLiquidAccount(
-      request.pool,
-      "User accounts must differ from LiquidAF reserve and fee vaults",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "User accounts must differ from LiquidAF reserve and fee vaults",
+    });
   }
 
   const observation = liquidAccount(
@@ -469,10 +486,10 @@ async function build(
     readAddress(observation.data, 11) !== request.pool ||
     observationView.getBigUint64(4043, true) > request.snapshot.unixTimestamp
   ) {
-    invalidLiquidAccount(
-      pool.observation,
-      "LiquidAF observation does not match its pool or supplied chain time",
-    );
+    throw new InvalidAccountError({
+      address: pool.observation,
+      message: "LiquidAF observation does not match its pool or supplied chain time",
+    });
   }
 
   validateLiquidSharedState(

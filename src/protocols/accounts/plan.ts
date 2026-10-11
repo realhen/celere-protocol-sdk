@@ -1,11 +1,12 @@
 import type { Instruction } from "@solana/kit";
-import { fail } from "../core/errors";
+import { InvalidAccountError, MissingAccountsError } from "../errors";
+
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../core/types";
+} from "../types";
 import {
   associatedTokenAddress,
   createAssociatedTokenInstruction,
@@ -21,16 +22,23 @@ export async function tokenRequirements(
   const kinds = adapter.tokenAccountKinds?.(request) ?? { input: "spl", output: "spl" };
   const result: AccountRequirement[] = [];
   for (const side of ["input", "output"] as const) {
-    if (kinds[side] === "nativeSol") continue;
+    if (kinds[side] === "nativeSol") {
+      continue;
+    }
+
     const mint = side === "input" ? request.inputMint : request.outputMint;
     result.push({ address: mint, role: `${side} mint` });
-    if (request.snapshot.accounts[mint] === undefined) continue;
+    if (request.snapshot.accounts[mint] === undefined) {
+      continue;
+    }
+
     const info = readMint(request.snapshot, mint);
     const account =
       request.tokenAccounts?.[side] ??
       (await associatedTokenAddress(request.owner, mint, info.tokenProgram));
     result.push({ address: account, role: `${side} token account` });
   }
+
   return result;
 }
 
@@ -43,26 +51,31 @@ export async function planTokenAccounts(
   const result = { input: request.owner, output: request.owner };
   const setup: Instruction[] = [];
   for (const side of ["input", "output"] as const) {
-    if (kinds[side] === "nativeSol") continue;
+    if (kinds[side] === "nativeSol") {
+      continue;
+    }
+
     const mint = side === "input" ? request.inputMint : request.outputMint;
     const info = readMint(request.snapshot, mint);
     const ata = await associatedTokenAddress(request.owner, mint, info.tokenProgram);
     const account = request.tokenAccounts?.[side] ?? ata;
     result[side] = account;
     const observation = request.snapshot.accounts[account];
-    if (observation === undefined)
-      fail({
-        code: "MISSING_ACCOUNTS",
+    if (observation === undefined) {
+      throw new MissingAccountsError({
         message: "Token account observation is required",
         accounts: [{ address: account, role: `${side} token account` }],
       });
+    }
+
     if (observation === null) {
-      if (side === "input" || account !== ata)
-        fail({
-          code: "INVALID_ACCOUNT",
+      if (side === "input" || account !== ata) {
+        throw new InvalidAccountError({
           address: account,
           message: "Input and custom token accounts must already exist",
         });
+      }
+
       setup.push(
         createAssociatedTokenInstruction(
           request.payer,
@@ -76,5 +89,6 @@ export async function planTokenAccounts(
       readTokenAccount(request.snapshot, account, mint, info.tokenProgram, request.owner);
     }
   }
+
   return { accounts: result, setup };
 }

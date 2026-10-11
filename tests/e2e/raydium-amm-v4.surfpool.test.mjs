@@ -1,3 +1,8 @@
+import {
+  InsufficientLiquidityError,
+  buildSwapInstructions,
+  compileTransaction,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -8,22 +13,13 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
+
 import { raydiumAmmV4Fixture, AMM_V4_PROGRAM } from "../fixtures/raydium-amm-v4.mjs";
 
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native AMM v4 tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -63,16 +59,14 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -99,13 +93,11 @@ test(
               label: `native:${reverse}:${status}:${feeNumerator}:${amount.kind}`,
             });
             await install(fixture, signer);
-            const build = value(
-              await buildSwapInstructions({
-                ...fixture.request,
-                amount,
-                slippageBps: 0,
-              }),
-            );
+            const build = await buildSwapInstructions({
+              ...fixture.request,
+              amount,
+              slippageBps: 0,
+            });
             const inputBefore = await tokenAmount(fixture.request.tokenAccounts.input);
             const outputBefore = await tokenAmount(fixture.request.tokenAccounts.output);
             const vaultInBefore = await tokenAmount(
@@ -187,9 +179,11 @@ test(
           reverse,
           label: `adverse:${reverse}:${amount.kind}`,
         });
-        const build = value(
-          await buildSwapInstructions({ ...fixture.request, amount, slippageBps: 0 }),
-        );
+        const build = await buildSwapInstructions({
+          ...fixture.request,
+          amount,
+          slippageBps: 0,
+        });
         const outputVault =
           fixture.request.snapshot.accounts[reverse ? fixture.vault0 : fixture.vault1];
         new DataView(outputVault.data.buffer).setBigUint64(
@@ -206,22 +200,26 @@ test(
           reverse,
           label: `boundary:${reverse}:${amount.kind}`,
         });
-        const boundary = await buildSwapInstructions({
-          ...boundaryFixture.request,
-          amount: {
-            kind: "exactOut",
-            amountOut: reverse ? 1_000_000_000n : 2_000_000_000n,
+        await assert.rejects(
+          () =>
+            buildSwapInstructions({
+              ...boundaryFixture.request,
+              amount: {
+                kind: "exactOut",
+                amountOut: reverse ? 1_000_000_000n : 2_000_000_000n,
+              },
+            }),
+          (error) => {
+            assert.ok(error instanceof InsufficientLiquidityError);
+            assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+            return true;
           },
-        });
-        assert.equal(boundary.ok, false);
-        assert.equal(boundary.error.code, "INSUFFICIENT_LIQUIDITY");
-        const noLiquidityBuild = value(
-          await buildSwapInstructions({
-            ...boundaryFixture.request,
-            amount,
-            slippageBps: 0,
-          }),
         );
+        const noLiquidityBuild = await buildSwapInstructions({
+          ...boundaryFixture.request,
+          amount,
+          slippageBps: 0,
+        });
         const depleted =
           boundaryFixture.request.snapshot.accounts[
             reverse ? boundaryFixture.vault0 : boundaryFixture.vault1

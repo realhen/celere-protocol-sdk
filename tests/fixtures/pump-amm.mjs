@@ -3,7 +3,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
-import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { WRAPPED_SOL_MINT } from "../../dist/protocols/accounts/tokens.js";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { createHash } from "node:crypto";
 import { TextEncoder } from "node:util";

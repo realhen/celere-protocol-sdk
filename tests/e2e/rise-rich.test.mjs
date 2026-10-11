@@ -1,9 +1,15 @@
+import {
+  UnsupportedPoolFeatureError,
+  UnsupportedSwapModeError,
+  createProtocolSdk,
+  compileTransaction,
+} from "../../dist/index.js";
 import { buy_with_exact_cash_in } from "../../dist/protocols/rise-rich/instructions/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
-import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
+
 import {
   riseRichAdapter,
   RISE_RICH_PROGRAM,
@@ -12,14 +18,7 @@ import { riseRichFixture } from "../fixtures/rise-rich.mjs";
 const { getSwapRequirements, buildSwapInstructions } = createProtocolSdk([
   riseRichAdapter,
 ]);
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return result.value;
-}
+
 test("Rise public consumer discovers raw snapshots, builds and compiles native exact-input swaps offline", async () => {
   for (const buy of [true, false]) {
     const f = await riseRichFixture(SYSTEM_PROGRAM_ADDRESS, {
@@ -30,39 +29,43 @@ test("Rise public consumer discovers raw snapshots, builds and compiles native e
     const missing = structuredClone(f.request);
     delete missing.snapshot.accounts[f.marketMeta];
     assert.ok(
-      value(await getSwapRequirements(missing)).missing.some(
+      (await getSwapRequirements(missing)).missing.some(
         (a) => a.address === f.marketMeta,
       ),
     );
-    assert.equal(value(await getSwapRequirements(f.request)).complete, true);
-    const built = value(await buildSwapInstructions(f.request));
+    assert.equal((await getSwapRequirements(f.request)).complete, true);
+    const built = await buildSwapInstructions(f.request);
     assert.equal(built.protocol, "rise-rich");
     assert.equal(built.execution.mayPartiallyFill, false);
     assert.equal(built.swapInstructions[0].programAddress, RISE_RICH_PROGRAM);
     assert.deepEqual(built.assets, { input: "spl", output: "spl" });
     assert.deepEqual(structuredClone(built), built);
-    const compiled = value(
-      compileTransaction({
-        instructions: built.instructions,
-        feePayer: f.request.owner,
-        lifetime: { blockhash: SYSTEM_PROGRAM_ADDRESS, lastValidBlockHeight: 100n },
-      }),
-    );
+    const compiled = compileTransaction({
+      instructions: built.instructions,
+      feePayer: f.request.owner,
+      lifetime: { blockhash: SYSTEM_PROGRAM_ADDRESS, lastValidBlockHeight: 100n },
+    });
     assert.ok(compiled.byteLength <= 1232);
     const output = buy ? f.userToken : f.userMain;
     f.request.snapshot.accounts[output] = null;
-    const created = value(await buildSwapInstructions(f.request));
+    const created = await buildSwapInstructions(f.request);
     assert.equal(created.setupInstructions.length, 1);
   }
 });
 test("Rise public consumer rejects native-unsupported modes and unqualified state", async () => {
   const f = await riseRichFixture(SYSTEM_PROGRAM_ADDRESS);
-  const wrongMode = await buildSwapInstructions({
-    ...f.request,
-    amount: { kind: "exactOut", amountOut: 1n },
-  });
-  assert.equal(wrongMode.ok, false);
-  assert.equal(wrongMode.error.code, "UNSUPPORTED_SWAP_MODE");
+  await assert.rejects(
+    () =>
+      buildSwapInstructions({
+        ...f.request,
+        amount: { kind: "exactOut", amountOut: 1n },
+      }),
+    (error) => {
+      assert.ok(error instanceof UnsupportedSwapModeError);
+      assert.equal(error.code, "UNSUPPORTED_SWAP_MODE");
+      return true;
+    },
+  );
   for (const [label, mutate, code] of [
     [
       "sloped",
@@ -122,16 +125,25 @@ test("Rise public consumer rejects native-unsupported modes and unqualified stat
   ]) {
     const fixture = await riseRichFixture(SYSTEM_PROGRAM_ADDRESS, { label });
     mutate(fixture);
-    const result = await buildSwapInstructions(fixture.request);
-    assert.equal(result.ok, false, label);
-    assert.equal(result.error.code, code, label);
+    await assert.rejects(
+      () => buildSwapInstructions(fixture.request),
+      (error) => {
+        assert.equal(error.code, code, label);
+        return true;
+      },
+    );
   }
   const sloped = await riseRichFixture(SYSTEM_PROGRAM_ADDRESS, {
     supply: 950_000_000_000n,
   });
-  const rejected = await buildSwapInstructions(sloped.request);
-  assert.equal(rejected.ok, false);
-  assert.equal(rejected.error.code, "UNSUPPORTED_POOL_FEATURE");
+  await assert.rejects(
+    () => buildSwapInstructions(sloped.request),
+    (error) => {
+      assert.ok(error instanceof UnsupportedPoolFeatureError);
+      assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+      return true;
+    },
+  );
 });
 
 test("Rise raw public builder rejects malformed Decimal argument widths synchronously", async () => {

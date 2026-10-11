@@ -7,7 +7,7 @@ import {
   getProgramDerivedAddress,
 } from "@solana/kit";
 import { SUGAR_PROGRAM } from "../../dist/protocols/sugar/constants.js";
-import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { WRAPPED_SOL_MINT } from "../../dist/protocols/accounts/tokens.js";
 const encoder = getAddressEncoder(),
   decoder = getAddressDecoder(),
   text = new TextEncoder();

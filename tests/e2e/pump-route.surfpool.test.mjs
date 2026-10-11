@@ -17,13 +17,7 @@ const endpoint = process.env.CELERE_SURFPOOL_URL;
 preservePumpConfiguration(endpoint);
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw Error("Native route qualification requires loopback Surfpool");
-const value = (r) => {
-  assert.ok(
-    r.ok,
-    JSON.stringify(r, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return r.value;
-};
+
 async function rpc(method, params = []) {
   const r = await (
     await fetch(endpoint, {
@@ -87,20 +81,18 @@ async function compile(b, signer) {
     lookupTables = [{ address: table, addresses }];
   }
   const latest = (await rpc("getLatestBlockhash")).value;
-  return value(
-    compileTransaction({
-      instructions: [
-        getSetComputeUnitLimitInstruction({ units: 600000 }),
-        ...b.instructions,
-      ],
-      feePayer: signer.address,
-      lookupTables,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  return compileTransaction({
+    instructions: [
+      getSetComputeUnitLimitInstruction({ units: 600000 }),
+      ...b.instructions,
+    ],
+    feePayer: signer.address,
+    lookupTables,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
 }
 async function send(b, signer) {
   const compiled = await compile(b, signer);
@@ -167,9 +159,7 @@ async function verify(options, signer) {
     );
     f.request.amount = { kind: "exactIn", amountIn: 3_000_000n };
   }
-  const b = value(
-    await buildRouteInstructions({ ...f.request, fillPolicy: "requireFull" }),
-  );
+  const b = await buildRouteInstructions({ ...f.request, fillPolicy: "requireFull" });
   await install(f);
   const volume = await pda(PUMP_AMM, "user_volume_accumulator", signer.address);
   const [baseBefore, quoteBefore, walletBefore, buybackBefore, volumeBefore] =
@@ -324,7 +314,7 @@ test(
             reverse,
             label: "atomic",
           }),
-          b = value(await buildRouteInstructions(f.request));
+          b = await buildRouteInstructions(f.request);
         await install(f);
         const keys = [
           f.userBase,
@@ -464,7 +454,7 @@ test(
       f.request.snapshot.accounts[f.userBase] = null;
       f.request.snapshot.accounts[recipientAta] = null;
       f.request.payer = payer.address;
-      const built = value(await buildRouteInstructions(f.request));
+      const built = await buildRouteInstructions(f.request);
       assert.equal(built.setupInstructions.length, 2);
       await install(f);
       await rpc("surfnet_setAccount", [payer.address, { lamports: 100_000_000_000 }]);
