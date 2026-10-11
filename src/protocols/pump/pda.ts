@@ -64,3 +64,13 @@ export function getPumpGlobalVolumeAccumulatorAddress(): Promise<Address> {
 export function getPumpUserVolumeAccumulatorAddress(owner: Address): Promise<Address> {
   return derive(PUMP_PROGRAM, "user_volume_accumulator", owner);
 }
+
+/** Get the Pump authority that creates a token's canonical PumpSwap pool; performs no I/O. */
+export function getPumpPoolAuthorityAddress(mint: Address): Promise<Address> {
+  return derive(PUMP_PROGRAM, "pool-authority", mint);
+}
+
+/** Get a token's holder-reward creator authority; derivation does not establish that rewards are enabled. */
+export function getPumpHolderRewardsAddress(mint: Address): Promise<Address> {
+  return derive(PUMP_PROGRAM, "holder-rewards", mint);
+}

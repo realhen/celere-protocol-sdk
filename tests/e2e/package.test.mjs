@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { generateKeyPairSigner } from "@solana/kit";
@@ -139,6 +139,17 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       await writeFile(path, snippet[1]);
       documentationSources.push(path);
     }
+    const addressGuide = await readFile(
+      join(installedPackage, "docs/addresses.md"),
+      "utf8",
+    );
+    for (const [index, snippet] of [
+      ...addressGuide.matchAll(/```ts\r?\n([\s\S]*?)```/g),
+    ].entries()) {
+      const path = join(directory, `address-guide-${index}.ts`);
+      await writeFile(path, snippet[1]);
+      documentationSources.push(path);
+    }
     const declarationMaps = packed.files.filter((file) =>
       file.path.endsWith(".d.ts.map"),
     );
@@ -182,10 +193,16 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       ],
       { cwd: directory, stdio: "pipe" },
     );
-    await writeFile(
-      join(directory, "consumer.ts"),
-      await readFile(new URL("../consumers/package.ts", import.meta.url), "utf8"),
-    );
+    const consumerSources = [];
+    for (const name of await readdir(new URL("../consumers/", import.meta.url))) {
+      if (!name.endsWith(".ts")) continue;
+      const path = join(directory, name);
+      await writeFile(
+        path,
+        await readFile(new URL(`../consumers/${name}`, import.meta.url), "utf8"),
+      );
+      consumerSources.push(path);
+    }
     execFileSync(
       process.execPath,
       [
@@ -198,7 +215,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         "NodeNext",
         "--moduleResolution",
         "NodeNext",
-        join(directory, "consumer.ts"),
+        ...consumerSources,
       ],
       { cwd: directory, stdio: "pipe" },
     );
@@ -214,7 +231,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         "ESNext",
         "--moduleResolution",
         "Bundler",
-        join(directory, "consumer.ts"),
+        ...consumerSources,
       ],
       { cwd: directory, stdio: "pipe" },
     );
@@ -230,7 +247,12 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       assert.ok(client instanceof sender.SenderClient);
       assert.ok(new root.SenderConfigurationError('example') instanceof sender.SenderError);
       for (const entrypoint of ${JSON.stringify(Object.keys(sourceManifest.exports))}) {
-        await import(entrypoint === '.' ? 'celere-protocol-sdk' : 'celere-protocol-sdk/' + entrypoint.slice(2));
+        const focused = await import(entrypoint === '.' ? 'celere-protocol-sdk' : 'celere-protocol-sdk/' + entrypoint.slice(2));
+        if (entrypoint.startsWith('./protocols/')) {
+          for (const [name, value] of Object.entries(focused)) {
+            if (/^(get|find).*(Address|Pda)$/.test(name)) assert.equal(root[name], value, name);
+          }
+        }
       }
     `,
     );

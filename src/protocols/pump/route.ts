@@ -1,9 +1,4 @@
-import {
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-  type Instruction,
-} from "@solana/kit";
+import { type Address, type Instruction } from "@solana/kit";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
@@ -33,7 +28,7 @@ import type {
 } from "../../core/types";
 import { quotePumpAmm } from "./amm-math";
 import { readAmmFees, readAmmGlobal, readAmmPool, type PumpAmmPool } from "./amm-state";
-import { PUMP_AMM_PROGRAM, PUMP_PROGRAM, PUMP_FEE_PROGRAM } from "./constants";
+import { PUMP_AMM_PROGRAM, PUMP_PROGRAM } from "./constants";
 import { quotePump } from "./math";
 import { readCurve, readFees, readPumpGlobal, type PumpCurve } from "./state";
 import {
@@ -41,21 +36,20 @@ import {
   type PumpAmmMultiHopSwapHopAccounts,
 } from "./instructions/amm/multi_hop_swap";
 
-const bytes = getAddressEncoder();
-const utf8 = new TextEncoder();
-
-async function derive(
-  programAddress: Address,
-  label: string,
-  ...addresses: readonly Address[]
-): Promise<Address> {
-  return (
-    await getProgramDerivedAddress({
-      programAddress,
-      seeds: [utf8.encode(label), ...addresses.map((value) => bytes.encode(value))],
-    })
-  )[0];
-}
+import {
+  getPumpPoolAuthorityAddress,
+  getPumpBondingCurveAddress,
+  getPumpGlobalAddress,
+  getPumpFeeConfigAddress,
+  getPumpEventAuthorityAddress,
+} from "./pda";
+import {
+  findPumpAmmPoolPda,
+  getPumpAmmGlobalAddress,
+  getPumpAmmFeeConfigAddress,
+  getPumpAmmEventAuthorityAddress,
+  getPumpAmmUserVolumeAccumulatorAddress,
+} from "./amm-pda";
 
 async function commonAddresses() {
   const [
@@ -66,12 +60,12 @@ async function commonAddresses() {
     pumpFeeConfig,
     pumpEventAuthority,
   ] = await Promise.all([
-    derive(PUMP_AMM_PROGRAM, "global_config"),
-    derive(PUMP_FEE_PROGRAM, "fee_config", PUMP_AMM_PROGRAM),
-    derive(PUMP_AMM_PROGRAM, "__event_authority"),
-    derive(PUMP_PROGRAM, "global"),
-    derive(PUMP_FEE_PROGRAM, "fee_config", PUMP_PROGRAM),
-    derive(PUMP_PROGRAM, "__event_authority"),
+    getPumpAmmGlobalAddress(),
+    getPumpAmmFeeConfigAddress(),
+    getPumpAmmEventAuthorityAddress(),
+    getPumpGlobalAddress(),
+    getPumpFeeConfigAddress(),
+    getPumpEventAuthorityAddress(),
   ]);
   return {
     global,
@@ -104,14 +98,12 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
       !(hop.inputMint === state.baseMint && hop.outputMint === state.quoteMint)
     )
       invalid(hop.pool, "Route hop mints do not match the pool");
-    const creator = await derive(PUMP_PROGRAM, "pool-authority", state.baseMint);
-    const [expected, bump] = await getProgramDerivedAddress({
-      programAddress: PUMP_AMM_PROGRAM,
-      seeds: [
-        utf8.encode("pool"),
-        new Uint8Array(2),
-        ...[creator, state.baseMint, state.quoteMint].map((value) => bytes.encode(value)),
-      ],
+    const creator = await getPumpPoolAuthorityAddress(state.baseMint);
+    const [expected, bump] = await findPumpAmmPoolPda({
+      index: 0,
+      creator,
+      baseMint: state.baseMint,
+      quoteMint: state.quoteMint,
     });
     if (
       state.index !== 0 ||
@@ -147,7 +139,7 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
   const baseMint = isBuy ? hop.outputMint : hop.inputMint;
   if (
     (!isBuy && hop.outputMint !== state.quoteMint) ||
-    (await derive(PUMP_PROGRAM, "bonding-curve", baseMint)) !== hop.pool
+    (await getPumpBondingCurveAddress(baseMint)) !== hop.pool
   )
     invalid(hop.pool, "Route hop mints or curve PDA do not match the bonding curve");
   const base = readMint(request.snapshot, baseMint);
@@ -429,11 +421,7 @@ async function build(
       userOutTokenAccount: accounts.output,
       globalConfig: common.global,
       feeConfig: common.feeConfig,
-      userVolumeAccumulator: await derive(
-        PUMP_AMM_PROGRAM,
-        "user_volume_accumulator",
-        request.owner,
-      ),
+      userVolumeAccumulator: await getPumpAmmUserVolumeAccumulatorAddress(request.owner),
       buybackFeeRecipient: buybackTokenAccount,
       tokenProgram: TOKEN_PROGRAM_ADDRESS,
       token2022Program: TOKEN_2022_PROGRAM_ADDRESS,

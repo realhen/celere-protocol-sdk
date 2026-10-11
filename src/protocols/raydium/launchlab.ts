@@ -1,12 +1,5 @@
 /** Native LaunchLab interface facts: raydium-io/raydium-idl e7e0c96; independent implementation. */
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-  type ReadonlyUint8Array,
-  type Instruction,
-} from "@solana/kit";
+import { getAddressDecoder, type Address, type Instruction } from "@solana/kit";
 import {
   readMint,
   readTokenAccount,
@@ -31,9 +24,26 @@ import {
 } from "./instructions/launchlab/index";
 import { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants";
 export { RAYDIUM_LAUNCHLAB_PROGRAM } from "./constants";
-const encoder = getAddressEncoder();
+import {
+  findRaydiumLaunchlabAuthorityPda,
+  getRaydiumLaunchlabGlobalConfigAddress,
+  getRaydiumLaunchlabPoolAddress,
+  getRaydiumLaunchlabVaultAddress,
+  getRaydiumLaunchlabEventAuthorityAddress,
+  getRaydiumLaunchlabPlatformFeeVaultAddress,
+  getRaydiumLaunchlabCreatorFeeVaultAddress,
+} from "./pda";
+export {
+  findRaydiumLaunchlabAuthorityPda,
+  getRaydiumLaunchlabAuthorityAddress,
+  getRaydiumLaunchlabGlobalConfigAddress,
+  getRaydiumLaunchlabPoolAddress,
+  getRaydiumLaunchlabVaultAddress,
+  getRaydiumLaunchlabEventAuthorityAddress,
+  getRaydiumLaunchlabPlatformFeeVaultAddress,
+  getRaydiumLaunchlabCreatorFeeVaultAddress,
+} from "./pda";
 const decoder = getAddressDecoder();
-const textEncoder = new TextEncoder();
 const FEE_SCALE = 1_000_000n;
 
 interface Pool {
@@ -159,16 +169,6 @@ function poolState(request: SwapRequest): Pool {
     });
   return pool;
 }
-async function pda(
-  seeds: readonly (string | ReadonlyUint8Array)[],
-): Promise<readonly [Address, number]> {
-  return getProgramDerivedAddress({
-    programAddress: RAYDIUM_LAUNCHLAB_PROGRAM,
-    seeds: seeds.map((seed) =>
-      typeof seed === "string" ? textEncoder.encode(seed) : seed,
-    ),
-  });
-}
 async function readRates(request: SwapRequest, pool: Pool): Promise<Rates> {
   const config = layout(
     requireAccount(
@@ -182,12 +182,7 @@ async function readRates(request: SwapRequest, pool: Pool): Promise<Rates> {
   );
   if (config[16] !== 0) unsupported("non constant-product curve");
   const index = new DataView(config.buffer, config.byteOffset).getUint16(17, true);
-  const [expected] = await pda([
-    "global_config",
-    encoder.encode(pool.quoteMint),
-    Uint8Array.of(0),
-    Uint8Array.of(index >> 8, index & 255),
-  ]);
+  const expected = await getRaydiumLaunchlabGlobalConfigAddress(pool.quoteMint, index);
   if (expected !== pool.config || key(config, 83) !== pool.quoteMint)
     invalid(pool.config, "LaunchLab global config does not match its quote mint and PDA");
   const platform = layout(
@@ -247,12 +242,11 @@ async function build(
     });
   }
   const rates = await readRates(request, pool);
-  const [authority, bump] = await pda(["vault_auth_seed"]);
-  const [expectedPool] = await pda([
-    "pool",
-    encoder.encode(pool.baseMint),
-    encoder.encode(pool.quoteMint),
-  ]);
+  const [authority, bump] = await findRaydiumLaunchlabAuthorityPda();
+  const expectedPool = await getRaydiumLaunchlabPoolAddress(
+    pool.baseMint,
+    pool.quoteMint,
+  );
   if (expectedPool !== request.pool || bump !== pool.bump)
     invalid(request.pool, "LaunchLab pool or authority PDA mismatch");
   const base = readMint(request.snapshot, pool.baseMint);
@@ -264,16 +258,8 @@ async function build(
     quote.tokenProgram !== (pool.tokenFlags & 2 ? TOKEN_2022_PROGRAM : TOKEN_PROGRAM)
   )
     invalid(request.pool, "LaunchLab mint metadata does not match pool state");
-  const [baseVault] = await pda([
-    "pool_vault",
-    encoder.encode(request.pool),
-    encoder.encode(pool.baseMint),
-  ]);
-  const [quoteVault] = await pda([
-    "pool_vault",
-    encoder.encode(request.pool),
-    encoder.encode(pool.quoteMint),
-  ]);
+  const baseVault = await getRaydiumLaunchlabVaultAddress(request.pool, pool.baseMint);
+  const quoteVault = await getRaydiumLaunchlabVaultAddress(request.pool, pool.quoteMint);
   if (baseVault !== pool.baseVault || quoteVault !== pool.quoteVault)
     invalid(request.pool, "LaunchLab vault PDA mismatch");
   const baseBalance = readTokenAccount(
@@ -361,15 +347,15 @@ async function build(
           expectedAmountOut: output,
           fees: feeItems,
         };
-  const [eventAuthority] = await pda(["__event_authority"]);
-  const [platformFeeVault] = await pda([
-    encoder.encode(pool.platform),
-    encoder.encode(pool.quoteMint),
-  ]);
-  const [creatorFeeVault] = await pda([
-    encoder.encode(pool.creator),
-    encoder.encode(pool.quoteMint),
-  ]);
+  const eventAuthority = await getRaydiumLaunchlabEventAuthorityAddress();
+  const platformFeeVault = await getRaydiumLaunchlabPlatformFeeVaultAddress(
+    pool.platform,
+    pool.quoteMint,
+  );
+  const creatorFeeVault = await getRaydiumLaunchlabCreatorFeeVaultAddress(
+    pool.creator,
+    pool.quoteMint,
+  );
   const instructionAccounts = {
     owner: request.owner,
     authority,

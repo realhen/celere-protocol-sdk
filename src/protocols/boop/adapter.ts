@@ -1,11 +1,6 @@
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
-import { TOKEN_PROGRAM_ADDRESS, findAssociatedTokenPda } from "@solana-program/token";
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
 import { minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -19,9 +14,10 @@ import type {
 } from "../../core/types";
 import { BOOP_PROGRAM } from "./constants";
 import { buy_token, sell_token } from "./instructions/index";
+import { getBoopCurveAddresses, getBoopUserTokenAddress } from "./pda";
+export * from "./pda";
 export { BOOP_PROGRAM } from "./constants";
-const decoder = getAddressDecoder(),
-  encoder = getAddressEncoder();
+const decoder = getAddressDecoder();
 const INITIAL_TOKEN_SUPPLY = 1_000_000_000_000_000_000n;
 const BASIS_POINTS = 10_000n;
 interface Curve {
@@ -97,30 +93,11 @@ function readCurve(request: SwapRequest): Curve {
     invalid(request.pool, "Invalid Boop reserve or graduation state");
   return curve;
 }
-async function pda(seed: string, mint?: Address): Promise<Address> {
-  return (
-    await getProgramDerivedAddress({
-      programAddress: BOOP_PROGRAM,
-      seeds: mint ? [seed, encoder.encode(mint)] : [seed],
-    })
-  )[0];
-}
-async function deriveAccounts(mint: Address) {
-  const [pool, config, tokenVault, solVault, feesVault, authority] = await Promise.all([
-    pda("bonding_curve", mint),
-    pda("config"),
-    pda("bonding_curve_vault", mint),
-    pda("bonding_curve_sol_vault", mint),
-    pda("trading_fees_vault", mint),
-    pda("vault_authority"),
-  ]);
-  return { pool, config, tokenVault, solVault, feesVault, authority };
-}
 async function requirements(
   request: SwapRequest,
 ): Promise<readonly AccountRequirement[]> {
   const curve = readCurve(request),
-    derived = await deriveAccounts(curve.mint);
+    derived = await getBoopCurveAddresses(curve.mint);
   return [
     { address: request.pool, role: "Boop bonding curve" },
     { address: derived.config, role: "Boop configuration" },
@@ -200,7 +177,7 @@ async function build(
     });
   const { isBuy } = direction(request),
     curve = readCurve(request),
-    derived = await deriveAccounts(curve.mint);
+    derived = await getBoopCurveAddresses(curve.mint);
   if (derived.pool !== request.pool) invalid(request.pool, "Boop curve PDA mismatch");
   readConfig(request, derived.config);
   const mint = readMint(request.snapshot, curve.mint),
@@ -260,11 +237,7 @@ async function build(
   if ([derived.tokenVault, derived.feesVault].includes(userToken))
     invalid(userToken, "User token account aliases a Boop vault");
   if (!isBuy) {
-    const [ata] = await findAssociatedTokenPda({
-      owner: request.owner,
-      mint: curve.mint,
-      tokenProgram: TOKEN_PROGRAM_ADDRESS,
-    });
+    const ata = await getBoopUserTokenAddress(request.owner, curve.mint);
     if (accounts.input !== ata)
       invalid(accounts.input, "Boop sells require the owner's associated token account");
   }

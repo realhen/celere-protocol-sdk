@@ -54,7 +54,7 @@ The account and instruction interface facts in `src/protocols/heaven/` reference
 
 ## Sugar
 
-The historical Sugar instruction layouts reference the official `sugar-money` Rust crate version `0.1.38`, source revision `7758a1d07424ea4dd675dee0707f9e6d693ce9db`, copyright SugarMoney Protocol, under MIT. See `licenses/SUGAR-LICENSE`. Only typed instruction builders are provided: the current program deployment rejects every instruction, so no high-level swap adapter is registered.
+The historical Sugar instruction layouts reference the official `sugar-money` Rust crate version `0.1.38`, source revision `7758a1d07424ea4dd675dee0707f9e6d693ce9db`, copyright SugarMoney Protocol, under MIT. See `licenses/SUGAR-LICENSE`. Typed instruction builders and historical address derivations are provided. The current program deployment rejects every instruction, so no high-level swap adapter is registered.
 
 ## MetaDAO
 

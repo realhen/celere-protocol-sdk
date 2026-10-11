@@ -3,19 +3,8 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-  type Instruction,
-} from "@solana/kit";
-import {
-  associatedTokenAddress,
-  readMint,
-  readTokenAccount,
-  WRAPPED_SOL_MINT,
-} from "../../accounts/tokens";
+import { getAddressDecoder, type Address, type Instruction } from "@solana/kit";
+import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
 import { assertAmount, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
 import { requireAccount } from "../../core/snapshot";
@@ -30,10 +19,14 @@ import type {
 
 import { MOONSHOT_PROGRAM } from "./constants";
 import * as instructions from "./instructions/index";
+import {
+  getMoonshotTokenVaultAddress,
+  getMoonshotUserTokenAddress,
+  getMoonshotCurveAddresses,
+} from "./pda";
+export * from "./pda";
 export { MOONSHOT_PROGRAM } from "./constants";
-const encoder = getAddressEncoder();
 const decoder = getAddressDecoder();
-const text = new TextEncoder();
 const TOTAL_SUPPLY = 1_000_000_000_000_000_000n;
 
 function invalid(key: Address, message: string): never {
@@ -59,24 +52,6 @@ function direction(request: SwapRequest) {
       message: "Moonshot requires exactly one native SOL side",
     });
   return { buy, mint: buy ? request.outputMint : request.inputMint };
-}
-async function pdas(mint: Address) {
-  const [curve, config] = await Promise.all([
-    getProgramDerivedAddress({
-      programAddress: MOONSHOT_PROGRAM,
-      seeds: [text.encode("token"), encoder.encode(mint)],
-    }),
-    getProgramDerivedAddress({
-      programAddress: MOONSHOT_PROGRAM,
-      seeds: [text.encode("config_account")],
-    }),
-  ]);
-  return {
-    curve: curve[0],
-    curveBump: curve[1],
-    config: config[0],
-    configBump: config[1],
-  };
 }
 function data(
   request: SwapRequest,
@@ -115,14 +90,14 @@ async function requirements(
   const observation = request.snapshot.accounts[mint];
   if (observation && observation.owner !== TOKEN_PROGRAM_ADDRESS)
     unsupported("Token-2022 or other token program");
-  const { config } = await pdas(mint);
+  const { config } = await getMoonshotCurveAddresses(mint);
   const result: AccountRequirement[] = [
     { address: request.owner, role: "Moonshot native SOL owner" },
     { address: request.pool, role: "Moonshot curve" },
     { address: config, role: "Moonshot configuration" },
     { address: mint, role: "Moonshot mint" },
     {
-      address: await associatedTokenAddress(request.pool, mint, TOKEN_PROGRAM_ADDRESS),
+      address: await getMoonshotTokenVaultAddress(request.pool, mint),
       role: "Moonshot token vault",
     },
   ];
@@ -151,7 +126,7 @@ async function build(
   accounts: ResolvedTokenAccounts,
 ): Promise<ProtocolSwap> {
   const { buy, mint } = direction(request);
-  const keys = await pdas(mint);
+  const keys = await getMoonshotCurveAddresses(mint);
   if (keys.curve !== request.pool)
     invalid(request.pool, "Moonshot curve PDA does not match mint");
   const curve = data(request, request.pool, 84, [8, 91, 83, 28, 132, 216, 248, 22]);
@@ -197,7 +172,7 @@ async function build(
   const feeBps = BigInt(config.view.getUint16(168, true));
   if (feeBps >= 10_000n || config.bytes[170]! > 100)
     invalid(keys.config, "Invalid Moonshot fee configuration");
-  const vault = await associatedTokenAddress(request.pool, mint, TOKEN_PROGRAM_ADDRESS);
+  const vault = await getMoonshotTokenVaultAddress(request.pool, mint);
   const vaultState = readTokenAccount(
     request.snapshot,
     vault,
@@ -244,10 +219,7 @@ async function build(
       "Moonshot owner and fee recipients must be plain system accounts with u64 lamports",
     );
   const userToken = buy ? accounts.output : accounts.input;
-  if (
-    userToken !==
-    (await associatedTokenAddress(request.owner, mint, TOKEN_PROGRAM_ADDRESS))
-  )
+  if (userToken !== (await getMoonshotUserTokenAddress(request.owner, mint)))
     fail({
       code: "INVALID_REQUEST",
       field: "tokenAccounts",

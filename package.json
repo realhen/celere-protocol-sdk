@@ -199,6 +199,10 @@
     "./sender": {
       "types": "./dist/sender/index.d.ts",
       "import": "./dist/sender/index.js"
+    },
+    "./protocols/sugar": {
+      "types": "./dist/protocols/sugar/pda.d.ts",
+      "import": "./dist/protocols/sugar/pda.js"
     }
   },
   "scripts": {

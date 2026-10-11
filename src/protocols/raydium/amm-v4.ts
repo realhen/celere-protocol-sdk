@@ -1,5 +1,5 @@
 /** Modified offline adaptation of raydium-io/raydium-amm (Apache-2.0); see NOTICE.md. */
-import { getAddressDecoder, getProgramDerivedAddress, type Address } from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -15,6 +15,8 @@ import type {
 import { swap_base_in_v2, swap_base_out_v2 } from "./instructions/amm-v4/index";
 import { RAYDIUM_AMM_V4_PROGRAM } from "./constants";
 export { RAYDIUM_AMM_V4_PROGRAM } from "./constants";
+import { findRaydiumAmmV4AuthorityPda } from "./pda";
+export { findRaydiumAmmV4AuthorityPda, getRaydiumAmmV4AuthorityAddress } from "./pda";
 
 const decoder = getAddressDecoder();
 const U128_MAX = (1n << 128n) - 1n;
@@ -178,10 +180,7 @@ async function build(
   tokenAccounts: ResolvedTokenAccounts,
 ): Promise<ProtocolSwap> {
   const pool = readPool(request);
-  const [authority, nonce] = await getProgramDerivedAddress({
-    programAddress: RAYDIUM_AMM_V4_PROGRAM,
-    seeds: [new TextEncoder().encode("amm authority")],
-  });
+  const [authority, nonce] = await findRaydiumAmmV4AuthorityPda();
   if (pool.nonce !== BigInt(nonce))
     invalid(request.pool, "Invalid AMM v4 authority nonce");
   for (const [mint, decimals] of [

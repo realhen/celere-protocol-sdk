@@ -1,10 +1,5 @@
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { readMint, readTokenAccount, WRAPPED_SOL_MINT } from "../../accounts/tokens";
 import { assertAmount, ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -18,10 +13,22 @@ import type {
 } from "../../core/types";
 import { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants";
 import { buy_with_exact_cash_in, sell_with_exact_token_in } from "./instructions/index";
+import {
+  findRiseRichMayflowerLogPda,
+  findRiseRichTenantPda,
+  findRiseRichMayflowerTenantPda,
+  findRiseRichMayflowerMarketGroupPda,
+  findRiseRichMayflowerMarketMetaPda,
+  findRiseRichMayflowerLinearMarketPda,
+  findRiseRichCashEscrowPda,
+  findRiseRichMayflowerLiquidityVaultPda,
+  findRiseRichMayflowerGroupRevenueEscrowPda,
+  findRiseRichMayflowerTenantRevenueEscrowPda,
+  getRiseRichMarketAddresses,
+} from "./pda";
+export * from "./pda";
 export { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants";
-const encoder = getAddressEncoder(),
-  decoder = getAddressDecoder(),
-  text = new TextEncoder();
+const decoder = getAddressDecoder();
 function invalid(address: Address, message: string): never {
   return fail({ code: "INVALID_ACCOUNT", address, message });
 }
@@ -65,12 +72,6 @@ function market(request: SwapRequest) {
     [219, 190, 213, 55, 0, 227, 198, 154],
   );
 }
-async function pda(program: Address, name: string, ...keys: Address[]) {
-  return getProgramDerivedAddress({
-    programAddress: program,
-    seeds: [text.encode(name), ...keys.map((k) => encoder.encode(k))],
-  });
-}
 async function deriveAddresses(request: SwapRequest) {
   const marketData = market(request);
   const tenant = marketData.pub(8),
@@ -78,14 +79,8 @@ async function deriveAddresses(request: SwapRequest) {
     mintToken = marketData.pub(72),
     mintMain = marketData.pub(104);
   if (mintMain !== WRAPPED_SOL_MINT) unsupported("non-WSOL collateral");
-  const [pool, creator, team, log, event] = await Promise.all([
-    pda(RISE_RICH_PROGRAM, "market", tenant, marketMeta),
-    pda(RISE_RICH_PROGRAM, "creator_escrow", request.pool),
-    pda(RISE_RICH_PROGRAM, "team_escrow", mintMain),
-    pda(MAYFLOWER_PROGRAM, "log"),
-    pda(RISE_RICH_PROGRAM, "__event_authority"),
-  ]);
-  if (pool[0] !== request.pool || pool[1] !== marketData.bytes[381])
+  const addresses = await getRiseRichMarketAddresses(tenant, marketMeta, mintMain);
+  if (addresses.pool !== request.pool || addresses.marketBump !== marketData.bytes[381])
     invalid(request.pool, "Rise market PDA mismatch");
   return {
     marketData,
@@ -94,10 +89,10 @@ async function deriveAddresses(request: SwapRequest) {
     mintToken,
     mintMain,
     cashEscrow: marketData.pub(137),
-    creatorEscrow: creator[0],
-    teamEscrow: team[0],
-    mayLogAccount: log[0],
-    eventAuthority: event[0],
+    creatorEscrow: addresses.creatorEscrow,
+    teamEscrow: addresses.teamEscrow,
+    mayLogAccount: addresses.mayLogAccount,
+    eventAuthority: addresses.eventAuthority,
   };
 }
 async function requirements(
@@ -236,19 +231,19 @@ async function build(
     17,
     [21, 166, 62, 121, 167, 196, 176, 195],
   );
-  const logPda = await pda(MAYFLOWER_PROGRAM, "log");
+  const logPda = await findRiseRichMayflowerLogPda();
   if (log.bytes[16] !== logPda[1] || log.view.getBigUint64(8, true) > U64_MAX - 3n)
     invalid(keys.mayLogAccount, "Invalid Mayflower log bump or exhausted event counter");
   if (group.bytes[72] !== 0 || mayTenant.bytes[73] !== 0)
     unsupported("pending Mayflower authority transfer");
   const [tenantPda, mayTenantPda, groupPda, metaPda, linearPda, cashEscrowPda] =
     await Promise.all([
-      pda(RISE_RICH_PROGRAM, "tenant", tenant.pub(52)),
-      pda(MAYFLOWER_PROGRAM, "tenant", mayTenant.pub(8)),
-      pda(MAYFLOWER_PROGRAM, "market_group", group.pub(74)),
-      pda(MAYFLOWER_PROGRAM, "market_meta", meta.pub(297)),
-      pda(MAYFLOWER_PROGRAM, "market_linear", keys.marketMeta),
-      pda(RISE_RICH_PROGRAM, "cash_escrow", request.pool),
+      findRiseRichTenantPda(tenant.pub(52)),
+      findRiseRichMayflowerTenantPda(mayTenant.pub(8)),
+      findRiseRichMayflowerMarketGroupPda(group.pub(74)),
+      findRiseRichMayflowerMarketMetaPda(meta.pub(297)),
+      findRiseRichMayflowerLinearMarketPda(keys.marketMeta),
+      findRiseRichCashEscrowPda(request.pool),
     ]);
   if (
     tenantPda[0] !== keys.tenant ||
@@ -380,12 +375,13 @@ async function build(
     vaultAddresses.some((k) => k === accounts.input || k === accounts.output)
   )
     unsupported("aliased settlement accounts");
-  for (const [seed, offset] of [
-    ["liq_vault_main", 200],
-    ["rev_escrow_group", 232],
-    ["rev_escrow_tenant", 264],
-  ] as const) {
-    if ((await pda(MAYFLOWER_PROGRAM, seed, keys.marketMeta))[0] !== meta.pub(offset))
+  const settlementVaults = await Promise.all([
+    findRiseRichMayflowerLiquidityVaultPda(keys.marketMeta),
+    findRiseRichMayflowerGroupRevenueEscrowPda(keys.marketMeta),
+    findRiseRichMayflowerTenantRevenueEscrowPda(keys.marketMeta),
+  ]);
+  for (const [index, offset] of [200, 232, 264].entries()) {
+    if (settlementVaults[index]![0] !== meta.pub(offset))
       invalid(keys.marketMeta, "Mayflower vault PDA mismatch");
   }
   for (const k of vaultAddresses) {

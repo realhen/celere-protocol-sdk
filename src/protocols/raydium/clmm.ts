@@ -4,13 +4,7 @@
  * See NOTICE.md. Runtime operations use caller-owned snapshots exclusively.
  */
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-  type ReadonlyUint8Array,
-} from "@solana/kit";
+import { getAddressDecoder, getAddressEncoder, type Address } from "@solana/kit";
 import { readMint, readTokenAccount } from "../../accounts/tokens";
 import { maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -35,9 +29,26 @@ import {
 import { swap } from "./instructions/clmm/index";
 import { RAYDIUM_CLMM_PROGRAM } from "./constants";
 export { RAYDIUM_CLMM_PROGRAM } from "./constants";
+import {
+  findRaydiumClmmConfigPda,
+  findRaydiumClmmPoolPda,
+  getRaydiumClmmVaultAddress,
+  getRaydiumClmmObservationAddress,
+  getRaydiumClmmTickArrayAddress,
+  getRaydiumClmmTickArrayBitmapExtensionAddress,
+} from "./pda";
+export {
+  findRaydiumClmmConfigPda,
+  getRaydiumClmmConfigAddress,
+  findRaydiumClmmPoolPda,
+  getRaydiumClmmPoolAddress,
+  getRaydiumClmmVaultAddress,
+  getRaydiumClmmObservationAddress,
+  getRaydiumClmmTickArrayAddress,
+  getRaydiumClmmTickArrayBitmapExtensionAddress,
+} from "./pda";
 const addressDecoder = getAddressDecoder();
 const addressEncoder = getAddressEncoder();
-const textEncoder = new TextEncoder();
 const U128_MAX = (1n << 128n) - 1n;
 const POOL_DISCRIMINATOR = [247, 237, 227, 245, 215, 195, 222, 70];
 const CONFIG_DISCRIMINATOR = [218, 244, 33, 104, 203, 203, 43, 111];
@@ -107,15 +118,6 @@ function layout(
   )
     invalid(account.address, "Unsupported Raydium CLMM account layout or discriminator");
 }
-async function pda(
-  seed: string,
-  ...seeds: readonly ReadonlyUint8Array[]
-): Promise<readonly [Address, number]> {
-  return getProgramDerivedAddress({
-    programAddress: RAYDIUM_CLMM_PROGRAM,
-    seeds: [textEncoder.encode(seed), ...seeds],
-  });
-}
 async function decodePool(request: SwapRequest): Promise<Pool> {
   const account = requireAccount(
     request.snapshot,
@@ -184,11 +186,10 @@ async function decodePool(request: SwapRequest): Promise<Pool> {
     pool.sqrtPrice > clmmSqrtPriceAtTick(pool.tick + 1)
   )
     invalid(request.pool, "CLMM sqrt price is inconsistent with its current tick");
-  const [expected, bump] = await pda(
-    "pool",
-    addressEncoder.encode(pool.config),
-    mint0Bytes,
-    mint1Bytes,
+  const [expected, bump] = await findRaydiumClmmPoolPda(
+    pool.config,
+    pool.mint0,
+    pool.mint1,
   );
   if (request.pool !== expected || data[8] !== bump)
     invalid(request.pool, "Invalid CLMM pool PDA or bump");
@@ -196,17 +197,10 @@ async function decodePool(request: SwapRequest): Promise<Pool> {
     [pool.vault0, pool.mint0],
     [pool.vault1, pool.mint1],
   ] as const) {
-    const [expectedVault] = await pda(
-      "pool_vault",
-      addressEncoder.encode(request.pool),
-      addressEncoder.encode(mint),
-    );
+    const expectedVault = await getRaydiumClmmVaultAddress(request.pool, mint);
     if (actual !== expectedVault) invalid(actual, "Invalid CLMM vault PDA");
   }
-  const [expectedObservation] = await pda(
-    "observation",
-    addressEncoder.encode(request.pool),
-  );
+  const expectedObservation = await getRaydiumClmmObservationAddress(request.pool);
   if (pool.observation !== expectedObservation)
     invalid(pool.observation, "Invalid CLMM observation PDA");
   return pool;
@@ -222,7 +216,7 @@ async function feeRate(request: SwapRequest, pool: Pool): Promise<bigint> {
   layout(account, 117, CONFIG_DISCRIMINATOR);
   const data = account.data;
   const bytes = view(data);
-  const [expected, bump] = await pda("amm_config", Uint8Array.of(data[10]!, data[9]!));
+  const [expected, bump] = await findRaydiumClmmConfigPda(bytes.getUint16(9, true));
   if (
     expected !== pool.config ||
     data[8] !== bump ||
@@ -278,11 +272,6 @@ function initializedArrays(
     .sort((a, b) => (pool.zeroForOne ? b - a : a - b));
 }
 
-async function tickArrayAddress(pool: Address, start: number): Promise<Address> {
-  const bytes = new Uint8Array(4);
-  view(bytes).setInt32(0, start, false);
-  return (await pda("tick_array", addressEncoder.encode(pool), bytes))[0];
-}
 function decodeTicks(
   request: SwapRequest,
   pool: Pool,
@@ -349,7 +338,7 @@ async function traverse(
   const requirements: AccountRequirement[] = [];
   const tickArrays: Address[] = [];
   for (const start of starts) {
-    const address = await tickArrayAddress(request.pool, start);
+    const address = await getRaydiumClmmTickArrayAddress(request.pool, start);
     requirements.push({ address, role: `tick array starting at ${start}` });
     tickArrays.push(address);
     if (request.snapshot.accounts[address] === undefined)
@@ -421,10 +410,7 @@ async function requirements(
   request: SwapRequest,
 ): Promise<readonly AccountRequirement[]> {
   const pool = await decodePool(request);
-  const [bitmap] = await pda(
-    "pool_tick_array_bitmap_extension",
-    addressEncoder.encode(request.pool),
-  );
+  const bitmap = await getRaydiumClmmTickArrayBitmapExtensionAddress(request.pool);
   const base = [
     { address: request.pool, role: "pool" },
     { address: pool.config, role: "AMM configuration" },
@@ -449,10 +435,7 @@ async function build(
 ): Promise<ProtocolSwap> {
   const pool = await decodePool(request);
   const rate = await feeRate(request, pool);
-  const [bitmap] = await pda(
-    "pool_tick_array_bitmap_extension",
-    addressEncoder.encode(request.pool),
-  );
+  const bitmap = await getRaydiumClmmTickArrayBitmapExtensionAddress(request.pool);
   validateMints(request, pool);
   const vault0 = readTokenAccount(
     request.snapshot,

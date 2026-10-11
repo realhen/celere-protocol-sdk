@@ -1,10 +1,5 @@
 /** Bigint adaptation of Meteora's MIT-declared DAMM v1 and vault SDKs; see NOTICE.md. */
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
 import { ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -18,11 +13,17 @@ import type {
 } from "../../core/types";
 
 import { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants";
+export * from "./damm-v1-pda";
+import {
+  findMeteoraDammV1VaultPda,
+  findMeteoraDammV1TokenVaultPda,
+  getMeteoraDammV1LpMintAddress,
+  findMeteoraDammV1PoolVaultSharePda,
+  getMeteoraDammV1ProtocolFeeAddress,
+} from "./damm-v1-pda";
 import { swap } from "./instructions/damm-v1/swap";
 export { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants";
 const decoder = getAddressDecoder();
-const encoder = getAddressEncoder();
-const utf8 = new TextEncoder();
 const PROFIT_DENOMINATOR = 1_000_000_000_000n;
 const POOL_DISCRIMINATOR = [241, 154, 109, 4, 17, 177, 109, 188];
 const VAULT_DISCRIMINATOR = [211, 8, 232, 43, 2, 152, 117, 119];
@@ -198,18 +199,6 @@ function readVault(request: SwapRequest, key: Address, mint: Address): Vault {
     unlocked: total - remaining,
   };
 }
-async function pda(
-  programAddress: Address,
-  seeds: readonly (Address | string)[],
-  literalFirst = false,
-): Promise<readonly [Address, number]> {
-  return getProgramDerivedAddress({
-    programAddress,
-    seeds: seeds.map((seed, index) =>
-      literalFirst && index === 0 ? utf8.encode(seed) : encoder.encode(seed as Address),
-    ),
-  });
-}
 async function requirements(
   request: SwapRequest,
 ): Promise<readonly AccountRequirement[]> {
@@ -247,26 +236,14 @@ async function balances(
   fee: Address,
 ): Promise<VaultBalances> {
   const vault = readVault(request, key, mint);
-  const [expectedVault, bump] = await pda(
-    METEORA_VAULT_PROGRAM,
-    ["vault", mint, vault.base],
-    true,
-  );
-  const [expectedToken, tokenBump] = await pda(
-    METEORA_VAULT_PROGRAM,
-    ["token_vault", key],
-    true,
-  );
-  const [expectedMint] = await pda(METEORA_VAULT_PROGRAM, ["lp_mint", key], true);
-  const [expectedShare, shareBump] = await pda(METEORA_DAMM_V1_PROGRAM, [
+  const [expectedVault, bump] = await findMeteoraDammV1VaultPda(mint, vault.base);
+  const [expectedToken, tokenBump] = await findMeteoraDammV1TokenVaultPda(key);
+  const expectedMint = await getMeteoraDammV1LpMintAddress(key);
+  const [expectedShare, shareBump] = await findMeteoraDammV1PoolVaultSharePda(
     key,
     request.pool,
-  ]);
-  const [expectedFee] = await pda(
-    METEORA_DAMM_V1_PROGRAM,
-    ["fee", mint, request.pool],
-    true,
   );
+  const expectedFee = await getMeteoraDammV1ProtocolFeeAddress(mint, request.pool);
   if (
     key !== expectedVault ||
     bump !== vault.bump ||

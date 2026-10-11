@@ -1,9 +1,5 @@
-import {
-  getAddressDecoder,
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-} from "@solana/kit";
+import type { getLiquidAfSharedAddresses } from "./pda";
+import { getAddressDecoder, type Address } from "@solana/kit";
 import { fail } from "../../core/errors";
 import { requireAccount } from "../../core/snapshot";
 import type { ProtocolId, SnapshotAccount, SwapRequest } from "../../core/types";
@@ -13,22 +9,7 @@ import {
   LIQUID_AF_PYTH_RECEIVER_PROGRAM,
 } from "./constants";
 
-const addressEncoder = getAddressEncoder();
 const addressDecoder = getAddressDecoder();
-/** Derive documented LiquidAF PDAs entirely offline. */
-export function deriveLiquidAddress(
-  programAddress: Address,
-  seed: string,
-  ...addresses: readonly Address[]
-) {
-  return getProgramDerivedAddress({
-    programAddress,
-    seeds: [
-      new TextEncoder().encode(seed),
-      ...addresses.map((value) => addressEncoder.encode(value)),
-    ],
-  });
-}
 export function invalidLiquidAccount(account: Address, message: string): never {
   fail({ code: "INVALID_ACCOUNT", address: account, message });
 }
@@ -58,51 +39,9 @@ export function liquidAccount(
     invalidLiquidAccount(account, `Invalid or truncated ${role}`);
   return observation;
 }
-export async function liquidSharedAddresses(
-  owner: Address,
-  creator: Address,
-  mint: Address,
-  quoteMint: Address,
-  amm: boolean,
-) {
-  const [
-    [feeConfig, feeBump],
-    [creatorUserProperties],
-    [userProperties],
-    [globalVolume],
-    [tokenVolume],
-    [cashbackConfig],
-    [stateEventsCpiAuthority],
-  ] = await Promise.all([
-    deriveLiquidAddress(LIQUID_AF_FEES_PROGRAM, "fee_config", mint, quoteMint),
-    deriveLiquidAddress(LIQUID_AF_STATE_PROGRAM, "user_properties", creator),
-    deriveLiquidAddress(LIQUID_AF_STATE_PROGRAM, "user_properties", owner),
-    deriveLiquidAddress(
-      LIQUID_AF_STATE_PROGRAM,
-      amm ? "global_amm_volume" : "global_curve_volume",
-    ),
-    deriveLiquidAddress(LIQUID_AF_STATE_PROGRAM, "token_volume", mint),
-    deriveLiquidAddress(LIQUID_AF_STATE_PROGRAM, "cashback_config"),
-    deriveLiquidAddress(LIQUID_AF_STATE_PROGRAM, "cpi_authority"),
-  ]);
-  const [feeVault] = await deriveLiquidAddress(
-    LIQUID_AF_FEES_PROGRAM,
-    "fee_vault",
-    feeConfig,
-  );
-  return {
-    feeConfig,
-    feeBump,
-    feeVault,
-    creatorUserProperties,
-    userProperties,
-    globalVolume,
-    tokenVolume,
-    cashbackConfig,
-    stateEventsCpiAuthority,
-  };
-}
-export type LiquidSharedAddresses = Awaited<ReturnType<typeof liquidSharedAddresses>>;
+export type LiquidSharedAddresses = Awaited<
+  ReturnType<typeof getLiquidAfSharedAddresses>
+>;
 
 /** Validate fee destinations and earning-mode user state; cashback never funds a quoted swap. */
 export function validateLiquidSharedState(
