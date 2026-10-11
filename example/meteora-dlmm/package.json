@@ -7,12 +7,11 @@
     "node": ">=22.16"
   },
   "scripts": {
-    "build": "tsc --noEmit && esbuild src/main.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/main.js",
-    "start": "npm run build && node --env-file=.env dist/main.js",
-    "simulate": "npm run start -- --simulate"
+    "build": "tsc --noEmit && esbuild main.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/main.js",
+    "start": "npm run build && node dist/main.js"
   },
   "dependencies": {
-    "celere-protocol-sdk": "git+https://github.com/realhen/celere-protocol-sdk.git#e98c8095a8a19b512639ce21905f68518ad862d0",
+    "celere-protocol-sdk": "file:../..",
     "@solana/kit": "5.5.1",
     "@solana/sysvars": "5.5.1",
     "@solana-program/system": "0.10.0",

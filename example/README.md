@@ -1,14 +1,10 @@
-# Runnable buy-and-send projects
+# Buy-and-send examples
 
-Copy either folder, install its dependencies, configure `.env`, and run it independently:
+Two small, independently runnable projects, each with one `main.ts`:
 
-| Project                                | Buy flow                                                                                          |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| [Pump.fun](pumpfun/README.md)          | Derive a bonding curve from a mint, quote a native SOL buy, build, simulate, sign, and send.      |
-| [Meteora DLMM](meteora-dlmm/README.md) | Fund WSOL if needed, discover pool/bin accounts, quote and build a buy, simulate, sign, and send. |
+- [Pump.fun](pumpfun): derive a bonding curve, build a SOL buy, and send it.
+- [Meteora DLMM](meteora-dlmm): build a buy using an existing WSOL balance and send it.
 
-Each project owns its package manifest, TypeScript configuration, environment template, and application helpers. There are no sibling-folder imports. Both support RPC-only submission or concurrent Helius/0slot lanes with a caller-provided durable nonce. They report signatures and transport results; chain tracking belongs to the consuming application.
+Run `npm ci` at the SDK repository root, then `npm ci` in either example folder. Replace the placeholders in `main.ts`, then run `npm start`. Sender routes and fees are written directly in the script. Each uses a caller-provided nonce to send to Helius, 0slot, and the default RPC concurrently. The RPC account-fetching helper sits at the bottom of the same file.
 
-The SDK is not yet on npm, so the examples install a pinned sender revision from GitHub. Their READMEs explain installation and switching to a published release. No wallet keys, RPC credentials, or fixed live trade target are included.
-
-Small examples for every native instruction remain in the public builders' TSDoc. The repository's packed-package workflow independently compiles/builds these copied projects; its Surfpool workflow exercises their actual command-line programs against native program execution.
+Both folders include their own package manifest, lockfile, and TypeScript configuration. They use `file:../..` to resolve the local SDK; if you copy a folder elsewhere, update that path to your SDK checkout and run `npm install`. Native instruction examples remain in the builders’ TSDoc. Repository checks build the copied projects and exercise their buys against native programs in Surfpool.
