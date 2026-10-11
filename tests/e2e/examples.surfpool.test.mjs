@@ -252,9 +252,21 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
           assert.ok(source.includes(JSON.stringify(key)));
           source = source.replace(
             JSON.stringify(key),
-            `"simulator", endpoint: ${JSON.stringify(endpoint)}`,
+            `"simulator", endpoint: ${JSON.stringify(endpoint)}, timeoutMs: 60_000`,
           );
         }
+        // The audit proxy hydrates remote accounts and checks receipts before replying.
+        // Allow that instrumentation time without changing the published example defaults.
+        source = source.replace(
+          "defaultRpc: { url: rpcUrl }",
+          "defaultRpc: { url: rpcUrl, timeoutMs: 60_000 }",
+        );
+        const resultsLine = "console.table(await submission.results);";
+        assert.ok(source.includes(resultsLine));
+        source = source.replace(
+          resultsLine,
+          'console.log("Route results:", JSON.stringify(await submission.results));',
+        );
         await writeFile(scriptPath, source);
         const beforeTokens = await tokenBalance(outputAta);
         const sent = await run("npm", ["start"], {
@@ -265,6 +277,14 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
           (match) => match[1],
         );
         assert.equal(signatures.length, 3);
+        const routeResults = JSON.parse(
+          sent.stdout.match(/^Route results: (.+)$/m)?.[1] ?? "null",
+        );
+        assert.equal(routeResults?.length, 3);
+        for (const result of routeResults) {
+          assert.equal(result.status, "accepted", JSON.stringify(result));
+          assert.equal(result.httpStatus, 200);
+        }
         const successful = [];
         for (const signature of signatures) {
           const receipt = await rpc(endpoint, "getTransaction", [
