@@ -14,14 +14,7 @@ const sdk = createProtocolSdk([heavenAdapter]);
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw Error("Heaven native tests require a loopback simulator");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const body = await (
     await fetch(endpoint, {
@@ -56,16 +49,14 @@ async function account(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash")).value;
-  const c = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const c = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], c.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -108,9 +99,7 @@ test(
                       : 16_000_001n
                     : f.request.amount.amountIn,
             };
-            const built = value(
-              await sdk.buildSwapInstructions({ ...f.request, amount }),
-            );
+            const built = await sdk.buildSwapInstructions({ ...f.request, amount });
             assert.equal(built.execution.mayPartiallyFill, false);
             for (const key of [f.userA, f.userB])
               new DataView(f.request.snapshot.accounts[key].data.buffer).setBigUint64(
@@ -154,12 +143,10 @@ test(
       for (const exhaustion of [false, true]) {
         const label = `failure:${buy}:${exhaustion}`,
           original = await heavenFixture(signer.address, { buy, label });
-        const built = value(
-          await sdk.buildSwapInstructions({
-            ...original.request,
-            slippageBps: exhaustion ? 9999 : 0,
-          }),
-        );
+        const built = await sdk.buildSwapInstructions({
+          ...original.request,
+          slippageBps: exhaustion ? 9999 : 0,
+        });
         const stale = await heavenFixture(signer.address, {
           buy,
           label,

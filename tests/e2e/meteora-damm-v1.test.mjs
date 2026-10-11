@@ -1,21 +1,16 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
-import { generateKeyPairSigner, getAddressEncoder } from "@solana/kit";
 import {
+  MissingAccountsError,
   buildSwapInstructions,
   getSwapRequirements,
   compileTransaction,
 } from "../../dist/index.js";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
+import { generateKeyPairSigner, getAddressEncoder } from "@solana/kit";
+
 import { meteoraDammV1Fixture, DAMM_V1_PROGRAM } from "../fixtures/meteora-damm-v1.mjs";
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-  );
-  return result.value;
-}
+
 function write(account, offset, amount) {
   new DataView(account.data.buffer).setBigUint64(offset, amount, true);
 }
@@ -28,12 +23,10 @@ test("offline DAMM v1 consumer discovers vault dependencies and builds portable 
   try {
     for (const reverse of [false, true]) {
       const fixture = await meteoraDammV1Fixture(signer.address, { reverse });
-      const unknown = value(
-        await getSwapRequirements({
-          ...fixture.request,
-          snapshot: { ...fixture.request.snapshot, accounts: {} },
-        }),
-      );
+      const unknown = await getSwapRequirements({
+        ...fixture.request,
+        snapshot: { ...fixture.request.snapshot, accounts: {} },
+      });
       assert.equal(unknown.protocol, null);
       assert.equal(unknown.missing[0].address, fixture.pool);
       const partial = {
@@ -43,34 +36,32 @@ test("offline DAMM v1 consumer discovers vault dependencies and builds portable 
           accounts: { [fixture.pool]: fixture.request.snapshot.accounts[fixture.pool] },
         },
       };
-      const stage1 = value(await getSwapRequirements(partial));
+      const stage1 = await getSwapRequirements(partial);
       assert.equal(stage1.protocol, "meteora-damm-v1");
       assert.ok(stage1.missing.some((a) => a.address === fixture.vaults[0].vault));
       for (const vault of fixture.vaults)
         partial.snapshot.accounts[vault.vault] =
           fixture.request.snapshot.accounts[vault.vault];
-      const stage2 = value(await getSwapRequirements(partial));
+      const stage2 = await getSwapRequirements(partial);
       assert.ok(stage2.missing.some((a) => a.address === fixture.vaults[0].lpMint));
       assert.ok(stage2.missing.some((a) => a.address === fixture.vaults[0].tokenVault));
-      assert.equal((await buildSwapInstructions(partial)).error.code, "MISSING_ACCOUNTS");
-      assert.equal(value(await getSwapRequirements(fixture.request)).complete, true);
-      const build = value(await buildSwapInstructions(fixture.request));
+      await assert.rejects(() => buildSwapInstructions(partial), MissingAccountsError);
+      assert.equal((await getSwapRequirements(fixture.request)).complete, true);
+      const build = await buildSwapInstructions(fixture.request);
       assert.equal(build.protocol, "meteora-damm-v1");
       assert.equal(build.execution.mayPartiallyFill, false);
       assert.equal(build.instructions.length, 1);
       assert.equal(build.instructions[0].programAddress, DAMM_V1_PROGRAM);
       assert.equal(build.instructions[0].accounts.length, 15);
       assert.deepEqual(structuredClone(build), build);
-      const compiled = value(
-        compileTransaction({
-          instructions: build.instructions,
-          feePayer: signer.address,
-          lifetime: {
-            blockhash: "11111111111111111111111111111111",
-            lastValidBlockHeight: 123n,
-          },
-        }),
-      );
+      const compiled = compileTransaction({
+        instructions: build.instructions,
+        feePayer: signer.address,
+        lifetime: {
+          blockhash: "11111111111111111111111111111111",
+          lastValidBlockHeight: 123n,
+        },
+      });
       assert.ok(compiled.byteLength <= 1232);
       assert.ok(Object.values(compiled.transaction.signatures).every((s) => s === null));
     }
@@ -78,7 +69,7 @@ test("offline DAMM v1 consumer discovers vault dependencies and builds portable 
     globalThis.fetch = originalFetch;
   }
 });
-test("DAMM v1 consumer receives structured errors for unsupported curves, modes, vault strategies and corrupt backing", async () => {
+test("DAMM v1 consumer receives typed errors for unsupported curves, modes, vault strategies and corrupt backing", async () => {
   const signer = await generateKeyPairSigner();
   for (const [change, code] of [
     [
@@ -192,8 +183,12 @@ test("DAMM v1 consumer receives structured errors for unsupported curves, modes,
   ]) {
     const fixture = await meteoraDammV1Fixture(signer.address);
     change(fixture);
-    const result = await buildSwapInstructions(fixture.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, code, result.error.message);
+    await assert.rejects(
+      () => buildSwapInstructions(fixture.request),
+      (error) => {
+        assert.equal(error.code, code, error.message);
+        return true;
+      },
+    );
   }
 });

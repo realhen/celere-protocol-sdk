@@ -1,20 +1,15 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import {
+  UnsupportedSwapModeError,
   getSwapRequirements,
   buildSwapInstructions,
   compileTransaction,
 } from "../../dist/index.js";
+import assert from "node:assert/strict";
+import test from "node:test";
+
 import { deterministicAddress, TOKEN, TOKEN_2022 } from "../fixtures/pump-amm.mjs";
 import { pumpAmmQuotesFixture } from "../fixtures/pump-amm-quotes.mjs";
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return result.value;
-}
+
 test("offline PumpSwap consumers discover modern quote accounts and compile each native amount mode", async () => {
   const fetch = globalThis.fetch;
   globalThis.fetch = () => {
@@ -40,20 +35,18 @@ test("offline PumpSwap consumers discover modern quote accounts and compile each
                 ? { kind: "exactOut", amountOut: 123456789n }
                 : f.request.amount,
           };
-          assert.equal(value(await getSwapRequirements(request)).complete, true);
-          const build = value(await buildSwapInstructions(request));
+          assert.equal((await getSwapRequirements(request)).complete, true);
+          const build = await buildSwapInstructions(request);
           assert.equal(build.execution.mayPartiallyFill, false);
           for (const fee of build.quote.fees) assert.equal(fee.mint, f.quoteMint);
-          const tx = value(
-            compileTransaction({
-              instructions: build.instructions,
-              feePayer: request.payer,
-              lifetime: {
-                blockhash: "11111111111111111111111111111111",
-                lastValidBlockHeight: 1n,
-              },
-            }),
-          );
+          const tx = compileTransaction({
+            instructions: build.instructions,
+            feePayer: request.payer,
+            lifetime: {
+              blockhash: "11111111111111111111111111111111",
+              lastValidBlockHeight: 1n,
+            },
+          });
           assert.deepEqual(tx.requiredSigners, [request.owner]);
         }
   } finally {
@@ -68,12 +61,12 @@ test("offline PumpSwap discovers unknown buyback ATAs and creates observed-absen
   const payer = deterministicAddress("ata-payer");
   const request = { ...f.request, payer };
   delete request.snapshot.accounts[f.buybackAta];
-  const incomplete = value(await getSwapRequirements(request));
+  const incomplete = await getSwapRequirements(request);
   assert.equal(incomplete.complete, false);
   assert.ok(incomplete.missing.some((r) => r.address === f.buybackAta));
   request.snapshot.accounts[f.buybackAta] = null;
   request.snapshot.accounts[f.userBase] = null;
-  const build = value(await buildSwapInstructions(request));
+  const build = await buildSwapInstructions(request);
   assert.equal(build.setupInstructions.length, 2);
   assert.equal(build.swapInstructions.length, 1);
   assert.deepEqual(new Set(build.requiredSigners), new Set([payer, request.owner]));
@@ -124,22 +117,34 @@ test("offline PumpSwap rejects invalid fee schedules, holder destinations and un
       a.data = data;
       a.owner = TOKEN_2022;
     }
-    const result = await buildSwapInstructions(f.request);
-    assert.equal(result.ok, false, mutation);
-    assert.equal(
-      result.error.code,
-      mutation === "quote-extension" ? "UNSUPPORTED_TOKEN_EXTENSION" : "INVALID_ACCOUNT",
-      mutation,
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.equal(
+          error.code,
+          mutation === "quote-extension"
+            ? "UNSUPPORTED_TOKEN_EXTENSION"
+            : "INVALID_ACCOUNT",
+          mutation,
+        );
+        return true;
+      },
     );
   }
   const f = await pumpAmmQuotesFixture(deterministicAddress("sell-out"), {
     quote: "exotic",
     reverse: true,
   });
-  const unsupported = await buildSwapInstructions({
-    ...f.request,
-    amount: { kind: "exactOut", amountOut: 123n },
-  });
-  assert.equal(unsupported.ok, false);
-  assert.equal(unsupported.error.code, "UNSUPPORTED_SWAP_MODE");
+  await assert.rejects(
+    () =>
+      buildSwapInstructions({
+        ...f.request,
+        amount: { kind: "exactOut", amountOut: 123n },
+      }),
+    (error) => {
+      assert.ok(error instanceof UnsupportedSwapModeError);
+      assert.equal(error.code, "UNSUPPORTED_SWAP_MODE");
+      return true;
+    },
+  );
 });

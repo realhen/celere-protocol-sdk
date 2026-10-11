@@ -1,17 +1,16 @@
+import {
+  UnsupportedFillPolicyError,
+  UnsupportedSwapModeError,
+  buildSwapInstructions,
+  getSwapRequirements,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { address } from "@solana/kit";
-import { buildSwapInstructions, getSwapRequirements } from "../../dist/index.js";
+
 import { liquidAfFixture, LIQUID_AF_PROGRAM } from "../fixtures/liquid-af.mjs";
 const owner = address("11111111111111111111111111111112");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return result.value;
-}
+
 test("consumer builds LiquidAF native-SOL buys and both sell modes from caller snapshots", async () => {
   for (const [reverse, exactOut] of [
     [false, false],
@@ -23,8 +22,8 @@ test("consumer builds LiquidAF native-SOL buys and both sell modes from caller s
       ...f.request,
       amount: exactOut ? { kind: "exactOut", amountOut: 1_000_001n } : f.request.amount,
     };
-    assert.equal(value(await getSwapRequirements(request)).complete, true);
-    const build = value(await buildSwapInstructions(request));
+    assert.equal((await getSwapRequirements(request)).complete, true);
+    const build = await buildSwapInstructions(request);
     assert.equal(build.protocol, "liquid-af");
     assert.equal(build.swapInstructions[0].programAddress, LIQUID_AF_PROGRAM);
     assert.equal(build.swapInstructions[0].accounts.length, 29);
@@ -45,18 +44,30 @@ test("consumer builds LiquidAF native-SOL buys and both sell modes from caller s
 });
 test("LiquidAF buys explicitly reject full-fill policy and high-level exact-output requests", async () => {
   const f = await liquidAfFixture(owner);
-  const full = await buildSwapInstructions({
-    ...f.request,
-    fillPolicy: "requireFull",
-  });
-  assert.equal(full.ok, false);
-  assert.equal(full.error.code, "UNSUPPORTED_FILL_POLICY");
-  const output = await buildSwapInstructions({
-    ...f.request,
-    amount: { kind: "exactOut", amountOut: 100n },
-  });
-  assert.equal(output.ok, false);
-  assert.equal(output.error.code, "UNSUPPORTED_SWAP_MODE");
+  await assert.rejects(
+    () =>
+      buildSwapInstructions({
+        ...f.request,
+        fillPolicy: "requireFull",
+      }),
+    (error) => {
+      assert.ok(error instanceof UnsupportedFillPolicyError);
+      assert.equal(error.code, "UNSUPPORTED_FILL_POLICY");
+      return true;
+    },
+  );
+  await assert.rejects(
+    () =>
+      buildSwapInstructions({
+        ...f.request,
+        amount: { kind: "exactOut", amountOut: 100n },
+      }),
+    (error) => {
+      assert.ok(error instanceof UnsupportedSwapModeError);
+      assert.equal(error.code, "UNSUPPORTED_SWAP_MODE");
+      return true;
+    },
+  );
   new DataView(f.request.snapshot.accounts[f.pool].data.buffer).setBigUint64(
     73,
     500_000n,
@@ -67,7 +78,7 @@ test("LiquidAF buys explicitly reject full-fill policy and high-level exact-outp
     500_000n,
     true,
   );
-  const clipped = value(await buildSwapInstructions(f.request));
+  const clipped = await buildSwapInstructions(f.request);
   assert.equal(clipped.quote.amountIn, 1_000_001n);
   assert.equal(clipped.quote.expectedAmountIn, 335_909n);
   assert.equal(clipped.quote.expectedAmountOut, 500_000n);
@@ -81,7 +92,7 @@ test("LiquidAF discovers caller-owned dependencies without account fetching", as
       accounts: { [f.pool]: f.request.snapshot.accounts[f.pool] },
     },
   };
-  const discovery = value(await getSwapRequirements(request));
+  const discovery = await getSwapRequirements(request);
   assert.equal(discovery.complete, false);
   assert.ok(discovery.missing.some((account) => account.address === f.globalConfig));
 });
@@ -126,8 +137,12 @@ test("LiquidAF rejects unsupported fee states, referrals, cashback spending and 
       f.request.amount = { kind: "exactIn", amountIn: 1n };
       expected = "INSUFFICIENT_LIQUIDITY";
     }
-    const result = await buildSwapInstructions(f.request);
-    assert.equal(result.ok, false, variant);
-    assert.equal(result.error.code, expected, variant);
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.equal(error.code, expected, variant);
+        return true;
+      },
+    );
   }
 });

@@ -6,5 +6,6 @@ import * as core from "./offline-core";
  */
 export function orcaCore(): typeof core {
   core.initialize();
+
   return core;
 }

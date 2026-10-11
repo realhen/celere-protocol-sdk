@@ -1,11 +1,5 @@
 import { SenderConfigurationError } from "../errors/index";
 import type { Region, RouteOptions, SenderRoute } from "./route";
-import type { SenderError } from "../errors/index";
-
-/** Internal validation result. Public methods preserve their documented throw/reject boundary. */
-export type ValidationResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: SenderError };
 
 /** Immutable provider metadata and the client-assigned observation identity. */
 export interface ConfiguredRoute {
@@ -27,43 +21,36 @@ export function isConfiguredProvider(provider: SenderRoute): boolean {
 }
 
 /** Parse caller-controlled URLs without returning credentials in error messages. */
-export function validateEndpoint(endpoint: string): ValidationResult<URL> {
+export function validateEndpoint(endpoint: string): URL {
+  let url: URL;
   try {
-    const url = new URL(endpoint);
-    if (
-      (url.protocol !== "http:" && url.protocol !== "https:") ||
-      url.username ||
-      url.password ||
-      url.hash
-    ) {
-      return {
-        ok: false,
-        error: new SenderConfigurationError(
-          "Expected an HTTP(S) endpoint without userinfo or fragment",
-        ),
-      };
-    }
-    return { ok: true, value: url };
+    url = new URL(endpoint);
   } catch {
-    return {
-      ok: false,
-      error: new SenderConfigurationError(
-        "Expected an HTTP(S) endpoint without userinfo or fragment",
-      ),
-    };
+    throw new SenderConfigurationError(
+      "Expected an HTTP(S) endpoint without userinfo or fragment",
+    );
   }
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username ||
+    url.password ||
+    url.hash
+  ) {
+    throw new SenderConfigurationError(
+      "Expected an HTTP(S) endpoint without userinfo or fragment",
+    );
+  }
+  return url;
 }
 
 /** Validate caller deadlines; defaults are applied only during configuration. */
-export function validateTimeout(timeoutMs = 3000): ValidationResult<number> {
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000)
-    return {
-      ok: false,
-      error: new SenderConfigurationError(
-        "timeoutMs must be an integer from 1 through 60000",
-      ),
-    };
-  return { ok: true, value: timeoutMs };
+export function validateTimeout(timeoutMs = 3000): number {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) {
+    throw new SenderConfigurationError(
+      "timeoutMs must be an integer from 1 through 60000",
+    );
+  }
+  return timeoutMs;
 }
 
 /** Normalized options retained by a provider constructor; contains credentials in the URL. */
@@ -78,40 +65,29 @@ export function configureProvider(
   options: RouteOptions,
   endpoints: Partial<Record<Region, string>>,
   defaultRegion: Region,
-): ValidationResult<ProviderConfiguration> {
+): ProviderConfiguration {
   if (
     !options ||
     typeof options.apiKey !== "string" ||
     !options.apiKey.trim() ||
     /[\r\n]/.test(options.apiKey)
-  )
-    return {
-      ok: false,
-      error: new SenderConfigurationError("A nonempty provider API key is required"),
-    };
+  ) {
+    throw new SenderConfigurationError("A nonempty provider API key is required");
+  }
   if (
     options.name !== undefined &&
     (typeof options.name !== "string" || !options.name.trim())
-  )
-    return {
-      ok: false,
-      error: new SenderConfigurationError("Route name must be nonempty"),
-    };
+  ) {
+    throw new SenderConfigurationError("Route name must be nonempty");
+  }
   const region = options.region ?? defaultRegion;
-  if (!Object.hasOwn(endpoints, region))
-    return {
-      ok: false,
-      error: new SenderConfigurationError("Unsupported provider region"),
-    };
+  if (!Object.hasOwn(endpoints, region)) {
+    throw new SenderConfigurationError("Unsupported provider region");
+  }
   const endpoint =
     options.endpoint === undefined
-      ? { ok: true as const, value: new URL(endpoints[region]!) }
+      ? new URL(endpoints[region]!)
       : validateEndpoint(options.endpoint);
-  if (!endpoint.ok) return endpoint;
   const timeout = validateTimeout(options.timeoutMs);
-  if (!timeout.ok) return timeout;
-  return {
-    ok: true,
-    value: { url: endpoint.value, name: options.name, timeoutMs: timeout.value },
-  };
+  return { url: endpoint, name: options.name, timeoutMs: timeout };
 }

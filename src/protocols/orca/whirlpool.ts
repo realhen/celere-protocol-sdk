@@ -1,4 +1,12 @@
-export * from "./pda";
+import { InvalidAccountError } from "../errors";
+import {
+  UnsupportedPoolFeatureError,
+  InvalidSnapshotContextError,
+  InsufficientLiquidityError,
+  UnsupportedFillPolicyError,
+} from "../errors";
+import { InvalidRequestError } from "../../shared/errors";
+
 import {
   findOrcaWhirlpoolPda,
   getOrcaTickArrayAddress,
@@ -8,9 +16,9 @@ import type { Address } from "@solana/kit";
 import { swap_v2 } from "./instructions/swap_v2";
 import type { TickArrayFacade } from "@orca-so/whirlpools-core";
 import { WHIRLPOOL_PROGRAM, decodePool, decodeFixedArray, type Pool } from "./layout";
-import { readMint, readTokenAccount } from "../../accounts/tokens";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+import { readMint, readTokenAccount } from "../accounts/tokens";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
@@ -18,8 +26,10 @@ import type {
   ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import { orcaCore } from "./core";
+
+export * from "./pda";
 
 const TICK_ARRAY_SIZE = 88;
 const MIN_TICK = -443636;
@@ -27,10 +37,6 @@ const MAX_TICK = 443636;
 /** Inclusive Q64.64 bounds at the pinned Orca core's minimum and maximum ticks. */
 const MIN_SQRT_PRICE = 4295048016n;
 const MAX_SQRT_PRICE = 79226673515401279992447579055n;
-
-function invalidAccount(account: Address, message: string): never {
-  return fail({ code: "INVALID_ACCOUNT", address: account, message });
-}
 
 async function readPool(request: SwapRequest): Promise<Pool> {
   const account = requireAccount(
@@ -46,50 +52,54 @@ async function readPool(request: SwapRequest): Promise<Pool> {
     pool.tickCurrentIndex > MAX_TICK ||
     pool.tokenMintA === pool.tokenMintB
   ) {
-    invalidAccount(
-      request.pool,
-      "Invalid Whirlpool tick spacing, current tick, or token pair",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Whirlpool tick spacing, current tick, or token pair",
+    });
   }
   if (pool.sqrtPrice < MIN_SQRT_PRICE || pool.sqrtPrice > MAX_SQRT_PRICE) {
-    invalidAccount(
-      request.pool,
-      "Whirlpool square-root price is outside protocol bounds",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Whirlpool square-root price is outside protocol bounds",
+    });
   }
   if (pool.protocolFeeRate > 10_000) {
-    invalidAccount(request.pool, "Whirlpool protocol fee exceeds 10000 basis points");
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Whirlpool protocol fee exceeds 10000 basis points",
+    });
   }
   if (!(
     (request.inputMint === pool.tokenMintA && request.outputMint === pool.tokenMintB) ||
     (request.inputMint === pool.tokenMintB && request.outputMint === pool.tokenMintA)
   )) {
-    fail({
-      code: "INVALID_REQUEST",
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested mint pair does not match the Whirlpool",
     });
   }
-  if (pool.feeTierIndex !== pool.tickSpacing)
-    fail({
-      code: "UNSUPPORTED_POOL_FEATURE",
+  if (pool.feeTierIndex !== pool.tickSpacing) {
+    throw new UnsupportedPoolFeatureError({
       protocol: "orca-whirlpool",
       feature: "adaptiveFees",
       message: "Adaptive-fee Whirlpools are not qualified in this release",
     });
+  }
+
   const [expectedPool, bump] = await findOrcaWhirlpoolPda(pool);
   if (expectedPool !== request.pool || pool.bump !== bump) {
-    invalidAccount(
-      request.pool,
-      "Whirlpool address does not match its mint pair, configuration, and fee tier",
-    );
+    throw new InvalidAccountError({
+      address: request.pool,
+      message:
+        "Whirlpool address does not match its mint pair, configuration, and fee tier",
+    });
   }
   if (pool.rewardLastUpdatedTimestamp > request.snapshot.unixTimestamp) {
-    fail({
-      code: "INVALID_SNAPSHOT_CONTEXT",
+    throw new InvalidSnapshotContextError({
       message: "Whirlpool state is newer than supplied chain time",
     });
   }
+
   return pool;
 }
 
@@ -107,6 +117,7 @@ async function discoverArrays(
     currentStart - span,
     currentStart - span * 2,
   ].filter((start) => start >= minimumStart && start <= MAX_TICK);
+
   return Promise.all(
     starts.map(async (startTickIndex) => ({
       address: await getOrcaTickArrayAddress(poolAddress, startTickIndex),
@@ -121,6 +132,7 @@ async function requirements(
   const pool = await readPool(request);
   const arrays = await discoverArrays(request.pool, pool);
   const oracle = await getOrcaOracleAddress(request.pool);
+
   return [
     { address: request.pool, role: "Whirlpool" },
     { address: pool.tokenMintA, role: "Whirlpool token A mint" },
@@ -154,14 +166,17 @@ function readArray(
   request: SwapRequest,
   entry: { address: Address; startTickIndex: number },
 ): TickArrayFacade {
-  if (request.snapshot.accounts[entry.address] === null)
+  if (request.snapshot.accounts[entry.address] === null) {
     return emptyArray(entry.startTickIndex);
+  }
+
   const account = requireAccount(
     request.snapshot,
     entry.address,
     "Whirlpool tick array",
     WHIRLPOOL_PROGRAM,
   );
+
   return decodeFixedArray(account, request.pool, entry.startTickIndex);
 }
 
@@ -174,14 +189,15 @@ function quoteSwap(
     pool.liquidity === 0n &&
     arrays.every((array) => array.ticks.every((tick) => !tick.initialized))
   ) {
-    fail({
-      code: "INSUFFICIENT_LIQUIDITY",
+    throw new InsufficientLiquidityError({
       protocol: "orca-whirlpool",
       message:
         "No active or initialized liquidity is present in the supplied tick arrays",
     });
   }
+
   const core = orcaCore();
+
   try {
     if (request.amount.kind === "exactIn") {
       const quote = core.swapQuoteByInputToken(
@@ -191,12 +207,13 @@ function quoteSwap(
         pool,
         arrays,
       );
-      if (quote.tokenEstOut === 0n)
-        fail({
-          code: "INSUFFICIENT_LIQUIDITY",
+      if (quote.tokenEstOut === 0n) {
+        throw new InsufficientLiquidityError({
           protocol: "orca-whirlpool",
           message: "Swap produces no output",
         });
+      }
+
       return {
         kind: "exactIn",
         amountIn: request.amount.amountIn,
@@ -206,6 +223,7 @@ function quoteSwap(
         fees: [{ kind: "trade", mint: request.inputMint, amount: quote.tradeFee }],
       };
     }
+
     const quote = core.swapQuoteByOutputToken(
       request.amount.amountOut,
       request.outputMint === pool.tokenMintA,
@@ -213,12 +231,13 @@ function quoteSwap(
       pool,
       arrays,
     );
-    if (quote.tokenOut !== request.amount.amountOut)
-      fail({
-        code: "INSUFFICIENT_LIQUIDITY",
+    if (quote.tokenOut !== request.amount.amountOut) {
+      throw new InsufficientLiquidityError({
         protocol: "orca-whirlpool",
         message: "Supplied Whirlpool liquidity cannot fill the requested output",
       });
+    }
+
     return {
       kind: "exactOut",
       amountOut: request.amount.amountOut,
@@ -233,18 +252,18 @@ function quoteSwap(
       error === core._TICK_INDEX_NOT_IN_ARRAY() ||
       error === core._ZERO_TRADABLE_AMOUNT()
     ) {
-      fail({
-        code: "INSUFFICIENT_LIQUIDITY",
+      throw new InsufficientLiquidityError({
         protocol: "orca-whirlpool",
         message: "Supplied tick-array coverage or liquidity is insufficient for the swap",
       });
     }
-    if (error === core._AMOUNT_EXCEEDS_MAX_U64())
-      fail({
-        code: "INVALID_REQUEST",
+    if (error === core._AMOUNT_EXCEEDS_MAX_U64()) {
+      throw new InvalidRequestError({
         field: "amount",
         message: "Whirlpool quote exceeds a u64 token amount",
       });
+    }
+
     throw error;
   }
 }
@@ -254,13 +273,13 @@ async function build(
   accounts: ResolvedTokenAccounts,
 ): Promise<ProtocolSwap> {
   if (request.amount.kind === "exactIn" && request.fillPolicy !== "allowPartial") {
-    fail({
-      code: "UNSUPPORTED_FILL_POLICY",
+    throw new UnsupportedFillPolicyError({
       protocol: "orca-whirlpool",
       message:
         "Whirlpool exact-input execution may partially fill; choose allowPartial explicitly",
     });
   }
+
   const pool = await readPool(request);
   const tokenA = readMint(request.snapshot, pool.tokenMintA);
   const tokenB = readMint(request.snapshot, pool.tokenMintB);
@@ -278,6 +297,7 @@ async function build(
     tokenB.tokenProgram,
     request.pool,
   );
+
   const arrays = await discoverArrays(request.pool, pool);
   const oracle = await getOrcaOracleAddress(request.pool);
   const quote = quoteSwap(
@@ -285,10 +305,17 @@ async function build(
     pool,
     arrays.map((entry) => readArray(request, entry)),
   );
+
+  // The native instruction requires three primary arrays even near a price boundary.
   const aToB = request.inputMint === pool.tokenMintA;
   const paddedArrays = [...arrays];
-  while (paddedArrays.length < 3) paddedArrays.push(paddedArrays[0]!);
+
+  while (paddedArrays.length < 3) {
+    paddedArrays.push(paddedArrays[0]!);
+  }
+
   const supplementalArrays = paddedArrays.slice(3);
+
   const instruction = swap_v2(
     {
       tokenProgramA: tokenA.tokenProgram,
@@ -316,6 +343,7 @@ async function build(
       aToB,
     },
   );
+
   return {
     instructions: [instruction],
     quote,

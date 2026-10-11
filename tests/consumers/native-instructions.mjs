@@ -55,11 +55,10 @@ for (const scenario of cases) {
     feePayer: scenario.accounts.owner,
     lifetime: scenario.lifetime,
   });
-  assert.equal(transaction.ok, true);
-  assert.deepEqual(transaction.value.wireBytes, scenario.expectedWireBytes);
-  assert.deepEqual(transaction.value.requiredSigners, [scenario.accounts.owner]);
+  assert.deepEqual(transaction.wireBytes, scenario.expectedWireBytes);
+  assert.deepEqual(transaction.requiredSigners, [scenario.accounts.owner]);
   assert.ok(
-    Object.values(transaction.value.transaction.signatures).every(
+    Object.values(transaction.transaction.signatures).every(
       (signature) => signature === null,
     ),
   );

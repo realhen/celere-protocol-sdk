@@ -40,6 +40,7 @@ export interface MeteoraDlmmSwapExactOut2Accounts {
   /** Caller supplies bin arrays in native traversal order. */
   readonly binArrays: readonly Address[];
 }
+
 /**
  * Native arguments for {@link swap_exact_out2}.
  *

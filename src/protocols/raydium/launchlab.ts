@@ -1,14 +1,28 @@
 /** Native LaunchLab interface facts: raydium-io/raydium-idl e7e0c96; independent implementation. */
-import { getAddressDecoder, type Address, type Instruction } from "@solana/kit";
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  UnsupportedSwapModeError,
+} from "../errors";
+import type { Address, Instruction } from "@solana/kit";
 import {
   readMint,
   readTokenAccount,
   TOKEN_PROGRAM,
   TOKEN_2022_PROGRAM,
-} from "../../accounts/tokens";
-import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/tokens";
+import { ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import {
+  accountDataView,
+  matchesDiscriminator,
+  readAddress,
+  readU64,
+} from "../accounts/bytes";
+import { requireAccount } from "../accounts/snapshot";
 import type {
   ProtocolAdapter,
   ProtocolSwap,
@@ -16,7 +30,7 @@ import type {
   ResolvedTokenAccounts,
   SnapshotAccount,
   SwapFee,
-} from "../../core/types";
+} from "../types";
 import {
   buy_exact_in,
   sell_exact_in,
@@ -43,7 +57,6 @@ export {
   getRaydiumLaunchlabPlatformFeeVaultAddress,
   getRaydiumLaunchlabCreatorFeeVaultAddress,
 } from "./pda";
-const decoder = getAddressDecoder();
 const FEE_SCALE = 1_000_000n;
 
 interface Pool {
@@ -68,38 +81,28 @@ interface Pool {
   pendingFees: bigint;
   locked: bigint;
 }
+
 interface Rates {
   trade: bigint;
   platform: bigint;
   creator: bigint;
 }
-function invalid(account: Address, message: string): never {
-  fail({ code: "INVALID_ACCOUNT", address: account, message });
-}
+
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "launchlab",
     feature,
     message: `Unsupported LaunchLab feature: ${feature}`,
   });
 }
+
 function liquidity(): never {
-  fail({
-    code: "INSUFFICIENT_LIQUIDITY",
+  throw new InsufficientLiquidityError({
     protocol: "launchlab",
     message: "Requested amount exceeds the active LaunchLab curve's liquidity",
   });
 }
-function u64(data: Uint8Array, offset: number): bigint {
-  return new DataView(data.buffer, data.byteOffset, data.byteLength).getBigUint64(
-    offset,
-    true,
-  );
-}
-function key(data: Uint8Array, offset: number): Address {
-  return decoder.decode(data.subarray(offset, offset + 32));
-}
+
 function layout(
   account: SnapshotAccount,
   length: number,
@@ -108,11 +111,17 @@ function layout(
 ): Uint8Array {
   if (
     (exact ? account.data.length !== length : account.data.length < length) ||
-    !discriminator.every((byte, index) => account.data[index] === byte)
-  )
-    invalid(account.address, "Unsupported LaunchLab account layout or discriminator");
+    !matchesDiscriminator(account.data, discriminator)
+  ) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Unsupported LaunchLab account layout or discriminator",
+    });
+  }
+
   return account.data;
 }
+
 function poolState(request: SwapRequest): Pool {
   const data = layout(
     requireAccount(
@@ -124,31 +133,40 @@ function poolState(request: SwapRequest): Pool {
     429,
     [247, 237, 227, 245, 215, 195, 222, 70],
   );
-  if (data[17] !== 0) unsupported("closed or migrated pool");
-  if (data[20]! > 1 || data[365]! > 3 || data[366]! > 1)
-    invalid(request.pool, "Invalid LaunchLab pool flags");
+
+  if (data[17] !== 0) {
+    unsupported("closed or migrated pool");
+  }
+  if (data[20]! > 1 || data[365]! > 3 || data[366]! > 1) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid LaunchLab pool flags",
+    });
+  }
+
   const pool: Pool = {
     bump: data[16]!,
     baseDecimals: data[18]!,
     quoteDecimals: data[19]!,
-    supply: u64(data, 21),
-    totalSell: u64(data, 29),
-    virtualBase: u64(data, 37),
-    virtualQuote: u64(data, 45),
-    sold: u64(data, 53),
-    raised: u64(data, 61),
-    target: u64(data, 69),
-    pendingFees: u64(data, 77) + u64(data, 85) + u64(data, 93),
-    locked: u64(data, 101),
-    config: key(data, 141),
-    platform: key(data, 173),
-    baseMint: key(data, 205),
-    quoteMint: key(data, 237),
-    baseVault: key(data, 269),
-    quoteVault: key(data, 301),
-    creator: key(data, 333),
+    supply: readU64(data, 21),
+    totalSell: readU64(data, 29),
+    virtualBase: readU64(data, 37),
+    virtualQuote: readU64(data, 45),
+    sold: readU64(data, 53),
+    raised: readU64(data, 61),
+    target: readU64(data, 69),
+    pendingFees: readU64(data, 77) + readU64(data, 85) + readU64(data, 93),
+    locked: readU64(data, 101),
+    config: readAddress(data, 141),
+    platform: readAddress(data, 173),
+    baseMint: readAddress(data, 205),
+    quoteMint: readAddress(data, 237),
+    baseVault: readAddress(data, 269),
+    quoteVault: readAddress(data, 301),
+    creator: readAddress(data, 333),
     tokenFlags: data[365]!,
   };
+
   if (
     pool.baseMint === pool.quoteMint ||
     pool.baseVault === pool.quoteVault ||
@@ -156,19 +174,25 @@ function poolState(request: SwapRequest): Pool {
     pool.totalSell + pool.locked > pool.supply ||
     pool.totalSell >= pool.virtualBase ||
     pool.raised >= pool.target
-  )
-    invalid(request.pool, "Inconsistent LaunchLab pool state");
+  ) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Inconsistent LaunchLab pool state",
+    });
+  }
   if (!(
     (request.inputMint === pool.baseMint && request.outputMint === pool.quoteMint) ||
     (request.inputMint === pool.quoteMint && request.outputMint === pool.baseMint)
-  ))
-    fail({
-      code: "INVALID_REQUEST",
+  )) {
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested pair does not match the LaunchLab pool",
     });
+  }
+
   return pool;
 }
+
 async function readRates(request: SwapRequest, pool: Pool): Promise<Rates> {
   const config = layout(
     requireAccount(
@@ -180,11 +204,21 @@ async function readRates(request: SwapRequest, pool: Pool): Promise<Rates> {
     371,
     [149, 8, 156, 202, 160, 252, 176, 217],
   );
-  if (config[16] !== 0) unsupported("non constant-product curve");
-  const index = new DataView(config.buffer, config.byteOffset).getUint16(17, true);
+
+  if (config[16] !== 0) {
+    unsupported("non constant-product curve");
+  }
+
+  const index = accountDataView(config).getUint16(17, true);
   const expected = await getRaydiumLaunchlabGlobalConfigAddress(pool.quoteMint, index);
-  if (expected !== pool.config || key(config, 83) !== pool.quoteMint)
-    invalid(pool.config, "LaunchLab global config does not match its quote mint and PDA");
+
+  if (expected !== pool.config || readAddress(config, 83) !== pool.quoteMint) {
+    throw new InvalidAccountError({
+      address: pool.config,
+      message: "LaunchLab global config does not match its quote mint and PDA",
+    });
+  }
+
   const platform = layout(
     requireAccount(
       request.snapshot,
@@ -197,18 +231,25 @@ async function readRates(request: SwapRequest, pool: Pool): Promise<Rates> {
     false,
   );
   const rates = {
-    trade: u64(config, 27),
-    platform: u64(platform, 104),
-    creator: u64(platform, 720),
+    trade: readU64(config, 27),
+    platform: readU64(platform, 104),
+    creator: readU64(platform, 720),
   };
+
   if (
     rates.trade + rates.platform + rates.creator >= FEE_SCALE ||
     rates.platform > 50_000n ||
     rates.creator > 5_000n
-  )
-    invalid(pool.platform, "Invalid LaunchLab fee rates");
+  ) {
+    throw new InvalidAccountError({
+      address: pool.platform,
+      message: "Invalid LaunchLab fee rates",
+    });
+  }
+
   return rates;
 }
+
 function fees(
   gross: bigint,
   rates: Rates,
@@ -218,50 +259,72 @@ function fees(
     FEE_SCALE,
   );
   const creator = (gross * rates.creator) / FEE_SCALE;
+
   return { total, trade: total - creator, creator };
 }
+
 function grossForNet(net: bigint, rates: Rates): bigint {
   return ceilDiv(
     net * FEE_SCALE,
     FEE_SCALE - rates.trade - rates.platform - rates.creator,
   );
 }
+
 async function build(
   request: SwapRequest,
   accounts: ResolvedTokenAccounts,
 ): Promise<ProtocolSwap> {
   const pool = poolState(request);
   const buy = request.inputMint === pool.quoteMint;
+
   if (buy && request.amount.kind === "exactOut") {
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+    throw new UnsupportedSwapModeError({
       protocol: "launchlab",
       mode: "exactOut",
       message:
         "LaunchLab buy_exact_out can deliver less than the requested output at graduation",
     });
   }
+
   const rates = await readRates(request, pool);
   const [authority, bump] = await findRaydiumLaunchlabAuthorityPda();
   const expectedPool = await getRaydiumLaunchlabPoolAddress(
     pool.baseMint,
     pool.quoteMint,
   );
-  if (expectedPool !== request.pool || bump !== pool.bump)
-    invalid(request.pool, "LaunchLab pool or authority PDA mismatch");
+
+  if (expectedPool !== request.pool || bump !== pool.bump) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab pool or authority PDA mismatch",
+    });
+  }
+
   const base = readMint(request.snapshot, pool.baseMint);
   const quote = readMint(request.snapshot, pool.quoteMint);
+
   if (
     base.decimals !== pool.baseDecimals ||
     quote.decimals !== pool.quoteDecimals ||
     base.tokenProgram !== (pool.tokenFlags & 1 ? TOKEN_2022_PROGRAM : TOKEN_PROGRAM) ||
     quote.tokenProgram !== (pool.tokenFlags & 2 ? TOKEN_2022_PROGRAM : TOKEN_PROGRAM)
-  )
-    invalid(request.pool, "LaunchLab mint metadata does not match pool state");
+  ) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab mint metadata does not match pool state",
+    });
+  }
+
   const baseVault = await getRaydiumLaunchlabVaultAddress(request.pool, pool.baseMint);
   const quoteVault = await getRaydiumLaunchlabVaultAddress(request.pool, pool.quoteMint);
-  if (baseVault !== pool.baseVault || quoteVault !== pool.quoteVault)
-    invalid(request.pool, "LaunchLab vault PDA mismatch");
+
+  if (baseVault !== pool.baseVault || quoteVault !== pool.quoteVault) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab vault PDA mismatch",
+    });
+  }
+
   const baseBalance = readTokenAccount(
     request.snapshot,
     pool.baseVault,
@@ -276,41 +339,74 @@ async function build(
     quote.tokenProgram,
     authority,
   ).amount;
+
   if (
     baseBalance < pool.totalSell - pool.sold ||
     quoteBalance < pool.raised + pool.pendingFees
-  )
-    invalid(request.pool, "LaunchLab vault does not back the recorded curve reserves");
-  if (pool.virtualBase <= pool.sold || pool.virtualQuote + pool.raised > U64_MAX)
-    invalid(request.pool, "Invalid LaunchLab effective reserves");
+  ) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab vault does not back the recorded curve reserves",
+    });
+  }
+  if (pool.virtualBase <= pool.sold || pool.virtualQuote + pool.raised > U64_MAX) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid LaunchLab effective reserves",
+    });
+  }
+
+  // Price against virtual reserves after validating the vault-backed sale balances.
   const x = pool.virtualBase - pool.sold;
   const y = pool.virtualQuote + pool.raised;
-  if (y === 0n) invalid(request.pool, "LaunchLab effective quote reserve is zero");
+
+  if (y === 0n) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "LaunchLab effective quote reserve is zero",
+    });
+  }
+
   let input: bigint;
   let output: bigint;
   let quoteGross: bigint;
+
   if (request.amount.kind === "exactIn") {
     input = request.amount.amountIn;
+
     if (buy) {
       quoteGross = input;
       const net = input - fees(input, rates).total;
-      if (net <= 0n) liquidity();
+
+      if (net <= 0n) {
+        liquidity();
+      }
+
       output = (x * net) / (y + net);
       const remainingBase = pool.totalSell - pool.sold;
+
+      // Graduation caps the delivered base and can reduce the actual quote debit.
       if (output >= remainingBase) {
         output = remainingBase;
         input = grossForNet(ceilDiv(y * output, x - output), rates);
         quoteGross = input;
       }
     } else {
-      if (input > pool.sold) liquidity();
+      if (input > pool.sold) {
+        liquidity();
+      }
+
       quoteGross = (y * input) / (x + input);
       output = quoteGross - fees(quoteGross, rates).total;
     }
   } else {
     output = request.amount.amountOut;
     quoteGross = grossForNet(output, rates);
-    if (quoteGross >= y || quoteGross > pool.raised) liquidity();
+
+    if (quoteGross >= y || quoteGross > pool.raised) {
+      liquidity();
+    }
+
     input = ceilDiv(x * quoteGross, y - quoteGross);
   }
   if (
@@ -321,14 +417,19 @@ async function build(
     (buy
       ? output > pool.totalSell - pool.sold
       : input > pool.sold || quoteGross > pool.raised)
-  )
+  ) {
     liquidity();
+  }
+
   const charged = fees(quoteGross, rates);
   const feeItems: SwapFee[] = [
     { kind: "trade", mint: pool.quoteMint, amount: charged.trade },
   ];
-  if (charged.creator !== 0n)
+
+  if (charged.creator !== 0n) {
     feeItems.push({ kind: "creator", mint: pool.quoteMint, amount: charged.creator });
+  }
+
   const swapQuote =
     request.amount.kind === "exactIn"
       ? {
@@ -347,6 +448,7 @@ async function build(
           expectedAmountOut: output,
           fees: feeItems,
         };
+
   const eventAuthority = await getRaydiumLaunchlabEventAuthorityAddress();
   const platformFeeVault = await getRaydiumLaunchlabPlatformFeeVaultAddress(
     pool.platform,
@@ -356,6 +458,7 @@ async function build(
     pool.creator,
     pool.quoteMint,
   );
+
   const instructionAccounts = {
     owner: request.owner,
     authority,
@@ -374,7 +477,9 @@ async function build(
     platformFeeVault,
     creatorFeeVault,
   };
+
   let instruction: Instruction;
+
   if (swapQuote.kind === "exactOut") {
     instruction = sell_exact_out(instructionAccounts, {
       amountOut: swapQuote.amountOut,
@@ -389,6 +494,7 @@ async function build(
       ? buy_exact_in(instructionAccounts, instructionArgs)
       : sell_exact_in(instructionAccounts, instructionArgs);
   }
+
   return {
     instructions: [instruction],
     quote: swapQuote,
@@ -408,6 +514,7 @@ export const raydiumLaunchlabAdapter: ProtocolAdapter = {
   programAddresses: [RAYDIUM_LAUNCHLAB_PROGRAM],
   async requirements(request) {
     const pool = poolState(request);
+
     return [
       { address: pool.config, role: "LaunchLab global config" },
       { address: pool.platform, role: "LaunchLab platform config" },

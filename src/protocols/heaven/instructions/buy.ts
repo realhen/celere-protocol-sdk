@@ -27,6 +27,7 @@ export interface HeavenBuyAccounts {
   readonly tokenBVault: Address;
   readonly protocolConfig: Address;
 }
+
 /**
  * Native arguments for {@link buy}.
  *
@@ -66,6 +67,7 @@ export interface HeavenBuyArgs {
    */
   readonly minimumAmountOut: bigint;
 }
+
 /** Encodes the native `buy` arguments and instruction discriminator. */
 const dataEncoder = getStructEncoder([
   ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
@@ -73,6 +75,7 @@ const dataEncoder = getStructEncoder([
   ["minimumAmountOut", getU64Encoder()],
   ["eventDataLength", getU32Encoder()],
 ]);
+
 /**
  * Creates a Heaven buy instruction for a specified input budget.
  *

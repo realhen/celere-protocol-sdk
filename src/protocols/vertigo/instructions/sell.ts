@@ -122,6 +122,7 @@ export function sell(accounts: VertigoSellAccounts, args: VertigoSellArgs): Inst
     amountIn: args.amountIn,
     minimumAmountOut: args.minimumAmountOut,
   });
+
   return {
     programAddress: VERTIGO_PROGRAM,
     accounts: [

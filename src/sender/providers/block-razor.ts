@@ -107,8 +107,7 @@ export class BlockRazorSender implements SenderRoute {
    */
   constructor(options: BlockRazorSenderOptions) {
     const configuration = configureProvider(options, ENDPOINTS, Region.Frankfurt);
-    if (!configuration.ok) throw configuration.error;
-    const { url, name, timeoutMs } = configuration.value;
+    const { url, name, timeoutMs } = configuration;
     if (name !== undefined) this.name = name;
     this.timeoutMs = timeoutMs;
     this.minimumTipLamports = 100_000n;

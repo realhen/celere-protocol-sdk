@@ -12,16 +12,7 @@ import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
 import { raydiumClmmFixture } from "../fixtures/raydium-clmm.mjs";
 
 const endpoint = process.env.CELERE_SURFPOOL_URL;
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const response = await fetch(endpoint, {
     signal: globalThis.AbortSignal.timeout(60_000),
@@ -63,16 +54,14 @@ async function tokenAmount(address) {
 }
 async function sendPlan(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -101,16 +90,14 @@ test(
             historicalOrders: crossing,
           });
           await installFixture(fixture, signer);
-          const build = value(
-            await buildSwapInstructions({
-              ...fixture.request,
-              amount:
-                kind === "exactIn"
-                  ? { kind, amountIn: amount }
-                  : { kind, amountOut: amount },
-              slippageBps: 0,
-            }),
-          );
+          const build = await buildSwapInstructions({
+            ...fixture.request,
+            amount:
+              kind === "exactIn"
+                ? { kind, amountIn: amount }
+                : { kind, amountOut: amount },
+            slippageBps: 0,
+          });
           assert.equal(build.execution.mayPartiallyFill, false);
           const inputBefore = await tokenAmount(fixture.request.tokenAccounts.input);
           const outputBefore = await tokenAmount(fixture.request.tokenAccounts.output);
@@ -188,16 +175,14 @@ test(
           reverse,
           label: `${signer.address}:slippage:${reverse}:${kind}`,
         });
-        const build = value(
-          await buildSwapInstructions({
-            ...fixture.request,
-            amount:
-              kind === "exactIn"
-                ? { kind, amountIn: 1_000_001n }
-                : { kind, amountOut: 1_000_001n },
-            slippageBps: 0,
-          }),
-        );
+        const build = await buildSwapInstructions({
+          ...fixture.request,
+          amount:
+            kind === "exactIn"
+              ? { kind, amountIn: 1_000_001n }
+              : { kind, amountOut: 1_000_001n },
+          slippageBps: 0,
+        });
         put128(fixture.request.snapshot.accounts[fixture.pool].data, 237, 2_000_000_000n);
         await installFixture(fixture, signer);
         await assert.rejects(
@@ -219,16 +204,14 @@ test(
           reverse,
           label: `${signer.address}:exhaust:${reverse}:${kind}`,
         });
-        const build = value(
-          await buildSwapInstructions({
-            ...fixture.request,
-            amount:
-              kind === "exactIn"
-                ? { kind, amountIn: 50_000_001n }
-                : { kind, amountOut: 50_000_001n },
-            slippageBps: 9999,
-          }),
-        );
+        const build = await buildSwapInstructions({
+          ...fixture.request,
+          amount:
+            kind === "exactIn"
+              ? { kind, amountIn: 50_000_001n }
+              : { kind, amountOut: 50_000_001n },
+          slippageBps: 9999,
+        });
         put128(fixture.request.snapshot.accounts[fixture.pool].data, 237, 200_000_000n);
         for (const { address } of fixture.tickArrays) {
           const data = fixture.request.snapshot.accounts[address].data;
@@ -275,16 +258,14 @@ test(
             label: `${signer.address}:bitmap:${tickOffset}:${reverse}:${kind}`,
           });
           await installFixture(fixture, signer);
-          const build = value(
-            await buildSwapInstructions({
-              ...fixture.request,
-              slippageBps: 0,
-              amount:
-                kind === "exactIn"
-                  ? { kind, amountIn: 1_000_001n }
-                  : { kind, amountOut: 1_000_001n },
-            }),
-          );
+          const build = await buildSwapInstructions({
+            ...fixture.request,
+            slippageBps: 0,
+            amount:
+              kind === "exactIn"
+                ? { kind, amountIn: 1_000_001n }
+                : { kind, amountOut: 1_000_001n },
+          });
           const inputBefore = await tokenAmount(fixture.request.tokenAccounts.input);
           const outputBefore = await tokenAmount(fixture.request.tokenAccounts.output);
           const signature = await sendPlan(build, signer);

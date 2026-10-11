@@ -82,6 +82,7 @@ export async function createSurfpoolEvidence(endpoint) {
   const programs = [];
   const protectedAccounts = new Set();
   const errors = [];
+  const unconfirmedTransactions = [];
   let confirmedTransactions = 0;
   async function rpc(method, params = []) {
     const response = await fetch(endpoint, {
@@ -182,20 +183,59 @@ export async function createSurfpoolEvidence(endpoint) {
     assert.equal(typeof response.result, "string", "Missing transaction signature");
     let receipt;
     for (let attempt = 0; attempt < 20; attempt++) {
-      receipt = (
-        await rpc("getTransaction", [
-          response.result,
-          {
-            encoding: "json",
-            commitment: "confirmed",
-            maxSupportedTransactionVersion: 0,
-          },
-        ])
-      ).result;
+      // An absent simulator transaction can trigger a remote lookup in getTransaction.
+      // Check the local status cache first; losing nonce variants need no mainnet read.
+      const statuses = await rpc("getSignatureStatuses", [
+        [response.result],
+        { searchTransactionHistory: false },
+      ]);
+      assert.ok(!statuses.error, `Status lookup failed for ${response.result}`);
+      assert.ok(
+        Array.isArray(statuses.result?.value) && statuses.result.value.length === 1,
+        `Malformed status response for ${response.result}`,
+      );
+      const status = statuses.result.value[0];
+      assert.ok(
+        status === null ||
+          ["processed", "confirmed", "finalized"].includes(status?.confirmationStatus),
+        `Malformed transaction status for ${response.result}`,
+      );
+      if (status === null || status.confirmationStatus === "processed") {
+        await delay(100);
+        continue;
+      }
+      const lookup = await rpc("getTransaction", [
+        response.result,
+        {
+          encoding: "json",
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: 0,
+        },
+      ]);
+      assert.ok(!lookup.error, `Receipt lookup failed for ${response.result}`);
+      assert.ok(
+        lookup.result === null ||
+          (typeof lookup.result === "object" && !Array.isArray(lookup.result)),
+        `Malformed receipt response for ${response.result}`,
+      );
+      receipt = lookup.result;
       if (receipt) break;
       await delay(100);
     }
-    assert.ok(receipt?.meta, `No confirmed receipt for ${response.result}`);
+    if (!receipt) {
+      // Acceptance does not imply execution: competing durable-nonce variants can
+      // be accepted with only one landing. Retain the observation, preserve the RPC
+      // response, and award no coverage without an actual successful receipt.
+      unconfirmedTransactions.push({
+        signature: response.result,
+        instructions: matches.map(({ entry }) => ({
+          protocol: entry.protocol,
+          name: entry.name,
+        })),
+      });
+      return;
+    }
+    assert.ok(receipt.meta, `Missing receipt metadata for ${response.result}`);
     if (receipt.meta.err !== null) return;
     confirmedTransactions++;
     for (const { entry } of matches) {
@@ -291,6 +331,7 @@ export async function createSurfpoolEvidence(endpoint) {
         source: "https://api.mainnet-beta.solana.com",
         programs,
         confirmedTransactions,
+        unconfirmedTransactions,
         instructions,
         errors,
         complete: errors.length === 0 && instructions.every((entry) => entry.covered),

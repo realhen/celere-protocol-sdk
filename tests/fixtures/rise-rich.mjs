@@ -10,7 +10,7 @@ import {
   MAYFLOWER_PROGRAM,
   RISE_RICH_PROGRAM,
 } from "../../dist/protocols/rise-rich/constants.js";
-import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { WRAPPED_SOL_MINT } from "../../dist/protocols/accounts/tokens.js";
 const encoder = getAddressEncoder(),
   decoder = getAddressDecoder(),
   text = new TextEncoder();

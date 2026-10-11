@@ -15,6 +15,7 @@ export async function getMeteoraDammV2TokenVaultAddress(
     })
   )[0];
 }
+
 /** Derive the DAMM v2 program's singleton Anchor event authority, without fetching or creating it. */
 export async function getMeteoraDammV2EventAuthorityAddress(): Promise<Address> {
   return (

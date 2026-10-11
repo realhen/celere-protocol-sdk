@@ -1,22 +1,16 @@
+import { InvalidAccountError, buildSwapInstructions } from "../../dist/index.js";
 import { preservePumpConfiguration } from "../fixtures/pump-surfpool-state.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
-import { buildSwapInstructions } from "../../dist/index.js";
+
 import { pumpV3Fixture, u64 } from "../fixtures/pump-v3.mjs";
 import { rpc, submitInstructions, SOL } from "../fixtures/pump-helpers.mjs";
 const url = process.env.CELERE_SURFPOOL_URL;
 preservePumpConfiguration(url);
 if (url && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(url).hostname))
   throw Error("Pump tests require loopback Surfpool");
-function value(r) {
-  assert.equal(
-    r.ok,
-    true,
-    JSON.stringify(r, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return r.value;
-}
+
 async function install(f) {
   for (const a of Object.values(f.request.snapshot.accounts)) {
     if (!a) continue;
@@ -38,7 +32,7 @@ async function amount(a) {
   return BigInt((await rpc(url, "getTokenAccountBalance", [a])).value.amount);
 }
 async function execute(f, signer) {
-  const built = value(await buildSwapInstructions(f.request));
+  const built = await buildSwapInstructions(f.request);
   await install(f);
   const beforeBase = await amount(f.userBase),
     beforeQuote =
@@ -135,9 +129,14 @@ test(
         assert.ok(after.readBigUInt64LE(150) > 0n);
         assert.ok(after.readBigUInt64LE(158) > 0n);
         f.request.snapshot.accounts[f.pool].data = Uint8Array.from(after);
-        const complete = await buildSwapInstructions(f.request);
-        assert.equal(complete.ok, false);
-        assert.equal(complete.error.code, "INVALID_ACCOUNT");
+        await assert.rejects(
+          () => buildSwapInstructions(f.request),
+          (error) => {
+            assert.ok(error instanceof InvalidAccountError);
+            assert.equal(error.code, "INVALID_ACCOUNT");
+            return true;
+          },
+        );
       }
   },
 );
@@ -195,7 +194,7 @@ test(
       ...missing.request.snapshot.accounts[signer.address],
       address: payer.address,
     };
-    const built = value(await buildSwapInstructions(missing.request));
+    const built = await buildSwapInstructions(missing.request);
     assert.deepEqual(
       new Set(built.requiredSigners),
       new Set([signer.address, payer.address]),
@@ -246,7 +245,7 @@ test(
           crossing: mode !== "sellIn",
           quote2022: quote === "token",
         });
-        const built = value(await buildSwapInstructions(f.request));
+        const built = await buildSwapInstructions(f.request);
         await install(f);
         const keys = [
           f.pool,
@@ -265,17 +264,15 @@ test(
         const { compileTransaction } = await import("../../dist/index.js");
         const { signTransaction, getBase64EncodedWireTransaction } =
           await import("@solana/kit");
-        const compiled = value(
-          compileTransaction({
-            instructions: [...built.setupInstructions, bad],
-            feePayer: signer.address,
-            lifetime: {
-              blockhash: latest.blockhash,
-              lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-            },
-            computeBudget: { units: 500000 },
-          }),
-        );
+        const compiled = compileTransaction({
+          instructions: [...built.setupInstructions, bad],
+          feePayer: signer.address,
+          lifetime: {
+            blockhash: latest.blockhash,
+            lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+          },
+          computeBudget: { units: 500000 },
+        });
         const signed = await signTransaction([signer.keyPair], compiled.transaction);
         const signature = await rpc(url, "sendTransaction", [
           getBase64EncodedWireTransaction(signed),

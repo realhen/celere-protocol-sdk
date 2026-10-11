@@ -25,14 +25,7 @@ if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).
   throw Error("Fee sweep tests require loopback Surfpool");
 const decode = getAddressDecoder();
 const encode = getAddressEncoder();
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return result.value;
-}
+
 async function install(snapshot) {
   for (const a of Object.values(snapshot.accounts)) {
     if (a)
@@ -86,7 +79,7 @@ test(
         quote2022: quote === "token",
         label: `sweeps:${quote}`,
       });
-      const beforeQuote = value(await buildSwapInstructions(f.request)).quote;
+      const beforeQuote = (await buildSwapInstructions(f.request)).quote;
       await install(f.request.snapshot);
       const creator = decode.decode(
         f.request.snapshot.accounts[f.pool].data.subarray(49, 81),
@@ -162,7 +155,7 @@ test(
         f.request.snapshot,
         quote === "sol" ? [f.pool] : [f.pool, f.quoteVault],
       );
-      assert.deepEqual(value(await buildSwapInstructions(f.request)).quote, beforeQuote);
+      assert.deepEqual((await buildSwapInstructions(f.request)).quote, beforeQuote);
     }
   },
 );
@@ -201,7 +194,7 @@ test(
           }
         }
       }
-      const beforeQuote = value(await buildSwapInstructions(f.request)).quote;
+      const beforeQuote = (await buildSwapInstructions(f.request)).quote;
       await install(f.request.snapshot);
       for (const kind of ["creator", "protocol"]) {
         const recipient =
@@ -261,7 +254,7 @@ test(
         assert.equal(await tokenBalance(recipientTokenAccount), recipientBefore + fee);
       }
       await refresh(f.request.snapshot, [f.pool, f.quoteVault]);
-      assert.deepEqual(value(await buildSwapInstructions(f.request)).quote, beforeQuote);
+      assert.deepEqual((await buildSwapInstructions(f.request)).quote, beforeQuote);
     }
   },
 );

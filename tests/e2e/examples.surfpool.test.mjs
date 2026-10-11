@@ -187,7 +187,7 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
           `
           import assert from "node:assert/strict";
           import { createSolanaRpc, createSolanaRpcFromTransport, createDefaultRpcTransport } from "@solana/kit";
-          import { fetchSwapInstructions, SwapBuildError, getPumpBondingCurveAddress } from "celere-protocol-sdk";
+          import { fetchSwapInstructions, InvalidRequestError, UnsupportedProtocolError, getPumpBondingCurveAddress } from "celere-protocol-sdk";
           import { getPumpBondingCurveAddress as getCurve } from "celere-protocol-sdk/protocols/pump";
           const rpc = createSolanaRpc(${JSON.stringify(endpoint)});
           const request = {
@@ -199,11 +199,11 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
           };
           assert.equal(await getCurve(request.outputMint), await getPumpBondingCurveAddress(request.outputMint));
           await assert.rejects(fetchSwapInstructions(rpc, { ...request, slippageBps: 10001 }),
-            error => error instanceof SwapBuildError && error.code === "INVALID_REQUEST" && error.detail.field === "slippageBps");
+            error => error instanceof InvalidRequestError && error.code === "INVALID_REQUEST" && error.field === "slippageBps");
           // This wallet exists but is owned by System, so discovery must preserve the
           // unsupported-program detail from the offline builder after an actual RPC read.
           await assert.rejects(fetchSwapInstructions(rpc, { ...request, pool: request.owner }),
-            error => error instanceof SwapBuildError && error.code === "UNSUPPORTED_PROTOCOL");
+            error => error instanceof UnsupportedProtocolError && error.code === "UNSUPPORTED_PROTOCOL");
           // Observe real RPC discovery, then cancel just after the final batch.
           // PDA derivation yields during final discovery/build after network I/O ends.
           const transport = createDefaultRpcTransport({ url: ${JSON.stringify(endpoint)} });
@@ -252,9 +252,21 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
           assert.ok(source.includes(JSON.stringify(key)));
           source = source.replace(
             JSON.stringify(key),
-            `"simulator", endpoint: ${JSON.stringify(endpoint)}`,
+            `"simulator", endpoint: ${JSON.stringify(endpoint)}, timeoutMs: 60_000`,
           );
         }
+        // The audit proxy hydrates remote accounts and checks receipts before replying.
+        // Allow that instrumentation time without changing the published example defaults.
+        source = source.replace(
+          "defaultRpc: { url: rpcUrl }",
+          "defaultRpc: { url: rpcUrl, timeoutMs: 60_000 }",
+        );
+        const resultsLine = "console.table(await submission.results);";
+        assert.ok(source.includes(resultsLine));
+        source = source.replace(
+          resultsLine,
+          'console.log("Route results:", JSON.stringify(await submission.results));',
+        );
         await writeFile(scriptPath, source);
         const beforeTokens = await tokenBalance(outputAta);
         const sent = await run("npm", ["start"], {
@@ -265,6 +277,14 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
           (match) => match[1],
         );
         assert.equal(signatures.length, 3);
+        const routeResults = JSON.parse(
+          sent.stdout.match(/^Route results: (.+)$/m)?.[1] ?? "null",
+        );
+        assert.equal(routeResults?.length, 3);
+        for (const result of routeResults) {
+          assert.equal(result.status, "accepted", JSON.stringify(result));
+          assert.equal(result.httpStatus, 200);
+        }
         const successful = [];
         for (const signature of signatures) {
           const receipt = await rpc(endpoint, "getTransaction", [

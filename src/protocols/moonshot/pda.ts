@@ -1,4 +1,4 @@
-import { associatedTokenAddress, TOKEN_PROGRAM } from "../../accounts/tokens";
+import { associatedTokenAddress, TOKEN_PROGRAM } from "../accounts/tokens";
 import {
   getAddressEncoder,
   getProgramDerivedAddress,
@@ -20,6 +20,7 @@ export function findMoonshotCurvePda(mint: Address): Promise<ProgramDerivedAddre
     seeds: ["token", encoder.encode(mint)],
   });
 }
+
 /** Get the token curve offline; inputs match {@link findMoonshotCurvePda}. Does not check existence. */
 export async function getMoonshotCurveAddress(mint: Address): Promise<Address> {
   return (await findMoonshotCurvePda(mint))[0];
@@ -35,6 +36,7 @@ export function findMoonshotConfigPda(): Promise<ProgramDerivedAddress> {
     seeds: ["config_account"],
   });
 }
+
 /** Get the global configuration offline; inputs match {@link findMoonshotConfigPda}. Does not check existence. */
 export async function getMoonshotConfigAddress(): Promise<Address> {
   return (await findMoonshotConfigPda())[0];
@@ -46,6 +48,7 @@ export async function getMoonshotCurveAddresses(mint: Address) {
     findMoonshotCurvePda(mint),
     findMoonshotConfigPda(),
   ]);
+
   return {
     curve: curve[0],
     curveBump: curve[1],

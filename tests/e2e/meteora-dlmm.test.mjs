@@ -4,16 +4,6 @@ import { address } from "@solana/kit";
 import { buildSwapInstructions, getSwapRequirements } from "../../dist/index.js";
 import { meteoraDlmmFixture, DLMM_PROGRAM } from "../fixtures/meteora-dlmm.mjs";
 const owner = address("11111111111111111111111111111111");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
 
 test("DLMM consumer discovers observed bitmap then directional bin arrays without network or clock access", async () => {
   const fixture = await meteoraDlmmFixture(owner);
@@ -35,7 +25,7 @@ test("DLMM consumer discovers observed bitmap then directional bin arrays withou
     let rounds = 0;
     let complete = false;
     while (!complete) {
-      const requirements = value(await getSwapRequirements(request));
+      const requirements = await getSwapRequirements(request);
       complete = requirements.complete;
       for (const missing of requirements.missing) {
         assert.ok(
@@ -53,7 +43,7 @@ test("DLMM consumer discovers observed bitmap then directional bin arrays withou
         { kind: "exactIn", amountIn: 2_100_001n },
         { kind: "exactOut", amountOut: 2_100_001n },
       ]) {
-        const built = value(await buildSwapInstructions({ ...full.request, amount }));
+        const built = await buildSwapInstructions({ ...full.request, amount });
         assert.equal(built.protocol, "meteora-dlmm");
         assert.equal(built.execution.mayPartiallyFill, false);
         assert.equal(built.swapInstructions[0].programAddress, DLMM_PROGRAM);
@@ -175,9 +165,13 @@ test("DLMM public consumer rejects unsupported semantics and malformed or exhaus
   for (const [code, mutate] of cases) {
     const fixture = await meteoraDlmmFixture(owner);
     mutate(fixture);
-    const result = await buildSwapInstructions(fixture.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, code, JSON.stringify(result));
+    await assert.rejects(
+      () => buildSwapInstructions(fixture.request),
+      (error) => {
+        assert.equal(error.code, code, JSON.stringify(error));
+        return true;
+      },
+    );
   }
 });
 
@@ -186,7 +180,7 @@ test("DLMM quotes use chain filter, decay and volatility updates without mutatin
   for (const feePhase of ["filter", "decay", "decayed"]) {
     const fixture = await meteoraDlmmFixture(owner, { dynamic: true, feePhase });
     const before = Uint8Array.from(fixture.request.snapshot.accounts[fixture.pool].data);
-    const built = value(await buildSwapInstructions(fixture.request));
+    const built = await buildSwapInstructions(fixture.request);
     fees.push(built.quote.fees[0].amount);
     assert.deepEqual(fixture.request.snapshot.accounts[fixture.pool].data, before);
   }

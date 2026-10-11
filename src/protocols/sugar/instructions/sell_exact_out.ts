@@ -157,6 +157,7 @@ export function sell_exact_out(
     maxTokensInput: args.maxTokensInput,
     solAmountOutput: args.solAmountOutput,
   });
+
   return {
     programAddress: SUGAR_PROGRAM,
     accounts: [

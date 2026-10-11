@@ -1,4 +1,4 @@
-import { associatedTokenAddress, TOKEN_PROGRAM } from "../../accounts/tokens";
+import { associatedTokenAddress, TOKEN_PROGRAM } from "../accounts/tokens";
 import {
   getAddressEncoder,
   getProgramDerivedAddress,
@@ -20,6 +20,7 @@ export function findBoopBondingCurvePda(mint: Address): Promise<ProgramDerivedAd
     seeds: ["bonding_curve", encoder.encode(mint)],
   });
 }
+
 /** Get the bonding curve offline; inputs match {@link findBoopBondingCurvePda}. Does not check existence. */
 export async function getBoopBondingCurveAddress(mint: Address): Promise<Address> {
   return (await findBoopBondingCurvePda(mint))[0];
@@ -32,6 +33,7 @@ export async function getBoopBondingCurveAddress(mint: Address): Promise<Address
 export function findBoopConfigPda(): Promise<ProgramDerivedAddress> {
   return getProgramDerivedAddress({ programAddress: BOOP_PROGRAM, seeds: ["config"] });
 }
+
 /** Get the global configuration offline; inputs match {@link findBoopConfigPda}. Does not check existence. */
 export async function getBoopConfigAddress(): Promise<Address> {
   return (await findBoopConfigPda())[0];
@@ -50,6 +52,7 @@ export function findBoopBondingCurveVaultPda(
     seeds: ["bonding_curve_vault", encoder.encode(mint)],
   });
 }
+
 /** Get the curve token vault offline; inputs match {@link findBoopBondingCurveVaultPda}. Does not check existence. */
 export async function getBoopBondingCurveVaultAddress(mint: Address): Promise<Address> {
   return (await findBoopBondingCurveVaultPda(mint))[0];
@@ -68,6 +71,7 @@ export function findBoopBondingCurveSolVaultPda(
     seeds: ["bonding_curve_sol_vault", encoder.encode(mint)],
   });
 }
+
 /** Get the curve native SOL vault offline; inputs match {@link findBoopBondingCurveSolVaultPda}. Does not check existence. */
 export async function getBoopBondingCurveSolVaultAddress(
   mint: Address,
@@ -88,6 +92,7 @@ export function findBoopTradingFeesVaultPda(
     seeds: ["trading_fees_vault", encoder.encode(mint)],
   });
 }
+
 /** Get the WSOL fee vault offline; inputs match {@link findBoopTradingFeesVaultPda}. Does not check existence. */
 export async function getBoopTradingFeesVaultAddress(mint: Address): Promise<Address> {
   return (await findBoopTradingFeesVaultPda(mint))[0];
@@ -103,6 +108,7 @@ export function findBoopVaultAuthorityPda(): Promise<ProgramDerivedAddress> {
     seeds: ["vault_authority"],
   });
 }
+
 /** Get the vault authority offline; inputs match {@link findBoopVaultAuthorityPda}. Does not check existence. */
 export async function getBoopVaultAuthorityAddress(): Promise<Address> {
   return (await findBoopVaultAuthorityPda())[0];
@@ -118,6 +124,7 @@ export async function getBoopCurveAddresses(mint: Address) {
     getBoopTradingFeesVaultAddress(mint),
     getBoopVaultAuthorityAddress(),
   ]);
+
   return { pool, config, tokenVault, solVault, feesVault, authority };
 }
 

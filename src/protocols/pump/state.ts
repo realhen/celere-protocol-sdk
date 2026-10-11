@@ -1,15 +1,16 @@
+import { InvalidAccountError, UnsupportedPoolFeatureError } from "../errors";
 import { SYSTEM_PROGRAM_ADDRESS as SYSTEM_PROGRAM } from "@solana-program/system";
-import { WRAPPED_SOL_MINT as NATIVE_SOL_MINT } from "../../accounts/tokens";
-import { getAddressDecoder, type Address } from "@solana/kit";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
-import type { AccountSnapshot, SnapshotAccount } from "../../core/types";
+import { WRAPPED_SOL_MINT as NATIVE_SOL_MINT } from "../accounts/tokens";
+import type { Address } from "@solana/kit";
+
+import { requireAccount } from "../accounts/snapshot";
+import type { AccountSnapshot, SnapshotAccount } from "../types";
+import { readU64, readAddress, matchesDiscriminator } from "../accounts/bytes";
 
 import { PUMP_PROGRAM, PUMP_FEE_PROGRAM } from "./constants";
 import { readPumpFeeSchedule } from "./fees";
 export { PUMP_PROGRAM, PUMP_FEE_PROGRAM };
 export { SYSTEM_PROGRAM, NATIVE_SOL_MINT };
-const addressDecoder = getAddressDecoder();
 
 /** Native incomplete curve state. Legacy Sol-named reserve fields hold atomic units of quoteMint. */
 export interface PumpCurve {
@@ -34,13 +35,8 @@ export interface PumpFees {
   readonly creatorBps: bigint;
 }
 
-function invalid(account: SnapshotAccount, message: string): never {
-  fail({ code: "INVALID_ACCOUNT", address: account.address, message });
-}
-
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "pump",
     feature,
     message: `Pump ${feature} is not supported by this release`,
@@ -54,22 +50,13 @@ function validateDiscriminator(
 ): void {
   if (
     account.data.length < minimumSize ||
-    discriminator.some((byte, index) => account.data[index] !== byte)
+    !matchesDiscriminator(account.data, discriminator)
   ) {
-    invalid(account, "Invalid Pump account discriminator or layout");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid Pump account discriminator or layout",
+    });
   }
-}
-
-function readU64(account: SnapshotAccount, offset: number): bigint {
-  return new DataView(
-    account.data.buffer,
-    account.data.byteOffset,
-    account.data.byteLength,
-  ).getBigUint64(offset, true);
-}
-
-function readAddress(account: SnapshotAccount, offset: number): Address {
-  return addressDecoder.decode(account.data.subarray(offset, offset + 32));
 }
 
 /** Decode an incomplete curve, including retained fees and token quote identity. */
@@ -77,52 +64,74 @@ export function readCurve(snapshot: AccountSnapshot, pool: Address): PumpCurve {
   const account = requireAccount(snapshot, pool, "Pump bonding curve", PUMP_PROGRAM);
   validateDiscriminator(account, [23, 183, 248, 55, 96, 216, 172, 96], 81);
   const lengths = [81, 82, 83, 115, 124, 125, 141, 151, 166];
-  if (!lengths.includes(account.data.length)) unsupported("bonding-curve-layout");
-  for (const offset of [48, 81, 82, 123, 124]) {
-    if ((account.data[offset] ?? 0) > 1)
-      invalid(account, "Invalid Pump curve boolean field");
+  if (!lengths.includes(account.data.length)) {
+    unsupported("bonding-curve-layout");
   }
-  if (account.data[48] !== 0)
-    invalid(
-      account,
-      "Completed Pump curves cannot trade through the bonding curve adapter",
-    );
+
+  for (const offset of [48, 81, 82, 123, 124]) {
+    if ((account.data[offset] ?? 0) > 1) {
+      throw new InvalidAccountError({
+        address: account.address,
+        message: "Invalid Pump curve boolean field",
+      });
+    }
+  }
+
+  if (account.data[48] !== 0) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Completed Pump curves cannot trade through the bonding curve adapter",
+    });
+  }
+
   if ((account.data[81] ?? 0) !== 0 || (account.data[82] ?? 0) !== 0) {
     unsupported("mayhem-or-cashback");
   }
-  if (readU64(account, 40) !== 1_000_000_000_000_000n)
+
+  if (readU64(account.data, 40) !== 1_000_000_000_000_000n) {
     unsupported("nonstandard-token-supply");
+  }
+
   const curve = {
-    virtualTokens: readU64(account, 8),
-    virtualSol: readU64(account, 16),
-    realTokens: readU64(account, 24),
-    realSol: readU64(account, 32),
-    creator: readAddress(account, 49),
+    virtualTokens: readU64(account.data, 8),
+    virtualSol: readU64(account.data, 16),
+    realTokens: readU64(account.data, 24),
+    realSol: readU64(account.data, 32),
+    creator: readAddress(account.data, 49),
     quoteMint:
-      account.data.length >= 115 && readAddress(account, 83) !== SYSTEM_PROGRAM
-        ? readAddress(account, 83)
+      account.data.length >= 115 && readAddress(account.data, 83) !== SYSTEM_PROGRAM
+        ? readAddress(account.data, 83)
         : NATIVE_SOL_MINT,
-    creatorFeeBps: account.data.length >= 123 ? readU64(account, 115) : 0n,
-    creatorFees: account.data.length >= 133 ? readU64(account, 125) : 0n,
-    protocolFees: account.data.length >= 141 ? readU64(account, 133) : 0n,
+    creatorFeeBps: account.data.length >= 123 ? readU64(account.data, 115) : 0n,
+    creatorFees: account.data.length >= 133 ? readU64(account.data, 125) : 0n,
+    protocolFees: account.data.length >= 141 ? readU64(account.data, 133) : 0n,
     holderReward: (account.data[124] ?? 0) === 1,
     depth: account.data[141] ?? 0,
-    postCompleteBaseOut: account.data.length >= 158 ? readU64(account, 150) : 0n,
-    postCompleteQuoteIn: account.data.length >= 166 ? readU64(account, 158) : 0n,
+    postCompleteBaseOut: account.data.length >= 158 ? readU64(account.data, 150) : 0n,
+    postCompleteQuoteIn: account.data.length >= 166 ? readU64(account.data, 158) : 0n,
   };
   if (
     curve.virtualTokens === 0n ||
     curve.virtualSol === 0n ||
     curve.realTokens > curve.virtualTokens
   ) {
-    invalid(account, "Invalid Pump curve reserves");
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid Pump curve reserves",
+    });
   }
+
   if (
     curve.creatorFeeBps >= 10_000n ||
     curve.postCompleteBaseOut !== 0n ||
     curve.postCompleteQuoteIn !== 0n
-  )
-    invalid(account, "Invalid incomplete Pump curve fee or migration state");
+  ) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid incomplete Pump curve fee or migration state",
+    });
+  }
+
   return curve;
 }
 
@@ -137,12 +146,17 @@ export function readRecipients(
   const buybackOffsets = Array.from({ length: 8 }, (_, index) => 741 + index * 32);
   const choose = (offsets: readonly number[]) =>
     offsets
-      .map((offset) => readAddress(account, offset))
+      .map((offset) => readAddress(account.data, offset))
       .find((recipient) => recipient !== SYSTEM_PROGRAM);
   const feeRecipient = choose(normalOffsets);
   const buybackRecipient = choose(buybackOffsets);
-  if (feeRecipient === undefined || buybackRecipient === undefined)
-    invalid(account, "Pump global has no valid fee recipients");
+  if (feeRecipient === undefined || buybackRecipient === undefined) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Pump global has no valid fee recipients",
+    });
+  }
+
   return { feeRecipient, buybackRecipient };
 }
 
@@ -160,11 +174,23 @@ export function readPumpGlobal(
 ): PumpGlobal {
   const account = requireAccount(snapshot, globalAddress, "Pump global", PUMP_PROGRAM);
   validateDiscriminator(account, [167, 232, 232, 177, 200, 108, 114, 127], 1005);
-  if ((account.data[1045] ?? 0) > 1) invalid(account, "Invalid creator fee gate");
-  const buybackBps = readU64(account, 997);
-  if (buybackBps > 10_000n) invalid(account, "Invalid Pump buyback rate");
+  if ((account.data[1045] ?? 0) > 1) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid creator fee gate",
+    });
+  }
+
+  const buybackBps = readU64(account.data, 997);
+  if (buybackBps > 10_000n) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid Pump buyback rate",
+    });
+  }
+
   return {
-    migrationFee: readU64(account, 146),
+    migrationFee: readU64(account.data, 146),
     creatorFeeConfigurable: account.data[1045] === 1,
     buybackBps,
   };
@@ -192,7 +218,12 @@ export function readFees(
       : global?.creatorFeeConfigurable && curve.creatorFeeBps !== 0n
         ? curve.creatorFeeBps
         : selected.creatorBps;
-  if (selected.protocolBps + creatorBps >= 10_000n)
-    invalid(account, "Unsupported Pump fee rate");
+  if (selected.protocolBps + creatorBps >= 10_000n) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Unsupported Pump fee rate",
+    });
+  }
+
   return { protocolBps: selected.protocolBps, creatorBps };
 }

@@ -1,19 +1,29 @@
 /** Bigint adaptation of Meteora's MIT-declared DAMM v1 and vault SDKs; see NOTICE.md. */
-import { getAddressDecoder, type Address } from "@solana/kit";
-import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
-import { ceilDiv, minimumOutput, U64_MAX } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+import { InvalidAccountError } from "../errors";
+import { U64_MAX } from "../../shared/numbers";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  InsufficientLiquidityError,
+  InvalidSnapshotContextError,
+  UnsupportedSwapModeError,
+} from "../errors";
+import type { Address } from "@solana/kit";
+import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
+import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../accounts/tokens";
+import { ceilDiv, minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
   ResolvedTokenAccounts,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 
 import { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants";
-export * from "./damm-v1-pda";
+
 import {
   findMeteoraDammV1VaultPda,
   findMeteoraDammV1TokenVaultPda,
@@ -22,8 +32,10 @@ import {
   getMeteoraDammV1ProtocolFeeAddress,
 } from "./damm-v1-pda";
 import { swap } from "./instructions/damm-v1/swap";
+
+export * from "./damm-v1-pda";
 export { METEORA_DAMM_V1_PROGRAM, METEORA_VAULT_PROGRAM } from "./constants";
-const decoder = getAddressDecoder();
+
 const PROFIT_DENOMINATOR = 1_000_000_000_000n;
 const POOL_DISCRIMINATOR = [241, 154, 109, 4, 17, 177, 109, 188];
 const VAULT_DISCRIMINATOR = [211, 8, 232, 43, 2, 152, 117, 119];
@@ -43,6 +55,7 @@ interface Pool {
   readonly protocolNumerator: bigint;
   readonly protocolDenominator: bigint;
 }
+
 interface Vault {
   readonly address: Address;
   readonly token: Address;
@@ -54,6 +67,7 @@ interface Vault {
   readonly total: bigint;
   readonly unlocked: bigint;
 }
+
 interface VaultBalances {
   readonly vault: Vault;
   readonly supply: bigint;
@@ -61,69 +75,93 @@ interface VaultBalances {
   readonly reserve: bigint;
   readonly poolAmount: bigint;
 }
-function invalid(key: Address, message: string): never {
-  fail({ code: "INVALID_ACCOUNT", address: key, message });
-}
+
 function unsupported(feature: string): never {
-  fail({
-    code: "UNSUPPORTED_POOL_FEATURE",
+  throw new UnsupportedPoolFeatureError({
     protocol: "meteora-damm-v1",
     feature,
     message: `Meteora DAMM v1 ${feature} is not qualified for this release`,
   });
 }
+
 function insufficient(message: string): never {
-  fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "meteora-damm-v1", message });
+  throw new InsufficientLiquidityError({ protocol: "meteora-damm-v1", message });
 }
-function readKey(data: Uint8Array, offset: number): Address {
-  return decoder.decode(data.subarray(offset, offset + 32));
-}
+
 function readPool(request: SwapRequest): Pool {
-  if (request.snapshot.unixTimestamp > U64_MAX || request.snapshot.slot > U64_MAX)
-    fail({
-      code: "INVALID_SNAPSHOT_CONTEXT",
+  if (request.snapshot.unixTimestamp > U64_MAX || request.snapshot.slot > U64_MAX) {
+    throw new InvalidSnapshotContextError({
       message: "Meteora chain time and slot must fit u64",
     });
-  if (request.amount.kind === "exactOut")
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+  }
+  if (request.amount.kind === "exactOut") {
+    throw new UnsupportedSwapModeError({
       protocol: "meteora-damm-v1",
       mode: "exactOut",
       message: "Meteora DAMM v1 only exposes a native exact-input swap",
     });
+  }
+
   const data = requireAccount(
     request.snapshot,
     request.pool,
     "pool",
     METEORA_DAMM_V1_PROGRAM,
   ).data;
-  if (data.length !== 1387 || !POOL_DISCRIMINATOR.every((b, i) => data[i] === b))
-    invalid(request.pool, "Unsupported Meteora DAMM v1 pool layout");
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  if (data[874] !== 0) unsupported("stable or unknown curves");
-  if (data[362] !== 0 && data[362] !== 1)
-    invalid(request.pool, "Unknown Meteora pool type");
-  if (data[233] !== 1) invalid(request.pool, "Meteora DAMM v1 pool is disabled");
-  if (data[475] !== 0 && data[475] !== 1)
-    invalid(request.pool, "Unknown activation type");
+  if (data.length !== 1387 || !matchesDiscriminator(data, POOL_DISCRIMINATOR)) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unsupported Meteora DAMM v1 pool layout",
+    });
+  }
+
+  const view = accountDataView(data);
+  if (data[874] !== 0) {
+    unsupported("stable or unknown curves");
+  }
+  if (data[362] !== 0 && data[362] !== 1) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown Meteora pool type",
+    });
+  }
+  if (data[233] !== 1) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Meteora DAMM v1 pool is disabled",
+    });
+  }
+  if (data[475] !== 0 && data[475] !== 1) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Unknown activation type",
+    });
+  }
+
   const point = data[475] === 0 ? request.snapshot.slot : request.snapshot.unixTimestamp;
-  if (point < view.getBigUint64(403, true))
-    invalid(request.pool, "Meteora DAMM v1 pool has not activated");
+  if (point < view.getBigUint64(403, true)) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Meteora DAMM v1 pool has not activated",
+    });
+  }
   if (
     view.getBigUint64(476, true) !== 0n ||
     view.getBigUint64(516, true) !== 0n ||
     view.getBigUint64(524, true) !== 0n
-  )
+  ) {
     unsupported("partner fees");
+  }
+
   const pool: Pool = {
-    mintA: readKey(data, 40),
-    mintB: readKey(data, 72),
-    vaultA: readKey(data, 104),
-    vaultB: readKey(data, 136),
-    shareA: readKey(data, 168),
-    shareB: readKey(data, 200),
-    feeA: readKey(data, 234),
-    feeB: readKey(data, 266),
+    mintA: readAddress(data, 40),
+    mintB: readAddress(data, 72),
+    vaultA: readAddress(data, 104),
+    vaultB: readAddress(data, 136),
+    shareA: readAddress(data, 168),
+    shareB: readAddress(data, 200),
+    feeA: readAddress(data, 234),
+    feeB: readAddress(data, 266),
     authorityBump: data[232]!,
     tradeNumerator: view.getBigUint64(330, true),
     tradeDenominator: view.getBigUint64(338, true),
@@ -135,26 +173,36 @@ function readPool(request: SwapRequest): Pool {
     pool.vaultA === pool.vaultB ||
     pool.shareA === pool.shareB ||
     pool.feeA === pool.feeB
-  )
-    invalid(request.pool, "Pool asset accounts must be distinct");
+  ) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Pool asset accounts must be distinct",
+    });
+  }
   if (
     pool.tradeDenominator === 0n ||
     pool.tradeNumerator >= pool.tradeDenominator ||
     pool.protocolDenominator === 0n ||
     pool.protocolNumerator > pool.protocolDenominator
-  )
-    invalid(request.pool, "Invalid Meteora fee fractions");
+  ) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "Invalid Meteora fee fractions",
+    });
+  }
   if (!(
     (request.inputMint === pool.mintA && request.outputMint === pool.mintB) ||
     (request.inputMint === pool.mintB && request.outputMint === pool.mintA)
-  ))
-    fail({
-      code: "INVALID_REQUEST",
+  )) {
+    throw new InvalidRequestError({
       field: "inputMint",
       message: "Requested mints do not match the DAMM v1 pool",
     });
+  }
+
   return pool;
 }
+
 function readVault(request: SwapRequest, key: Address, mint: Address): Vault {
   const data = requireAccount(
     request.snapshot,
@@ -165,40 +213,65 @@ function readVault(request: SwapRequest, key: Address, mint: Address): Vault {
   if (
     data.length < 1227 ||
     data.length > 10240 ||
-    !VAULT_DISCRIMINATOR.every((b, i) => data[i] === b)
-  )
-    invalid(key, "Unsupported Meteora vault layout");
-  if (data[8] !== 1) invalid(key, "Meteora vault deposits are disabled");
-  if (data.subarray(147, 1107).some((b) => b !== 0)) unsupported("vault strategies");
-  if (readKey(data, 83) !== mint) invalid(key, "Vault mint does not match the pool");
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const total = view.getBigUint64(11, true),
-    locked = view.getBigUint64(1203, true),
-    lastReport = view.getBigUint64(1211, true),
-    degradation = view.getBigUint64(1219, true);
+    !matchesDiscriminator(data, VAULT_DISCRIMINATOR)
+  ) {
+    throw new InvalidAccountError({
+      address: key,
+      message: "Unsupported Meteora vault layout",
+    });
+  }
+  if (data[8] !== 1) {
+    throw new InvalidAccountError({
+      address: key,
+      message: "Meteora vault deposits are disabled",
+    });
+  }
+  if (data.subarray(147, 1107).some((b) => b !== 0)) {
+    unsupported("vault strategies");
+  }
+  if (readAddress(data, 83) !== mint) {
+    throw new InvalidAccountError({
+      address: key,
+      message: "Vault mint does not match the pool",
+    });
+  }
+
+  const view = accountDataView(data);
+  const total = view.getBigUint64(11, true);
+  const locked = view.getBigUint64(1203, true);
+  const lastReport = view.getBigUint64(1211, true);
+  const degradation = view.getBigUint64(1219, true);
   if (
     lastReport > request.snapshot.unixTimestamp ||
     degradation > PROFIT_DENOMINATOR ||
     locked > total
-  )
-    invalid(key, "Invalid vault locked-profit state or chain timestamp");
+  ) {
+    throw new InvalidAccountError({
+      address: key,
+      message: "Invalid vault locked-profit state or chain timestamp",
+    });
+  }
+
+  // Release locked profit using the caller's chain timestamp before pricing vault shares.
   const ratio = (request.snapshot.unixTimestamp - lastReport) * degradation;
   const remaining =
     ratio >= PROFIT_DENOMINATOR
       ? 0n
       : (locked * (PROFIT_DENOMINATOR - ratio)) / PROFIT_DENOMINATOR;
+
   return {
     address: key,
     mint,
-    token: readKey(data, 19),
-    lpMint: readKey(data, 115),
-    base: readKey(data, 1107),
+    token: readAddress(data, 19),
+    lpMint: readAddress(data, 115),
+    base: readAddress(data, 1107),
     bump: data[9]!,
     tokenBump: data[10]!,
     total,
     unlocked: total - remaining,
   };
 }
+
 async function requirements(
   request: SwapRequest,
 ): Promise<readonly AccountRequirement[]> {
@@ -212,6 +285,7 @@ async function requirements(
     { address: pool.feeA, role: "token A protocol fees" },
     { address: pool.feeB, role: "token B protocol fees" },
   ];
+
   for (const [key, mint] of [
     [pool.vaultA, pool.mintA],
     [pool.vaultB, pool.mintB],
@@ -225,8 +299,10 @@ async function requirements(
       );
     }
   }
+
   return required;
 }
+
 async function balances(
   request: SwapRequest,
   pool: Pool,
@@ -253,22 +329,34 @@ async function balances(
     share !== expectedShare ||
     fee !== expectedFee ||
     (share === pool.shareA && shareBump !== pool.authorityBump)
-  )
-    invalid(key, "Vault or pool share PDA mismatch");
+  ) {
+    throw new InvalidAccountError({
+      address: key,
+      message: "Vault or pool share PDA mismatch",
+    });
+  }
+
   const lp = readMint(request.snapshot, vault.lpMint);
   if (
     readMint(request.snapshot, mint).tokenProgram !== TOKEN_PROGRAM ||
     lp.tokenProgram !== TOKEN_PROGRAM
-  )
+  ) {
     unsupported("Token-2022 assets or vault shares");
+  }
+
   const lpData = requireAccount(request.snapshot, vault.lpMint, "vault share mint").data;
-  const lpView = new DataView(lpData.buffer, lpData.byteOffset, lpData.byteLength);
+  const lpView = accountDataView(lpData);
   if (
     lpView.getUint32(0, true) !== 1 ||
-    readKey(lpData, 4) !== key ||
+    readAddress(lpData, 4) !== key ||
     lpView.getUint32(46, true) !== 0
-  )
-    invalid(vault.lpMint, "Invalid vault share mint authority");
+  ) {
+    throw new InvalidAccountError({
+      address: vault.lpMint,
+      message: "Invalid vault share mint authority",
+    });
+  }
+
   const reserve = readTokenAccount(
     request.snapshot,
     vault.token,
@@ -284,10 +372,16 @@ async function balances(
     pool.shareA,
   ).amount;
   readTokenAccount(request.snapshot, fee, mint, TOKEN_PROGRAM, pool.shareA);
-  if (vault.total > reserve || shares > lp.supply)
-    invalid(key, "Vault total or pool shares exceed supplied backing");
-  if (lp.supply === 0n || vault.unlocked === 0n || shares === 0n)
+  if (vault.total > reserve || shares > lp.supply) {
+    throw new InvalidAccountError({
+      address: key,
+      message: "Vault total or pool shares exceed supplied backing",
+    });
+  }
+  if (lp.supply === 0n || vault.unlocked === 0n || shares === 0n) {
     insufficient("Meteora vault has no unlocked pool liquidity");
+  }
+
   return {
     vault,
     supply: lp.supply,
@@ -296,11 +390,17 @@ async function balances(
     poolAmount: (shares * vault.unlocked) / lp.supply,
   };
 }
+
 function fee(amount: bigint, numerator: bigint, denominator: bigint): bigint {
-  if (amount === 0n || numerator === 0n) return 0n;
+  if (amount === 0n || numerator === 0n) {
+    return 0n;
+  }
+
   const rounded = (amount * numerator) / denominator;
+
   return rounded === 0n ? 1n : rounded;
 }
+
 /** Share mint/burn conversions round down independently from the constant-product output. */
 function quoteInput(
   request: SwapRequest,
@@ -308,36 +408,54 @@ function quoteInput(
   input: VaultBalances,
   output: VaultBalances,
 ) {
-  if (request.amount.kind !== "exactIn") throw new Error("Validated swap mode changed");
+  if (request.amount.kind !== "exactIn") {
+    throw new Error("Validated swap mode changed");
+  }
+
   const amount = request.amount.amountIn;
   const tradeFee = fee(amount, pool.tradeNumerator, pool.tradeDenominator);
   const protocolFee = fee(tradeFee, pool.protocolNumerator, pool.protocolDenominator);
   const deposit = amount - protocolFee;
-  if (deposit <= 0n || input.poolAmount === 0n || output.poolAmount === 0n)
+  if (deposit <= 0n || input.poolAmount === 0n || output.poolAmount === 0n) {
     insufficient("Swap input or pool reserves are exhausted");
+  }
+
+  // The deposit first mints vault shares; its effective pool credit rounds independently.
   const minted = (deposit * input.supply) / input.vault.unlocked;
-  if (minted === 0n) insufficient("Swap input cannot mint one vault share");
+  if (minted === 0n) {
+    insufficient("Swap input cannot mint one vault share");
+  }
   if (
     input.supply + minted > U64_MAX ||
     input.shares + minted > U64_MAX ||
     input.vault.total + deposit > U64_MAX ||
     input.reserve + deposit > U64_MAX
-  )
+  ) {
     insufficient("Swap exceeds native vault accounting range");
+  }
+
   const after =
     ((input.shares + minted) * (input.vault.unlocked + deposit)) /
     (input.supply + minted);
   const curveInput = after - input.poolAmount - (tradeFee - protocolFee);
-  if (curveInput <= 0n) insufficient("Swap input is consumed by vault rounding and fees");
+  if (curveInput <= 0n) {
+    insufficient("Swap input is consumed by vault rounding and fees");
+  }
+
+  // Price the credited input, then burn output shares to recover the withdrawable amount.
   const invariant = input.poolAmount * output.poolAmount;
   const denominator = input.poolAmount + curveInput;
-  if (invariant / denominator === 0n)
+  if (invariant / denominator === 0n) {
     insufficient("Swap exceeds the native constant-product arithmetic range");
+  }
+
   const curveOutput = output.poolAmount - ceilDiv(invariant, denominator);
   const burned = (curveOutput * output.supply) / output.vault.unlocked;
   const credit = (burned * output.vault.unlocked) / output.supply;
-  if (credit <= 0n || credit >= output.reserve || burned >= output.shares)
+  if (credit <= 0n || credit >= output.reserve || burned >= output.shares) {
     insufficient("Swap output exceeds available vault liquidity or rounds to zero");
+  }
+
   const protocolAccount = request.inputMint === pool.mintA ? pool.feeA : pool.feeB;
   if (
     readTokenAccount(
@@ -349,8 +467,10 @@ function quoteInput(
     ).amount +
       protocolFee >
     U64_MAX
-  )
+  ) {
     insufficient("Protocol fee account would overflow");
+  }
+
   return {
     kind: "exactIn" as const,
     amountIn: amount,
@@ -360,6 +480,7 @@ function quoteInput(
     fees: [{ kind: "trade" as const, mint: request.inputMint, amount: tradeFee }],
   };
 }
+
 async function build(
   request: SwapRequest,
   tokenAccounts: ResolvedTokenAccounts,
@@ -381,6 +502,7 @@ async function build(
     pool.shareB,
     pool.feeB,
   );
+
   const reserved = [
     pool.shareA,
     pool.shareB,
@@ -389,10 +511,16 @@ async function build(
     a.vault.token,
     b.vault.token,
   ];
-  if (reserved.includes(tokenAccounts.input) || reserved.includes(tokenAccounts.output))
-    invalid(request.pool, "User token accounts cannot alias protocol accounts");
+  if (reserved.includes(tokenAccounts.input) || reserved.includes(tokenAccounts.output)) {
+    throw new InvalidAccountError({
+      address: request.pool,
+      message: "User token accounts cannot alias protocol accounts",
+    });
+  }
+
   const reverse = request.inputMint === pool.mintB;
   const quote = quoteInput(request, pool, reverse ? b : a, reverse ? a : b);
+
   const instruction = swap(
     {
       pool: request.pool,
@@ -411,8 +539,10 @@ async function build(
     },
     { amountIn: quote.amountIn, minimumAmountOut: quote.minimumAmountOut },
   );
+
   return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
+
 /**
  * Offline native exact-input swaps for constant-product DAMM v1 pools.
  * @remarks Supports classic SPL assets and fully backed vaults without strategies.

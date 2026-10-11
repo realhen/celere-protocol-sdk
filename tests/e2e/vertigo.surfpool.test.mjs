@@ -1,3 +1,8 @@
+import {
+  InsufficientLiquidityError,
+  compileTransaction,
+  buildSwapInstructions,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -8,19 +13,12 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { compileTransaction, buildSwapInstructions } from "../../dist/index.js";
+
 import { vertigoFixture, VERTIGO_PROGRAM } from "../fixtures/vertigo.mjs";
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native Vertigo tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const r = await fetch(endpoint, {
     method: "POST",
@@ -60,16 +58,14 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -124,7 +120,7 @@ test(
         amount: { kind: "exactIn", amountIn },
         slippageBps: 0,
       };
-      const build = value(await buildSwapInstructions(request));
+      const build = await buildSwapInstructions(request);
       await install(f, signer);
       const beforeIn = await tokenAmount(f.request.tokenAccounts.input);
       const beforeOut = await tokenAmount(f.request.tokenAccounts.output);
@@ -196,9 +192,7 @@ test(
           reverse,
           label: `rejection:${reverse}:${exhausted}`,
         });
-        const build = value(
-          await buildSwapInstructions({ ...f.request, slippageBps: 0 }),
-        );
+        const build = await buildSwapInstructions({ ...f.request, slippageBps: 0 });
         const reserve = exhausted ? 0n : reverse ? 500_000_000n : 1_000_000_000n;
         const pool = f.request.snapshot.accounts[f.pool].data;
         new DataView(pool.buffer).setBigUint64(reverse ? 105 : 121, reserve, true);
@@ -217,10 +211,13 @@ test(
         );
         assert.equal(await tokenAmount(f.request.tokenAccounts.input), beforeIn);
         assert.equal(await tokenAmount(f.request.tokenAccounts.output), beforeOut);
-        const offline = await buildSwapInstructions({ ...f.request, slippageBps: 0 });
         if (exhausted) {
-          assert.equal(offline.ok, false);
-          assert.equal(offline.error.code, "INSUFFICIENT_LIQUIDITY");
+          await assert.rejects(
+            () => buildSwapInstructions({ ...f.request, slippageBps: 0 }),
+            InsufficientLiquidityError,
+          );
+        } else {
+          await buildSwapInstructions({ ...f.request, slippageBps: 0 });
         }
       }
   },

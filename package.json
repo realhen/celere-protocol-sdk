@@ -29,8 +29,8 @@
       "import": "./dist/index.js"
     },
     "./core": {
-      "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js"
+      "types": "./dist/protocols/index.d.ts",
+      "import": "./dist/protocols/index.js"
     },
     "./transactions": {
       "types": "./dist/transactions/index.d.ts",
@@ -203,6 +203,10 @@
     "./protocols/sugar": {
       "types": "./dist/protocols/sugar/pda.d.ts",
       "import": "./dist/protocols/sugar/pda.js"
+    },
+    "./protocols": {
+      "types": "./dist/protocols/index.d.ts",
+      "import": "./dist/protocols/index.js"
     }
   },
   "scripts": {

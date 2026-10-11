@@ -1,25 +1,24 @@
+import {
+  UnsupportedPoolFeatureError,
+  UnsupportedSwapModeError,
+  buildSwapInstructions,
+  getSwapRequirements,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { address } from "@solana/kit";
-import { buildSwapInstructions, getSwapRequirements } from "../../dist/index.js";
+
 import { metadaoFixture, METADAO_PROGRAM } from "../fixtures/metadao.mjs";
 const owner = address("11111111111111111111111111111112");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return result.value;
-}
+
 test("consumer builds native MetaDAO spot buys and sells from offline observations", async () => {
   for (const reverse of [false, true]) {
     const f = await metadaoFixture(owner, { reverse });
-    const requirements = value(await getSwapRequirements(f.request));
+    const requirements = await getSwapRequirements(f.request);
     assert.equal(requirements.complete, true);
-    const build = value(await buildSwapInstructions(f.request));
+    const build = await buildSwapInstructions(f.request);
     assert.equal(build.protocol, "metadao");
     assert.equal(build.swapInstructions.length, 1);
     const instruction = build.swapInstructions[0];
@@ -37,16 +36,27 @@ test("consumer builds native MetaDAO spot buys and sells from offline observatio
 });
 test("MetaDAO reports exact output and active futarchy state as unsupported", async () => {
   const f = await metadaoFixture(owner);
-  const exactOut = await buildSwapInstructions({
-    ...f.request,
-    amount: { kind: "exactOut", amountOut: 100n },
-  });
-  assert.equal(exactOut.ok, false);
-  assert.equal(exactOut.error.code, "UNSUPPORTED_SWAP_MODE");
+  await assert.rejects(
+    () =>
+      buildSwapInstructions({
+        ...f.request,
+        amount: { kind: "exactOut", amountOut: 100n },
+      }),
+    (error) => {
+      assert.ok(error instanceof UnsupportedSwapModeError);
+      assert.equal(error.code, "UNSUPPORTED_SWAP_MODE");
+      return true;
+    },
+  );
   f.request.snapshot.accounts[f.pool].data[8] = 1;
-  const active = await buildSwapInstructions(f.request);
-  assert.equal(active.ok, false);
-  assert.equal(active.error.code, "UNSUPPORTED_POOL_FEATURE");
+  await assert.rejects(
+    () => buildSwapInstructions(f.request),
+    (error) => {
+      assert.ok(error instanceof UnsupportedPoolFeatureError);
+      assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+      return true;
+    },
+  );
 });
 test("MetaDAO rejects malformed observations, mismatched vault state, stale time and zero-output amounts", async () => {
   for (const variant of [
@@ -94,8 +104,12 @@ test("MetaDAO rejects malformed observations, mismatched vault state, stale time
       f.request.amount = { kind: "exactIn", amountIn: 1n };
       expected = "INSUFFICIENT_LIQUIDITY";
     }
-    const result = await buildSwapInstructions(f.request);
-    assert.equal(result.ok, false, variant);
-    assert.equal(result.error.code, expected, variant);
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.equal(error.code, expected, variant);
+        return true;
+      },
+    );
   }
 });

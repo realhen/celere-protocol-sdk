@@ -324,6 +324,44 @@ test("consumer gets independent rejection, ambiguous response and bounded timeou
   assert.equal(JSON.stringify(results).includes("secret"), false);
 });
 
+test("consumer receives unexpected compilation errors unchanged before signing or submission", async () => {
+  const { request } = await trade();
+  const failure = new Error("Caller nonce observation is unavailable");
+  const originalStack = failure.stack;
+  let calls = 0;
+  const client = new SenderClient({
+    defaultRpc: { url: "https://rpc.example" },
+    fetch: async () => {
+      calls++;
+      throw new Error("Must not submit");
+    },
+  });
+  const failingRequest = {
+    ...request,
+    nonce: {
+      ...request.nonce,
+      get value() {
+        throw failure;
+      },
+    },
+    signers: request.signers.map((signer) => ({
+      address: signer.address,
+      signTransactions: async () => {
+        calls++;
+        throw new Error("Must not sign");
+      },
+    })),
+  };
+  const isOriginalFailure = (error) => {
+    assert.equal(error, failure);
+    assert.equal(error.stack, originalStack);
+    return true;
+  };
+  assert.throws(() => client.prepare(failingRequest), isOriginalFailure);
+  await assert.rejects(client.send(failingRequest), isOriginalFailure);
+  assert.equal(calls, 0);
+});
+
 test("consumer validates nonce and fee policy before invoking wallets or networking", async () => {
   const { request } = await trade();
   let calls = 0;
@@ -388,7 +426,16 @@ test("consumer validates nonce and fee policy before invoking wallets or network
   await assert.rejects(
     client.send({
       ...request,
-      instructions: [{ programAddress: request.feePayer, data: new Uint8Array(2000) }],
+      instructions: [{ programAddress: request.feePayer }],
+    }),
+    code(SenderErrorCode.CompilationFailed),
+  );
+  await assert.rejects(
+    client.send({
+      ...request,
+      instructions: [
+        { programAddress: SYSTEM_PROGRAM_ADDRESS, data: new Uint8Array(2000) },
+      ],
     }),
     code(SenderErrorCode.CompilationFailed),
   );

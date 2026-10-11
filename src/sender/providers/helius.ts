@@ -118,11 +118,10 @@ export class HeliusSender implements SenderRoute {
    */
   constructor(options: HeliusSenderOptions) {
     const configuration = configureProvider(options, ENDPOINTS, Region.Global);
-    if (!configuration.ok) throw configuration.error;
     const mode = options.mode ?? HeliusSenderMode.Max;
     if (!Object.values(HeliusSenderMode).includes(mode))
       throw new SenderConfigurationError("Unsupported Helius mode");
-    const { url, name, timeoutMs } = configuration.value;
+    const { url, name, timeoutMs } = configuration;
     if (name !== undefined) this.name = name;
     this.timeoutMs = timeoutMs;
     this.minimumTipLamports = mode === HeliusSenderMode.Max ? 1_000_000n : 5_000n;

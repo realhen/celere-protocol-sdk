@@ -1,4 +1,11 @@
 import {
+  InsufficientLiquidityError,
+  InvalidRequestError,
+  UnsupportedPoolFeatureError,
+  createProtocolSdk,
+  compileTransaction,
+} from "../../dist/index.js";
+import {
   buy_with_exact_cash_in,
   sell_with_exact_token_in,
 } from "../../dist/protocols/rise-rich/instructions/index.js";
@@ -12,7 +19,7 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
+
 import { riseRichFixture } from "../fixtures/rise-rich.mjs";
 import { riseRichAdapter } from "../../dist/protocols/rise-rich/curve.js";
 const { buildSwapInstructions } = createProtocolSdk([riseRichAdapter]);
@@ -20,16 +27,7 @@ const { buildSwapInstructions } = createProtocolSdk([riseRichAdapter]);
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native Rise Rich tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -74,16 +72,14 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -107,7 +103,7 @@ test(
             label: "native-rise",
           });
           process.stdout.write(`Rise native case ${buy}/${feeRate}/${floor}: install\n`);
-          const build = value(await buildSwapInstructions(f.request));
+          const build = await buildSwapInstructions(f.request);
           await install(f, signer);
           const before = [await tokenAmount(f.userToken), await tokenAmount(f.userMain)];
           process.stdout.write(`Rise native case ${buy}/${feeRate}/${floor}: send\n`);
@@ -185,7 +181,7 @@ test(
         label,
         floor: buy ? 1n : 3n,
       });
-      const build = value(await buildSwapInstructions(old.request));
+      const build = await buildSwapInstructions(old.request);
       const adverse = await riseRichFixture(signer.address, {
         buy,
         feeRate: 12500,
@@ -205,7 +201,7 @@ test(
       feeRate: 12500,
       label: "native-rise",
     });
-    const valid = value(await buildSwapInstructions({ ...f.request, slippageBps: 9999 }));
+    const valid = await buildSwapInstructions({ ...f.request, slippageBps: 9999 });
     new DataView(f.request.snapshot.accounts[f.mayMarket].data.buffer).setBigUint64(
       48,
       1n,
@@ -217,9 +213,14 @@ test(
       true,
     );
     f.request.snapshot.accounts[f.liqVaultMain].lamports = 2_039_281n;
-    const rejected = await buildSwapInstructions(f.request);
-    assert.equal(rejected.ok, false);
-    assert.equal(rejected.error.code, "INSUFFICIENT_LIQUIDITY");
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.ok(error instanceof InsufficientLiquidityError);
+        assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+        return true;
+      },
+    );
     await install(f, signer);
     await atomicFailure(
       valid,
@@ -241,13 +242,18 @@ test(
           buy,
           label: "native-rise",
         });
-        const built = value(await buildSwapInstructions(f.request));
+        const built = await buildSwapInstructions(f.request);
         const view = new DataView(f.request.snapshot.accounts[f.marketMeta].data.buffer);
         if (disabled === "permission") view.setUint16(330, 0, true);
         else view.setBigUint64(332, 9_000_000_000n, true);
-        const rejected = await buildSwapInstructions(f.request);
-        assert.equal(rejected.ok, false);
-        assert.equal(rejected.error.code, "UNSUPPORTED_POOL_FEATURE");
+        await assert.rejects(
+          () => buildSwapInstructions(f.request),
+          (error) => {
+            assert.ok(error instanceof UnsupportedPoolFeatureError);
+            assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+            return true;
+          },
+        );
         await install(f, signer);
         await atomicFailure(
           built,
@@ -272,12 +278,10 @@ test(
         floorScale: 2,
         mainIntercept: -2n,
       });
-      const build = value(
-        await buildSwapInstructions({
-          ...f.request,
-          amount: { kind: "exactIn", amountIn: buy ? 1_000_001n : 99_999_999n },
-        }),
-      );
+      const build = await buildSwapInstructions({
+        ...f.request,
+        amount: { kind: "exactIn", amountIn: buy ? 1_000_001n : 99_999_999n },
+      });
       await install(f, signer);
       const before = [await tokenAmount(f.userMain), await tokenAmount(f.userToken)];
       const signature = await send(build, signer);
@@ -297,7 +301,7 @@ test(
       feeRate: 12500,
       supply: boundary - 987500n,
     });
-    const built = value(await buildSwapInstructions(f.request));
+    const built = await buildSwapInstructions(f.request);
     assert.equal(built.quote.expectedAmountOut, 987500n);
     await install(f, signer);
     const cashBefore = await tokenAmount(f.userMain),
@@ -309,17 +313,20 @@ test(
       label: "native-rise",
       feeRate: 12500,
     });
-    const stale = value(
-      await buildSwapInstructions({ ...original.request, slippageBps: 9999 }),
-    );
+    const stale = await buildSwapInstructions({ ...original.request, slippageBps: 9999 });
     const crossing = await riseRichFixture(signer.address, {
       label: "native-rise",
       feeRate: 12500,
       supply: boundary - 1n,
     });
-    const rejected = await buildSwapInstructions(crossing.request);
-    assert.equal(rejected.ok, false);
-    assert.equal(rejected.error.code, "UNSUPPORTED_POOL_FEATURE");
+    await assert.rejects(
+      () => buildSwapInstructions(crossing.request),
+      (error) => {
+        assert.ok(error instanceof UnsupportedPoolFeatureError);
+        assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+        return true;
+      },
+    );
     await install(crossing, signer);
     const beforeCash = await tokenAmount(crossing.userMain),
       beforeToken = await tokenAmount(crossing.userToken);
@@ -345,12 +352,18 @@ test(
       });
       const below = buy ? 699_999n : 708_860n,
         at = below + 1n;
-      const refused = await buildSwapInstructions({
-        ...f.request,
-        amount: { kind: "exactIn", amountIn: below },
-      });
-      assert.equal(refused.ok, false);
-      assert.equal(refused.error.code, "INVALID_REQUEST");
+      await assert.rejects(
+        () =>
+          buildSwapInstructions({
+            ...f.request,
+            amount: { kind: "exactIn", amountIn: below },
+          }),
+        (error) => {
+          assert.ok(error instanceof InvalidRequestError);
+          assert.equal(error.code, "INVALID_REQUEST");
+          return true;
+        },
+      );
       const raw = buy
         ? buy_with_exact_cash_in(f.instructionAccounts, {
             cashIn: below,
@@ -372,12 +385,10 @@ test(
         signer,
         /AmountTooSmall|"Custom":6022/,
       );
-      const valid = value(
-        await buildSwapInstructions({
-          ...f.request,
-          amount: { kind: "exactIn", amountIn: at },
-        }),
-      );
+      const valid = await buildSwapInstructions({
+        ...f.request,
+        amount: { kind: "exactIn", amountIn: at },
+      });
       const cashBefore = await tokenAmount(f.userMain),
         tokenBefore = await tokenAmount(f.userToken);
       await send(valid, signer);

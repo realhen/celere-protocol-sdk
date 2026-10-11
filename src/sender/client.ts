@@ -5,10 +5,10 @@ import {
   PriorityFeeTooLowError,
 } from "./errors/index";
 import type { Transaction } from "@solana/kit";
-import { U64_MAX } from "../core/amounts";
-import { isValidAddress } from "../core/addresses";
+import { U64_MAX } from "../shared/numbers";
+import { isValidAddress } from "../shared/addresses";
 import { isConfiguredProvider, validateTimeout } from "./providers/configuration";
-import type { ConfiguredRoute, ValidationResult } from "./providers/configuration";
+import type { ConfiguredRoute } from "./providers/configuration";
 import { RpcSender } from "./providers/rpc";
 import { sendRouteTransaction } from "./transport";
 import {
@@ -94,7 +94,8 @@ export class SenderClient {
    * @throws {@link SenderRequestError} for malformed inputs or conflicting tip recipients.
    * @throws {@link NonceRequiredError} when distinct variants lack a shared durable nonce.
    * @throws {@link TipTooLowError} or {@link PriorityFeeTooLowError} for below-floor fees.
-   * @throws {@link SenderCompilationError} if offline message compilation fails.
+   * @throws {@link SenderCompilationError} for expected compilation validation or size failures.
+   * Unexpected compilation errors propagate unchanged.
    * @remarks No RPC reads or signatures are requested. The caller owns nonce freshness and
    * exclusive use. Preparing a transaction does not establish that it can execute.
    *
@@ -110,8 +111,7 @@ export class SenderClient {
    * ```
    */
   prepare(request: PrepareRequest): PreparedSubmission {
-    const validation = validatePreparationRequest(request, this.#routes);
-    if (!validation.ok) throw validation.error;
+    validatePreparationRequest(request, this.#routes);
     const variants = copyPreparedVariants(
       prepareTransactionVariants(request, this.#routes),
     );
@@ -242,21 +242,25 @@ export class SenderClient {
 }
 
 /** Built-ins are already validated and immutable. Snapshot metadata for custom implementations. */
-function configureRoute(route: SenderRoute): ValidationResult<SenderRoute> {
-  if (isConfiguredProvider(route)) return { ok: true, value: route };
+function configureRoute(route: SenderRoute): SenderRoute {
+  if (isConfiguredProvider(route)) {
+    return route;
+  }
   if (
     !route ||
     !Object.values(SenderProvider).includes(route.provider) ||
     route.provider === SenderProvider.Rpc
-  )
-    return {
-      ok: false,
-      error: new SenderConfigurationError(
-        "Use a provider route; defaultRpc supplies the RPC lane",
-      ),
-    };
-  if (route.name !== undefined && (typeof route.name !== "string" || !route.name.trim()))
-    return { ok: false, error: new SenderConfigurationError("Invalid route name") };
+  ) {
+    throw new SenderConfigurationError(
+      "Use a provider route; defaultRpc supplies the RPC lane",
+    );
+  }
+  if (
+    route.name !== undefined &&
+    (typeof route.name !== "string" || !route.name.trim())
+  ) {
+    throw new SenderConfigurationError("Invalid route name");
+  }
   const amounts = [route.minimumTipLamports, route.minimumPriorityFeeLamports];
   if (
     amounts.some((value) => typeof value !== "bigint" || value < 0n || value > U64_MAX) ||
@@ -265,47 +269,45 @@ function configureRoute(route: SenderRoute): ValidationResult<SenderRoute> {
     !route.tipAccounts.length ||
     route.tipAccounts.some((value) => !isValidAddress(value)) ||
     typeof route.createRequest !== "function"
-  )
-    return {
-      ok: false,
-      error: new SenderConfigurationError(
-        "Invalid provider requirements or request encoder",
-      ),
-    };
+  ) {
+    throw new SenderConfigurationError(
+      "Invalid provider requirements or request encoder",
+    );
+  }
   const timeout = validateTimeout(route.timeoutMs);
-  if (!timeout.ok) return timeout;
-  return {
-    ok: true,
-    value: Object.freeze({
-      provider: route.provider,
-      ...(route.name === undefined ? {} : { name: route.name }),
-      timeoutMs: timeout.value,
-      minimumTipLamports: route.minimumTipLamports,
-      minimumPriorityFeeLamports: route.minimumPriorityFeeLamports,
-      tipAccounts: Object.freeze([...route.tipAccounts]),
-      createRequest: route.createRequest.bind(route),
-    }),
-  };
+  return Object.freeze({
+    provider: route.provider,
+    ...(route.name === undefined ? {} : { name: route.name }),
+    timeoutMs: timeout,
+    minimumTipLamports: route.minimumTipLamports,
+    minimumPriorityFeeLamports: route.minimumPriorityFeeLamports,
+    tipAccounts: Object.freeze([...route.tipAccounts]),
+    createRequest: route.createRequest.bind(route),
+  });
 }
 
 /** Configure once, add the default RPC, and assign stable IDs. No network work is performed. */
 function configureSenderRoutes(options: SenderClientOptions): readonly ConfiguredRoute[] {
-  if (!options?.defaultRpc) throw new SenderConfigurationError("defaultRpc is required");
-  if (options.routes !== undefined && !Array.isArray(options.routes))
+  if (!options?.defaultRpc) {
+    throw new SenderConfigurationError("defaultRpc is required");
+  }
+  if (options.routes !== undefined && !Array.isArray(options.routes)) {
     throw new SenderConfigurationError("routes must be an array of providers");
-  if (options.fetch !== undefined && typeof options.fetch !== "function")
+  }
+  if (options.fetch !== undefined && typeof options.fetch !== "function") {
     throw new SenderConfigurationError("fetch must be an HTTP transport function");
+  }
   const routes: SenderRoute[] = [];
   const names = new Set<string>();
   for (const route of options.routes ?? []) {
-    const result = configureRoute(route);
-    if (!result.ok) throw result.error;
-    if (result.value.name !== undefined) {
-      if (names.has(result.value.name))
+    const configured = configureRoute(route);
+    if (configured.name !== undefined) {
+      if (names.has(configured.name)) {
         throw new SenderConfigurationError("Explicit route names must be unique");
-      names.add(result.value.name);
+      }
+      names.add(configured.name);
     }
-    routes.push(result.value);
+    routes.push(configured);
   }
   return [
     { id: "rpc:0", config: new RpcSender(options.defaultRpc) },
@@ -318,70 +320,58 @@ function isFeeAmount(value: unknown): value is bigint {
   return typeof value === "bigint" && value >= 0n && value <= U64_MAX;
 }
 
-/** Return expected input failures as values; the public preparation boundary decides how to surface them. */
+/** Validate preparation input before compiling or signing any transaction. */
 function validatePreparationRequest(
   request: PrepareRequest,
   routes: readonly ConfiguredRoute[],
-): ValidationResult<PrepareRequest> {
+): void {
   if (
     !request ||
     !request.fees ||
     !Array.isArray(request.instructions) ||
     request.instructions.length === 0
-  )
-    return {
-      ok: false,
-      error: new SenderRequestError("At least one instruction and fees are required"),
-    };
-  if (Boolean(request.nonce) === Boolean(request.lifetime))
-    return {
-      ok: false,
-      error: new SenderRequestError("Supply exactly one nonce or blockhash lifetime"),
-    };
+  ) {
+    throw new SenderRequestError("At least one instruction and fees are required");
+  }
+  if (Boolean(request.nonce) === Boolean(request.lifetime)) {
+    throw new SenderRequestError("Supply exactly one nonce or blockhash lifetime");
+  }
   const fees = request.fees;
-  if (!isFeeAmount(fees.tipLamports) || !isFeeAmount(fees.computeUnitPriceMicroLamports))
-    return {
-      ok: false,
-      error: new SenderRequestError("Fee amounts must be non-negative u64 bigint values"),
-    };
+  if (
+    !isFeeAmount(fees.tipLamports) ||
+    !isFeeAmount(fees.computeUnitPriceMicroLamports)
+  ) {
+    throw new SenderRequestError("Fee amounts must be non-negative u64 bigint values");
+  }
   if (
     !Number.isInteger(fees.computeUnitLimit) ||
     fees.computeUnitLimit <= 0 ||
     fees.computeUnitLimit > 1_400_000
-  )
-    return {
-      ok: false,
-      error: new SenderRequestError(
-        "Compute unit limit must be an integer from 1 through 1400000",
-      ),
-    };
+  ) {
+    throw new SenderRequestError(
+      "Compute unit limit must be an integer from 1 through 1400000",
+    );
+  }
   // Solana rounds the total priority fee up to whole lamports, not the per-CU price.
   const priorityFeeLamports =
     (BigInt(fees.computeUnitLimit) * fees.computeUnitPriceMicroLamports + 999_999n) /
     1_000_000n;
   for (const route of routes) {
-    if (priorityFeeLamports < route.config.minimumPriorityFeeLamports)
-      return {
-        ok: false,
-        error: new PriorityFeeTooLowError(`Priority fee below minimum for ${route.id}`),
-      };
+    if (priorityFeeLamports < route.config.minimumPriorityFeeLamports) {
+      throw new PriorityFeeTooLowError(`Priority fee below minimum for ${route.id}`);
+    }
   }
   for (const [provider, amount] of Object.entries(fees.tipOverrides ?? {})) {
     if (
       provider === SenderProvider.Rpc ||
       !routes.some((route) => route.config.provider === provider)
-    )
-      return {
-        ok: false,
-        error: new SenderRequestError("Tip override refers to an unconfigured provider"),
-      };
-    if (!isFeeAmount(amount))
-      return {
-        ok: false,
-        error: new SenderRequestError(
-          "Tip overrides must be non-negative u64 bigint values",
-        ),
-      };
+    ) {
+      throw new SenderRequestError("Tip override refers to an unconfigured provider");
+    }
+    if (!isFeeAmount(amount)) {
+      throw new SenderRequestError(
+        "Tip overrides must be non-negative u64 bigint values",
+      );
+    }
   }
-  return { ok: true, value: request };
 }

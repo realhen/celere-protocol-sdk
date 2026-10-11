@@ -1,7 +1,12 @@
+import {
+  UnsupportedSwapModeError,
+  buildSwapInstructions,
+  compileTransaction,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
-import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
+
 import { TOKEN, TOKEN_2022, SOL, ata } from "../fixtures/pump-amm.mjs";
 import {
   observeAmmRequest,
@@ -49,26 +54,23 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
             fillPolicy: "requireFull",
           });
           const built = await buildSwapInstructions(request);
-          assert.ok(
-            built.ok,
-            JSON.stringify(built, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
-          );
+
           const [baseBefore, quoteBefore] = await Promise.all([
             amount(baseAccount),
             amount(quoteAccount),
           ]);
-          const signature = await submitInstructions(url, built.value.instructions, user);
+          const signature = await submitInstructions(url, built.instructions, user);
           const [baseAfter, quoteAfter] = await Promise.all([
             amount(baseAccount),
             amount(quoteAccount),
           ]);
           assert.equal(
             isBuy ? baseAfter - baseBefore : quoteAfter - quoteBefore,
-            built.value.quote.expectedAmountOut,
+            built.quote.expectedAmountOut,
           );
           assert.equal(
             isBuy ? quoteBefore - quoteAfter : baseBefore - baseAfter,
-            built.value.quote.expectedAmountIn,
+            built.quote.expectedAmountIn,
           );
           const tx = await rpc(url, "getTransaction", [
             signature,
@@ -91,11 +93,11 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
             protocolFee = event.readBigUInt64LE(96),
             creatorFee = event.readBigUInt64LE(352);
           assert.equal(
-            built.value.quote.fees.find((fee) => fee.kind === "trade").amount,
+            built.quote.fees.find((fee) => fee.kind === "trade").amount,
             lpFee + protocolFee,
           );
           assert.equal(
-            built.value.quote.fees.find((fee) => fee.kind === "creator").amount,
+            built.quote.fees.find((fee) => fee.kind === "creator").amount,
             creatorFee,
           );
         }
@@ -109,8 +111,8 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
           slippageBps: 50,
         });
         const built = await buildSwapInstructions(buy);
-        assert.ok(built.ok);
-        const instruction = structuredClone(built.value.swapInstructions[0]);
+
+        const instruction = structuredClone(built.swapInstructions[0]);
         const vaultAddress = instruction.accounts[7].address;
         const remaining = await amount(vaultAddress);
         new DataView(instruction.data.buffer).setBigUint64(8, remaining + 1n, true);
@@ -124,9 +126,9 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
             lastValidBlockHeight: BigInt(latest.value.lastValidBlockHeight),
           },
         });
-        assert.ok(compiled.ok);
+
         const simulated = await rpc(url, "simulateTransaction", [
-          Buffer.from(compiled.value.wireBytes).toString("base64"),
+          Buffer.from(compiled.wireBytes).toString("base64"),
           { encoding: "base64", sigVerify: false, replaceRecentBlockhash: true },
         ]);
         assert.notEqual(
@@ -139,13 +141,19 @@ for (const tokenProgram of [TOKEN, TOKEN_2022]) {
           6016,
           JSON.stringify(simulated.value),
         );
-        const rejected = await buildSwapInstructions({
-          ...buy,
-          inputMint: mint.address,
-          outputMint: SOL,
-        });
-        assert.equal(rejected.ok, false);
-        assert.equal(rejected.error.code, "UNSUPPORTED_SWAP_MODE");
+        await assert.rejects(
+          () =>
+            buildSwapInstructions({
+              ...buy,
+              inputMint: mint.address,
+              outputMint: SOL,
+            }),
+          (error) => {
+            assert.ok(error instanceof UnsupportedSwapModeError);
+            assert.equal(error.code, "UNSUPPORTED_SWAP_MODE");
+            return true;
+          },
+        );
         const poolData = (await readAccount(url, pool)).data;
         assert.ok(
           new DataView(poolData.buffer).getBigUint64(271, true) > 0n,

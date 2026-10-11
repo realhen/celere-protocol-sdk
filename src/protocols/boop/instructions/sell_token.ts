@@ -13,6 +13,7 @@ import {
   type Instruction,
 } from "@solana/kit";
 import { BOOP_PROGRAM } from "../constants";
+
 /** Identifies Boop’s native `sell_token` instruction. */
 const DISCRIMINATOR = new Uint8Array([109, 61, 40, 187, 230, 176, 135, 174]);
 /** Encodes the native `sell_token` arguments and instruction discriminator. */
@@ -21,6 +22,7 @@ const instructionDataEncoder = getStructEncoder([
   ["sellAmount", getU64Encoder()],
   ["amountOutMin", getU64Encoder()],
 ]);
+
 /** Accounts required by Boop’s native `sell_token` instruction. */
 export interface BoopSellTokenAccounts {
   readonly mint: Address;
@@ -33,6 +35,7 @@ export interface BoopSellTokenAccounts {
   readonly recipient: Address;
   readonly config: Address;
 }
+
 /**
  * Native arguments for {@link sell_token}.
  *
@@ -68,6 +71,7 @@ export interface BoopSellTokenArgs {
    */
   readonly amountOutMin: bigint;
 }
+
 /**
  * Creates a Boop sell instruction for a specified input budget.
  *

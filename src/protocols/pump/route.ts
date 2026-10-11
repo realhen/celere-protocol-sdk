@@ -1,4 +1,13 @@
-import { type Address, type Instruction } from "@solana/kit";
+import { InvalidAccountError } from "../errors";
+import { InvalidRequestError } from "../../shared/errors";
+import {
+  UnsupportedPoolFeatureError,
+  UnsupportedProtocolError,
+  UnsupportedSwapModeError,
+  InsufficientLiquidityError,
+} from "../errors";
+
+import type { Instruction } from "@solana/kit";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
@@ -8,24 +17,24 @@ import {
   readMint,
   readTokenAccount,
   WRAPPED_SOL_MINT,
-} from "../../accounts/tokens";
-import { minimumOutput } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import { requireAccount } from "../../core/snapshot";
+} from "../accounts/tokens";
+import { minimumOutput } from "../amounts";
+
+import { requireAccount } from "../accounts/snapshot";
 import type {
   RouteAdapter,
   RouteHop,
   RouteHopQuote,
   RouteRequest,
   ProtocolRoute,
-} from "../../core/route-types";
+} from "../route-types";
 import type {
   AccountRequirement,
   ResolvedTokenAccounts,
   SwapFee,
   SwapQuote,
   SwapRequest,
-} from "../../core/types";
+} from "../types";
 import { quotePumpAmm } from "./amm-math";
 import { readAmmFees, readAmmGlobal, readAmmPool, type PumpAmmPool } from "./amm-state";
 import { PUMP_AMM_PROGRAM, PUMP_PROGRAM } from "./constants";
@@ -67,6 +76,7 @@ async function commonAddresses() {
     getPumpFeeConfigAddress(),
     getPumpEventAuthorityAddress(),
   ]);
+
   return {
     global,
     feeConfig,
@@ -84,10 +94,6 @@ type Venue = PumpAmmMultiHopSwapHopAccounts & {
     | { readonly kind: "curve"; readonly state: PumpCurve }
   );
 
-function invalid(address: Address, message: string): never {
-  fail({ code: "INVALID_ACCOUNT", address, message });
-}
-
 async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
   const account = requireAccount(request.snapshot, hop.pool, "route venue");
   if (account.owner === PUMP_AMM_PROGRAM) {
@@ -96,8 +102,13 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
     if (
       !isBuy &&
       !(hop.inputMint === state.baseMint && hop.outputMint === state.quoteMint)
-    )
-      invalid(hop.pool, "Route hop mints do not match the pool");
+    ) {
+      throw new InvalidAccountError({
+        address: hop.pool,
+        message: "Route hop mints do not match the pool",
+      });
+    }
+
     const creator = await getPumpPoolAuthorityAddress(state.baseMint);
     const [expected, bump] = await findPumpAmmPoolPda({
       index: 0,
@@ -110,13 +121,14 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
       state.creator !== creator ||
       hop.pool !== expected ||
       state.bump !== bump
-    )
-      fail({
-        code: "UNSUPPORTED_POOL_FEATURE",
+    ) {
+      throw new UnsupportedPoolFeatureError({
         protocol: "pump-amm",
         feature: "noncanonical-route-pool",
         message: "Native Pump routes require canonical migrated pools at index zero",
       });
+    }
+
     return {
       kind: "pool",
       state,
@@ -128,22 +140,30 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
       quoteVault: state.quoteVault,
     };
   }
-  if (account.owner !== PUMP_PROGRAM)
-    fail({
-      code: "UNSUPPORTED_PROTOCOL",
+
+  if (account.owner !== PUMP_PROGRAM) {
+    throw new UnsupportedProtocolError({
       programAddress: account.owner,
       message: "Native Pump routes support only Pump curves and canonical PumpSwap pools",
     });
+  }
+
   const state = readCurve(request.snapshot, hop.pool);
   const isBuy = hop.inputMint === state.quoteMint;
   const baseMint = isBuy ? hop.outputMint : hop.inputMint;
   if (
     (!isBuy && hop.outputMint !== state.quoteMint) ||
     (await getPumpBondingCurveAddress(baseMint)) !== hop.pool
-  )
-    invalid(hop.pool, "Route hop mints or curve PDA do not match the bonding curve");
+  ) {
+    throw new InvalidAccountError({
+      address: hop.pool,
+      message: "Route hop mints or curve PDA do not match the bonding curve",
+    });
+  }
+
   const base = readMint(request.snapshot, baseMint);
   const quote = readMint(request.snapshot, state.quoteMint);
+
   return {
     kind: "curve",
     state,
@@ -161,28 +181,31 @@ async function readVenue(request: RouteRequest, hop: RouteHop): Promise<Venue> {
 }
 
 async function readVenues(request: RouteRequest): Promise<readonly Venue[]> {
-  if (request.amount.kind !== "exactIn")
-    fail({
-      code: "UNSUPPORTED_SWAP_MODE",
+  if (request.amount.kind !== "exactIn") {
+    throw new UnsupportedSwapModeError({
       protocol: "pump-amm",
       mode: "exactOut",
       message: "Native Pump routes support exact input only",
     });
-  if (request.hops.length > 4)
-    fail({
-      code: "UNSUPPORTED_POOL_FEATURE",
+  }
+
+  if (request.hops.length > 4) {
+    throw new UnsupportedPoolFeatureError({
       protocol: "pump-amm",
       feature: "route-size",
       message:
         "Qualified Pump routes support at most four hops; longer routes can exhaust the native allocator",
     });
+  }
+
   const venues = await Promise.all(request.hops.map((hop) => readVenue(request, hop)));
-  if (venues.some((venue) => venue.isBuy !== venues[0]!.isBuy))
-    fail({
-      code: "INVALID_REQUEST",
+  if (venues.some((venue) => venue.isBuy !== venues[0]!.isBuy)) {
+    throw new InvalidRequestError({
       field: "hops",
       message: "Every Pump route hop must have the same buy or sell direction",
     });
+  }
+
   return venues;
 }
 
@@ -203,19 +226,24 @@ async function requirements(
       { address: hop.outputMint, role: "route output mint" },
     );
   }
+
   if (
     result.some(
       (requirement) => request.snapshot.accounts[requirement.address] === undefined,
     )
-  )
+  ) {
     return result;
+  }
+
   const venues = await readVenues(request);
   const isBuy = venues[0]!.isBuy;
   for (const venue of venues) {
     result.push({ address: venue.baseVault, role: "route base vault" });
-    if (venue.kind === "pool" || venue.quoteMint !== WRAPPED_SOL_MINT)
+    if (venue.kind === "pool" || venue.quoteMint !== WRAPPED_SOL_MINT) {
       result.push({ address: venue.quoteVault, role: "route quote vault" });
+    }
   }
+
   const currency = isBuy ? venues[0]! : venues.at(-1)!;
   const { buybackRecipient } = readAmmGlobal(request.snapshot, common.global);
   const quote = readMint(request.snapshot, currency.quoteMint);
@@ -228,17 +256,20 @@ async function requirements(
     role: "route buyback recipient token account",
     optional: true,
   });
+
   return result;
 }
 
 function aggregateFees(hops: readonly RouteHopQuote[]): readonly SwapFee[] {
   const fees = new Map<string, SwapFee>();
-  for (const hop of hops)
+  for (const hop of hops) {
     for (const fee of hop.quote.fees) {
       const key = `${fee.kind}:${fee.mint}`;
       const previous = fees.get(key);
       fees.set(key, { ...fee, amount: fee.amount + (previous?.amount ?? 0n) });
     }
+  }
+
   return [...fees.values()].filter((fee) => fee.amount > 0n);
 }
 
@@ -247,18 +278,22 @@ async function build(
   accounts: ResolvedTokenAccounts,
 ): Promise<ProtocolRoute> {
   const venues = await readVenues(request);
-  if (request.amount.kind !== "exactIn") throw new Error("Validated exact-input route");
+  if (request.amount.kind !== "exactIn") {
+    throw new Error("Validated exact-input route");
+  }
+
   const common = await commonAddresses();
   const global = readAmmGlobal(request.snapshot, common.global);
   const pumpGlobal = readPumpGlobal(request.snapshot, common.pumpGlobal);
   const isBuy = venues[0]!.isBuy;
-  if (global.disabled & (isBuy ? 8 : 16))
-    fail({
-      code: "UNSUPPORTED_POOL_FEATURE",
+  if (global.disabled & (isBuy ? 8 : 16)) {
+    throw new UnsupportedPoolFeatureError({
       protocol: "pump-amm",
       feature: "disabled-swap-direction",
       message: "PumpSwap global disables this route direction",
     });
+  }
+
   const currency = isBuy ? venues[0]! : venues.at(-1)!;
   const quoteMint = readMint(request.snapshot, currency.quoteMint);
   const buybackTokenAccount = await associatedTokenAddress(
@@ -286,6 +321,7 @@ async function build(
       global.buybackRecipient,
     );
   }
+
   let amountIn = request.amount.amountIn;
   const hops: RouteHopQuote[] = [];
   for (let index = 0; index < venues.length; index++) {
@@ -297,8 +333,13 @@ async function build(
       associatedTokenAddress(venue.pool, venue.baseMint, base.tokenProgram),
       associatedTokenAddress(venue.pool, venue.quoteMint, quote.tokenProgram),
     ]);
-    if (baseVaultAddress !== venue.baseVault || quoteVaultAddress !== venue.quoteVault)
-      invalid(venue.pool, "Route vault addresses must be canonical ATAs of the venue");
+    if (baseVaultAddress !== venue.baseVault || quoteVaultAddress !== venue.quoteVault) {
+      throw new InvalidAccountError({
+        address: venue.pool,
+        message: "Route vault addresses must be canonical ATAs of the venue",
+      });
+    }
+
     const baseVault = readTokenAccount(
       request.snapshot,
       venue.baseVault,
@@ -316,6 +357,8 @@ async function build(
             venue.pool,
           )
         : undefined;
+
+    // Protocol fees apply at the currency end; LP/creator fees at the far-token end.
     const protocolFee = isBuy ? index === 0 : index === venues.length - 1;
     const targetFee = isBuy ? index === venues.length - 1 : index === 0;
     const hopRequest: SwapRequest = {
@@ -324,14 +367,16 @@ async function build(
       amount: { kind: "exactIn", amountIn },
       slippageBps: 0,
     };
+
     let quoted: SwapQuote;
     if (venue.kind === "pool") {
-      if (baseVault.amount === 0n)
-        fail({
-          code: "INSUFFICIENT_LIQUIDITY",
+      if (baseVault.amount === 0n) {
+        throw new InsufficientLiquidityError({
           protocol: "pump-amm",
           message: "Route base reserve is empty",
         });
+      }
+
       const state = venue.state;
       const rates = readAmmFees(
         request.snapshot,
@@ -367,21 +412,30 @@ async function build(
         venue.quoteMint === WRAPPED_SOL_MINT &&
         requireAccount(request.snapshot, venue.pool, "Pump curve").lamports <
           state.realSol + state.protocolFees + state.creatorFees
-      )
-        invalid(
-          venue.pool,
-          "Curve lamports are below its real SOL reserve and retained fees",
-        );
-      if (state.realTokens > baseVault.amount)
-        invalid(venue.baseVault, "Curve base balance is below its real token reserve");
+      ) {
+        throw new InvalidAccountError({
+          address: venue.pool,
+          message: "Curve lamports are below its real SOL reserve and retained fees",
+        });
+      }
+
+      if (state.realTokens > baseVault.amount) {
+        throw new InvalidAccountError({
+          address: venue.baseVault,
+          message: "Curve base balance is below its real token reserve",
+        });
+      }
+
       if (
         quoteVault &&
         quoteVault.amount < state.realSol + state.protocolFees + state.creatorFees
-      )
-        invalid(
-          venue.quoteVault,
-          "Curve quote balance is below its reserve and retained fees",
-        );
+      ) {
+        throw new InvalidAccountError({
+          address: venue.quoteVault,
+          message: "Curve quote balance is below its reserve and retained fees",
+        });
+      }
+
       const rates = readFees(request.snapshot, common.pumpFeeConfig, state, pumpGlobal);
       quoted = quotePump(
         hopRequest,
@@ -400,6 +454,7 @@ async function build(
         },
       );
     }
+
     hops.push({
       ...hop,
       protocol: venue.kind === "pool" ? "pump-amm" : "pump",
@@ -407,13 +462,15 @@ async function build(
     });
     amountIn = quoted.expectedAmountOut;
   }
+
   const minimumAmountOut = minimumOutput(amountIn, request.slippageBps);
-  if (minimumAmountOut === 0n)
-    fail({
-      code: "INVALID_REQUEST",
+  if (minimumAmountOut === 0n) {
+    throw new InvalidRequestError({
       field: "slippageBps",
       message: "Native routes require a nonzero minimum output",
     });
+  }
+
   const instruction = multi_hop_swap(
     {
       user: request.owner,
@@ -438,6 +495,7 @@ async function build(
   );
   const nativeCurrency =
     currency.kind === "curve" && currency.quoteMint === WRAPPED_SOL_MINT;
+
   return {
     instructions: [instruction],
     setupInstructions,

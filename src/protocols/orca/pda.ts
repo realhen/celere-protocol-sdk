@@ -19,6 +19,7 @@ export interface OrcaWhirlpoolAddressParams {
   /** Unsigned 16-bit fee-tier seed, encoded little-endian. For the adapter's supported static-fee pools this equals tick spacing; derivation does not qualify adaptive-fee execution. */
   readonly feeTierIndex: number;
 }
+
 /** Derive a Whirlpool and bump without fetching or creating it. Rejects a noninteger or out-of-range u16 feeTierIndex; uses the caller's native mint order. */
 export function findOrcaWhirlpoolPda(
   params: OrcaWhirlpoolAddressParams,
@@ -27,10 +28,13 @@ export function findOrcaWhirlpoolPda(
     !Number.isSafeInteger(params.feeTierIndex) ||
     params.feeTierIndex < 0 ||
     params.feeTierIndex > 65535
-  )
+  ) {
     throw new RangeError("feeTierIndex must be an unsigned 16-bit integer");
+  }
+
   const bytes = new Uint8Array(2);
   new DataView(bytes.buffer).setUint16(0, params.feeTierIndex, true);
+
   return getProgramDerivedAddress({
     programAddress: WHIRLPOOL_PROGRAM,
     seeds: [
@@ -42,12 +46,14 @@ export function findOrcaWhirlpoolPda(
     ],
   });
 }
+
 /** Derive a Whirlpool from native mint order and a u16 fee-tier seed without fetching or creating it; see {@link OrcaWhirlpoolAddressParams}. */
 export async function getOrcaWhirlpoolAddress(
   params: OrcaWhirlpoolAddressParams,
 ): Promise<Address> {
   return (await findOrcaWhirlpoolPda(params))[0];
 }
+
 /** Derive a Whirlpool tick array without fetching or creating it. startTickIndex is the signed i32 first tick index, encoded as decimal text (not binary); caller computes alignment to 88 * tick spacing. Rejects noninteger/out-of-range indexes. Does not qualify dynamic tick-array execution. */
 export async function getOrcaTickArrayAddress(
   pool: Address,
@@ -57,8 +63,10 @@ export async function getOrcaTickArrayAddress(
     !Number.isSafeInteger(startTickIndex) ||
     startTickIndex < -2147483648 ||
     startTickIndex > 2147483647
-  )
+  ) {
     throw new RangeError("startTickIndex must be a signed 32-bit integer");
+  }
+
   return (
     await getProgramDerivedAddress({
       programAddress: WHIRLPOOL_PROGRAM,
@@ -66,6 +74,7 @@ export async function getOrcaTickArrayAddress(
     })
   )[0];
 }
+
 /** Derive a Whirlpool's oracle without fetching it, creating it, or asserting its existence. */
 export async function getOrcaOracleAddress(pool: Address): Promise<Address> {
   return (

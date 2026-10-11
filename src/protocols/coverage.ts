@@ -1,4 +1,4 @@
-import type { ProtocolId } from "../core/types";
+import type { ProtocolId } from "./types";
 
 /** Native protocol coverage; adapter status does not restrict access to instruction builders. */
 export type ProtocolCoverage = {

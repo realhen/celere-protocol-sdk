@@ -1,6 +1,8 @@
-import { assertAmount, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import type { SwapFee, SwapQuote, SwapRequest } from "../../core/types";
+import { InvalidRequestError } from "../../shared/errors";
+import { InsufficientLiquidityError, UnsupportedSwapModeError } from "../errors";
+import { assertAmount, ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import type { SwapFee, SwapQuote, SwapRequest } from "../types";
 import type { PumpCurve, PumpFees } from "./state";
 
 /** Caller-observed inventory and global charge needed to price synthetic migration. */
@@ -14,8 +16,7 @@ export interface PumpQuoteOptions {
 }
 
 function insufficientLiquidity(): never {
-  fail({
-    code: "INSUFFICIENT_LIQUIDITY",
+  throw new InsufficientLiquidityError({
     protocol: "pump",
     message: "Swap exceeds the available Pump curve or synthetic pool liquidity",
   });
@@ -35,27 +36,44 @@ function feesFor(amount: bigint, rates: PumpFees, curve: PumpCurve): readonly Sw
     },
   ];
 }
+
 function totalFees(fees: readonly SwapFee[]): bigint {
   return fees.reduce((sum, fee) => sum + fee.amount, 0n);
 }
+
 function buyNet(budget: bigint, rates: PumpFees, curve: PumpCurve) {
   let net = (budget * 10_000n) / (10_000n + rates.protocolBps + rates.creatorBps);
   const fees = feesFor(net, rates, curve);
   const cost = net + totalFees(fees);
-  if (cost > budget) net -= cost - budget;
+  if (cost > budget) {
+    net -= cost - budget;
+  }
+
   return { net, fees };
 }
+
 function curveCost(curve: PumpCurve, tokens: bigint): bigint {
-  if (tokens >= curve.virtualTokens) insufficientLiquidity();
+  if (tokens >= curve.virtualTokens) {
+    insufficientLiquidity();
+  }
+
   return (tokens * curve.virtualSol) / (curve.virtualTokens - tokens) + 1n;
 }
+
 function futurePool(curve: PumpCurve, curveNet: bigint, options?: PumpQuoteOptions) {
-  if (!options?.allowSynthetic) insufficientLiquidity();
+  if (!options?.allowSynthetic) {
+    insufficientLiquidity();
+  }
+
   const base = options.baseVaultBalance - curve.realTokens;
   const quote = curve.realSol + curveNet - options.migrationFee;
-  if (base <= 0n || quote <= 0n) insufficientLiquidity();
+  if (base <= 0n || quote <= 0n) {
+    insufficientLiquidity();
+  }
+
   return { base, quote };
 }
+
 function combineFees(
   first: readonly SwapFee[],
   second: readonly SwapFee[],
@@ -80,28 +98,36 @@ export function quotePump(
   options?: PumpQuoteOptions,
 ): SwapQuote {
   if (request.amount.kind === "exactOut") {
-    if (!isBuy)
-      fail({
-        code: "UNSUPPORTED_SWAP_MODE",
+    if (!isBuy) {
+      throw new UnsupportedSwapModeError({
         protocol: "pump",
         mode: "exactOut",
         message: "Pump sells have no native exact-output instruction",
       });
+    }
+
     const amountOut = request.amount.amountOut;
     const curveTokens = amountOut < curve.realTokens ? amountOut : curve.realTokens;
     const net = curveCost(curve, curveTokens);
     let fees = feesFor(net, rates, curve);
     let expectedAmountIn = net + totalFees(fees);
+
+    // A completing v3 buy pays separately rounded fees on the synthetic-pool leg.
     if (amountOut > curve.realTokens) {
       const pool = futurePool(curve, net, options);
       const extra = amountOut - curve.realTokens;
-      if (extra >= pool.base) insufficientLiquidity();
+      if (extra >= pool.base) {
+        insufficientLiquidity();
+      }
+
       const poolNet = ceilDiv(pool.quote * extra, pool.base - extra);
       const poolFees = feesFor(poolNet, rates, curve);
       expectedAmountIn += poolNet + totalFees(poolFees);
       fees = combineFees(fees, poolFees);
     }
+
     assertAmount(expectedAmountIn, "expectedAmountIn");
+
     return {
       kind: "exactOut",
       amountOut,
@@ -111,16 +137,23 @@ export function quotePump(
       fees,
     };
   }
+
   const amountIn = request.amount.amountIn;
   let expectedAmountIn = amountIn;
   let expectedAmountOut: bigint;
   let fees: readonly SwapFee[];
+
   if (isBuy) {
     const input = buyNet(amountIn, rates, curve);
-    if (input.net <= 1n) insufficientLiquidity();
+    if (input.net <= 1n) {
+      insufficientLiquidity();
+    }
+
     fees = input.fees;
     expectedAmountOut =
       ((input.net - 1n) * curve.virtualTokens) / (curve.virtualSol + input.net - 1n);
+
+    // Spend the remaining budget against the pool created by synthetic migration.
     if (expectedAmountOut > curve.realTokens) {
       const net = curveCost(curve, curve.realTokens);
       const pool = futurePool(curve, net, options);
@@ -135,25 +168,40 @@ export function quotePump(
         poolInput.net > 1n
           ? ((poolInput.net - 1n) * pool.base) / (pool.quote + poolInput.net - 1n)
           : 0n;
+
       expectedAmountOut = curve.realTokens + extra;
-      if (extra > 0n || options?.route) fees = combineFees(fees, poolInput.fees);
-      else expectedAmountIn = curveTotal;
+
+      // Only routes consume a final budget tail that cannot buy another token atom.
+      if (extra > 0n || options?.route) {
+        fees = combineFees(fees, poolInput.fees);
+      } else {
+        expectedAmountIn = curveTotal;
+      }
     }
   } else {
     const gross = (amountIn * curve.virtualSol) / (curve.virtualTokens + amountIn);
-    if (gross > curve.realSol) insufficientLiquidity();
+    if (gross > curve.realSol) {
+      insufficientLiquidity();
+    }
+
     fees = feesFor(gross, rates, curve);
     expectedAmountOut = gross - totalFees(fees);
   }
-  if (expectedAmountOut <= 0n) insufficientLiquidity();
+
+  if (expectedAmountOut <= 0n) {
+    insufficientLiquidity();
+  }
+
   assertAmount(expectedAmountOut, "expectedAmountOut");
+
   const minimumAmountOut = minimumOutput(expectedAmountOut, request.slippageBps);
-  if (minimumAmountOut === 0n)
-    fail({
-      code: "INVALID_REQUEST",
+  if (minimumAmountOut === 0n) {
+    throw new InvalidRequestError({
       field: "slippageBps",
       message: "Slippage would permit zero output",
     });
+  }
+
   return {
     kind: "exactIn",
     amountIn,

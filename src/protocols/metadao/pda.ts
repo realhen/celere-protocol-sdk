@@ -1,4 +1,4 @@
-import { associatedTokenAddress, TOKEN_PROGRAM } from "../../accounts/tokens";
+import { associatedTokenAddress, TOKEN_PROGRAM } from "../accounts/tokens";
 import {
   getAddressEncoder,
   getProgramDerivedAddress,
@@ -7,6 +7,7 @@ import {
 } from "@solana/kit";
 import { METADAO_PROGRAM } from "./constants";
 import { getU64Encoder } from "@solana/kit";
+
 const encoder = getAddressEncoder();
 
 /**
@@ -19,6 +20,7 @@ export function findMetaDaoEventAuthorityPda(): Promise<ProgramDerivedAddress> {
     seeds: ["__event_authority"],
   });
 }
+
 /** Get the v0.6 event authority offline; inputs match {@link findMetaDaoEventAuthorityPda}. Does not check existence. */
 export async function getMetaDaoEventAuthorityAddress(): Promise<Address> {
   return (await findMetaDaoEventAuthorityPda())[0];
@@ -35,13 +37,16 @@ export async function findMetaDaoDaoPda(
   creator: Address,
   nonce: bigint,
 ): Promise<ProgramDerivedAddress> {
-  if (typeof nonce !== "bigint" || nonce < 0n || nonce > (1n << 64n) - 1n)
+  if (typeof nonce !== "bigint" || nonce < 0n || nonce > (1n << 64n) - 1n) {
     throw new RangeError("MetaDAO nonce must be a u64 bigint");
+  }
+
   return getProgramDerivedAddress({
     programAddress: METADAO_PROGRAM,
     seeds: ["dao", encoder.encode(creator), getU64Encoder().encode(nonce)],
   });
 }
+
 /** Get the MetaDAO v0.6 DAO address offline; inputs match {@link findMetaDaoDaoPda}. Does not check existence. */
 export async function getMetaDaoDaoAddress(
   creator: Address,

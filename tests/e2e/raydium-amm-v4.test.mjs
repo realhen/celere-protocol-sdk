@@ -1,19 +1,17 @@
+import {
+  InvalidAccountError,
+  InsufficientLiquidityError,
+  UnsupportedPoolFeatureError,
+  MissingAccountsError,
+  buildSwapInstructions,
+  getSwapRequirements,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
-import { buildSwapInstructions, getSwapRequirements } from "../../dist/index.js";
+
 import { raydiumAmmV4Fixture, AMM_V4_PROGRAM } from "../fixtures/raydium-amm-v4.mjs";
 
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
 function writeU64(account, offset, amount) {
   new DataView(
     account.data.buffer,
@@ -31,12 +29,10 @@ test("offline AMM v4 consumer discovers snapshots, builds native modes and trans
   try {
     for (const reverse of [false, true]) {
       const fixture = await raydiumAmmV4Fixture(signer.address, { reverse });
-      const unknown = value(
-        await getSwapRequirements({
-          ...fixture.request,
-          snapshot: { ...fixture.request.snapshot, accounts: {} },
-        }),
-      );
+      const unknown = await getSwapRequirements({
+        ...fixture.request,
+        snapshot: { ...fixture.request.snapshot, accounts: {} },
+      });
       assert.equal(unknown.protocol, null);
       assert.equal(unknown.missing[0].address, fixture.pool);
       const partial = {
@@ -46,7 +42,7 @@ test("offline AMM v4 consumer discovers snapshots, builds native modes and trans
           accounts: { [fixture.pool]: fixture.request.snapshot.accounts[fixture.pool] },
         },
       };
-      const discovered = value(await getSwapRequirements(partial));
+      const discovered = await getSwapRequirements(partial);
       assert.equal(discovered.protocol, "raydium-amm-v4");
       assert.equal(discovered.complete, false);
       for (const account of [
@@ -56,15 +52,20 @@ test("offline AMM v4 consumer discovers snapshots, builds native modes and trans
         fixture.mint1,
       ])
         assert.ok(discovered.missing.some((item) => item.address === account));
-      const incomplete = await buildSwapInstructions(partial);
-      assert.equal(incomplete.ok, false);
-      assert.equal(incomplete.error.code, "MISSING_ACCOUNTS");
-      assert.equal(value(await getSwapRequirements(fixture.request)).complete, true);
+      await assert.rejects(
+        () => buildSwapInstructions(partial),
+        (error) => {
+          assert.ok(error instanceof MissingAccountsError);
+          assert.equal(error.code, "MISSING_ACCOUNTS");
+          return true;
+        },
+      );
+      assert.equal((await getSwapRequirements(fixture.request)).complete, true);
       for (const amount of [
         { kind: "exactIn", amountIn: 1_000_001n },
         { kind: "exactOut", amountOut: 1_000_001n },
       ]) {
-        const build = value(await buildSwapInstructions({ ...fixture.request, amount }));
+        const build = await buildSwapInstructions({ ...fixture.request, amount });
         assert.equal(build.protocol, "raydium-amm-v4");
         assert.equal(build.execution.mayPartiallyFill, false);
         assert.equal(build.swapInstructions.length, 1);
@@ -96,7 +97,7 @@ test("offline AMM v4 consumer discovers snapshots, builds native modes and trans
   }
 });
 
-test("AMM v4 consumer receives structured errors for unqualified states, malformed snapshots and liquidity limits", async () => {
+test("AMM v4 consumer receives typed errors for unqualified states, malformed snapshots and liquidity limits", async () => {
   const signer = await generateKeyPairSigner();
   for (const [change, code] of [
     [
@@ -162,9 +163,29 @@ test("AMM v4 consumer receives structured errors for unqualified states, malform
   ]) {
     const fixture = await raydiumAmmV4Fixture(signer.address);
     change(fixture);
-    const result = await buildSwapInstructions(fixture.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, code, result.error.message);
-    assert.deepEqual(structuredClone(result), result);
+    await assert.rejects(
+      () => buildSwapInstructions(fixture.request),
+      (error) => {
+        assert.equal(error.code, code, error.message);
+        const expectedClass = {
+          INVALID_ACCOUNT: InvalidAccountError,
+          INSUFFICIENT_LIQUIDITY: InsufficientLiquidityError,
+          UNSUPPORTED_POOL_FEATURE: UnsupportedPoolFeatureError,
+        }[code];
+        assert.ok(error instanceof expectedClass);
+        if (error instanceof InvalidAccountError) {
+          assert.ok(error.address in fixture.request.snapshot.accounts);
+        } else {
+          assert.equal(error.protocol, "raydium-amm-v4");
+        }
+        if (error instanceof UnsupportedPoolFeatureError) {
+          assert.equal(typeof error.feature, "string");
+          assert.ok(error.feature.length > 0);
+        }
+        const serialized = { ...error, message: error.message };
+        assert.deepEqual(structuredClone(serialized), serialized);
+        return true;
+      },
+    );
   }
 });

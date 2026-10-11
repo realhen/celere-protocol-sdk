@@ -1,5 +1,5 @@
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import { WRAPPED_SOL_MINT } from "../../dist/accounts/tokens.js";
+import { WRAPPED_SOL_MINT } from "../../dist/protocols/accounts/tokens.js";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {

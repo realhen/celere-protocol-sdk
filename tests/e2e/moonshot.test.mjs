@@ -1,24 +1,18 @@
+import {
+  InvalidAccountError,
+  UnsupportedPoolFeatureError,
+  buildSwapInstructions,
+  getSwapRequirements,
+  compileTransaction,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getAddressEncoder } from "@solana/kit";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
-import {
-  buildSwapInstructions,
-  getSwapRequirements,
-  compileTransaction,
-} from "../../dist/index.js";
+
 import { MOONSHOT_PROGRAM } from "../../dist/protocols/moonshot/curve.js";
 import { moonshotFixture } from "../fixtures/moonshot.mjs";
-
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, v) => (typeof v === "bigint" ? String(v) : v)),
-  );
-  return result.value;
-}
 
 test("Moonshot public consumer discovers supplied accounts and compiles all qualified native modes offline", async () => {
   for (const curveType of [1, 2])
@@ -37,13 +31,13 @@ test("Moonshot public consumer discovers supplied accounts and compiles all qual
         const missing = structuredClone(request);
         delete missing.snapshot.accounts[f.config];
         assert.equal(
-          value(await getSwapRequirements(missing)).missing.some(
+          (await getSwapRequirements(missing)).missing.some(
             (a) => a.address === f.config,
           ),
           true,
         );
-        assert.equal(value(await getSwapRequirements(request)).complete, true);
-        const build = value(await buildSwapInstructions(request));
+        assert.equal((await getSwapRequirements(request)).complete, true);
+        const build = await buildSwapInstructions(request);
         assert.equal(build.protocol, "moonshot");
         assert.equal(build.execution.mayPartiallyFill, false);
         assert.equal(build.swapInstructions[0].programAddress, MOONSHOT_PROGRAM);
@@ -54,35 +48,48 @@ test("Moonshot public consumer discovers supplied accounts and compiles all qual
             ? { input: "nativeSol", output: "spl" }
             : { input: "spl", output: "nativeSol" },
         );
-        const compiled = value(
-          compileTransaction({
-            instructions: build.instructions,
-            feePayer: request.owner,
-            lifetime: { blockhash: SYSTEM_PROGRAM_ADDRESS, lastValidBlockHeight: 100n },
-          }),
-        );
+        const compiled = compileTransaction({
+          instructions: build.instructions,
+          feePayer: request.owner,
+          lifetime: { blockhash: SYSTEM_PROGRAM_ADDRESS, lastValidBlockHeight: 100n },
+        });
         assert.ok(compiled.byteLength <= 1232);
         assert.deepEqual(structuredClone(build), build);
       }
 });
 
-test("Moonshot rejects unsupported curves, token programs, and malformed state through structured errors", async () => {
+test("Moonshot rejects unsupported curves, token programs, and malformed state through typed errors", async () => {
   for (const curveType of [0, 3, 4]) {
     const f = await moonshotFixture(SYSTEM_PROGRAM_ADDRESS, { curveType });
-    const result = await buildSwapInstructions(f.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, "UNSUPPORTED_POOL_FEATURE");
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.ok(error instanceof UnsupportedPoolFeatureError);
+        assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+        return true;
+      },
+    );
   }
   const token = await moonshotFixture(SYSTEM_PROGRAM_ADDRESS);
   token.request.snapshot.accounts[token.mint].owner = TOKEN_2022_PROGRAM_ADDRESS;
-  const tokenResult = await buildSwapInstructions(token.request);
-  assert.equal(tokenResult.ok, false);
-  assert.equal(tokenResult.error.code, "UNSUPPORTED_POOL_FEATURE");
+  await assert.rejects(
+    () => buildSwapInstructions(token.request),
+    (error) => {
+      assert.ok(error instanceof UnsupportedPoolFeatureError);
+      assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+      return true;
+    },
+  );
   const invalid = await moonshotFixture(SYSTEM_PROGRAM_ADDRESS);
   invalid.request.snapshot.accounts[invalid.pool].data[80] ^= 1;
-  const rejected = await buildSwapInstructions(invalid.request);
-  assert.equal(rejected.ok, false);
-  assert.equal(rejected.error.code, "INVALID_ACCOUNT");
+  await assert.rejects(
+    () => buildSwapInstructions(invalid.request),
+    (error) => {
+      assert.ok(error instanceof InvalidAccountError);
+      assert.equal(error.code, "INVALID_ACCOUNT");
+      return true;
+    },
+  );
 });
 
 test("Moonshot consumer rejects aliased fees, unknown state and settlement overflows before producing instructions", async () => {
@@ -90,10 +97,12 @@ test("Moonshot consumer rejects aliased fees, unknown state and settlement overf
     const f = await moonshotFixture(SYSTEM_PROGRAM_ADDRESS, { label: `alias:${target}` });
     const key = target === "owner" ? f.request.owner : f[target];
     f.request.snapshot.accounts[f.config].data.set(getAddressEncoder().encode(key), 136);
-    const result = await buildSwapInstructions(f.request);
-    assert.equal(result.ok, false);
-    assert.ok(
-      ["UNSUPPORTED_POOL_FEATURE", "INVALID_ACCOUNT"].includes(result.error.code),
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.ok(["UNSUPPORTED_POOL_FEATURE", "INVALID_ACCOUNT"].includes(error.code));
+        return true;
+      },
     );
   }
   for (const target of ["pool", "config"]) {
@@ -101,9 +110,14 @@ test("Moonshot consumer rejects aliased fees, unknown state and settlement overf
     f.request.snapshot.accounts[f[target]].data[
       f.request.snapshot.accounts[f[target]].data.length - 1
     ] = 1;
-    const result = await buildSwapInstructions(f.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, "UNSUPPORTED_POOL_FEATURE");
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.ok(error instanceof UnsupportedPoolFeatureError);
+        assert.equal(error.code, "UNSUPPORTED_POOL_FEATURE");
+        return true;
+      },
+    );
   }
   for (const target of ["dexFee", "helioFee", "pool", "user", "owner"]) {
     const buy = target !== "owner";
@@ -121,8 +135,13 @@ test("Moonshot consumer rejects aliased fees, unknown state and settlement overf
       f.request.snapshot.accounts[
         target === "owner" ? f.request.owner : f[target]
       ].lamports = (1n << 64n) - 1n;
-    const result = await buildSwapInstructions(f.request);
-    assert.equal(result.ok, false);
-    assert.equal(result.error.code, "INVALID_ACCOUNT");
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.ok(error instanceof InvalidAccountError);
+        assert.equal(error.code, "INVALID_ACCOUNT");
+        return true;
+      },
+    );
   }
 });

@@ -3,7 +3,7 @@
  * sqrt-price, and swap arithmetic, revision ed1eb41519d5355755f7df52b43fa9610938b60b.
  * See NOTICE.md. No Raydium JavaScript SDK implementation is included.
  */
-import { ceilDiv } from "../../core/amounts";
+import { ceilDiv } from "../amounts";
 
 export const CLMM_Q64 = 1n << 64n;
 export const CLMM_MIN_TICK = -443636;
@@ -37,9 +37,13 @@ const FACTORS = [
 export function clmmSqrtPriceAtTick(tick: number): bigint {
   const absolute = Math.abs(tick);
   let ratio = CLMM_Q64;
+
   for (let bit = 0; bit < FACTORS.length; bit++) {
-    if ((absolute & (1 << bit)) !== 0) ratio = (ratio * FACTORS[bit]!) >> 64n;
+    if ((absolute & (1 << bit)) !== 0) {
+      ratio = (ratio * FACTORS[bit]!) >> 64n;
+    }
   }
+
   return tick > 0 ? ((1n << 128n) - 1n) / ratio : ratio;
 }
 
@@ -54,6 +58,7 @@ function deltas(
   const token0Numerator = (liquidity << 64n) * (high - low);
   const token0Denominator = low * high;
   const token1Numerator = liquidity * (high - low);
+
   return zeroForOne
     ? {
         input: ceilDiv(token0Numerator, token0Denominator),
@@ -79,13 +84,16 @@ export function clmmSwapStep(
   exactIn: boolean,
   zeroForOne: boolean,
 ): { price: bigint; input: bigint; output: bigint; fee: bigint } {
+  // Compare the spendable amount with the amount needed to reach the target.
   const available = exactIn
     ? (remaining * (FEE_DENOMINATOR - feeRate)) / FEE_DENOMINATOR
     : remaining;
   const targetAmounts = deltas(price, target, liquidity, zeroForOne);
   let next = target;
+
   if (available < (exactIn ? targetAmounts.input : targetAmounts.output)) {
     const numerator = liquidity << 64n;
+
     if (exactIn) {
       next = zeroForOne
         ? ceilDiv(numerator * price, numerator + available * price)
@@ -96,6 +104,8 @@ export function clmmSwapStep(
         : ceilDiv(numerator * price, numerator - available * price);
     }
   }
+
+  // A partial exact-input step consumes the remaining budget, including its fee.
   const amounts =
     next === target ? targetAmounts : deltas(price, next, liquidity, zeroForOne);
   const output = !exactIn && amounts.output > remaining ? remaining : amounts.output;
@@ -103,5 +113,6 @@ export function clmmSwapStep(
     exactIn && next !== target
       ? remaining - amounts.input
       : ceilDiv(amounts.input * feeRate, FEE_DENOMINATOR - feeRate);
+
   return { price: next, input: amounts.input, output, fee };
 }

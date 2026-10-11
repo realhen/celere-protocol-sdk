@@ -27,6 +27,7 @@ export interface HeavenSellAccounts {
   readonly tokenBVault: Address;
   readonly protocolConfig: Address;
 }
+
 /**
  * Native arguments for {@link sell}.
  *
@@ -63,6 +64,7 @@ export interface HeavenSellArgs {
    */
   readonly minimumAmountOut: bigint;
 }
+
 /** Encodes the native `sell` arguments and instruction discriminator. */
 const dataEncoder = getStructEncoder([
   ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
@@ -70,6 +72,7 @@ const dataEncoder = getStructEncoder([
   ["minimumAmountOut", getU64Encoder()],
   ["eventDataLength", getU32Encoder()],
 ]);
+
 /**
  * Creates a Heaven sell instruction for a specified input budget.
  *

@@ -1,3 +1,8 @@
+import {
+  InsufficientLiquidityError,
+  buildSwapInstructions,
+  compileTransaction,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -8,22 +13,13 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { buildSwapInstructions, compileTransaction } from "../../dist/index.js";
+
 import { moonshotFixture } from "../fixtures/moonshot.mjs";
 
 const endpoint = process.env.CELERE_SURFPOOL_URL;
 if (endpoint && !["127.0.0.1", "localhost", "[::1]"].includes(new URL(endpoint).hostname))
   throw new Error("Native Moonshot tests only accept loopback simulators");
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, item) =>
-      typeof item === "bigint" ? item.toString() : item,
-    ),
-  );
-  return result.value;
-}
+
 async function rpc(method, params = []) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -65,16 +61,14 @@ async function tokenAmount(key) {
 }
 async function send(build, signer) {
   const latest = (await rpc("getLatestBlockhash", [{ commitment: "confirmed" }])).value;
-  const compiled = value(
-    compileTransaction({
-      instructions: build.instructions,
-      feePayer: signer.address,
-      lifetime: {
-        blockhash: latest.blockhash,
-        lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
-      },
-    }),
-  );
+  const compiled = compileTransaction({
+    instructions: build.instructions,
+    feePayer: signer.address,
+    lifetime: {
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
+    },
+  });
   const signed = await signTransaction([signer.keyPair], compiled.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
@@ -104,9 +98,7 @@ test(
               kind === "exactIn"
                 ? fixture.request.amount
                 : { kind, amountOut: buy ? 1_000_000_000_001n : 1_000_001n };
-            const build = value(
-              await buildSwapInstructions({ ...fixture.request, amount }),
-            );
+            const build = await buildSwapInstructions({ ...fixture.request, amount });
             await install(fixture, signer);
             const tokenBefore = await tokenAmount(fixture.user),
               solBefore = await solAmount(signer.address);
@@ -179,9 +171,7 @@ test(
             kind === "exactIn"
               ? original.request.amount
               : { kind, amountOut: buy ? 1_000_000_000_001n : 1_000_001n };
-          const build = value(
-            await buildSwapInstructions({ ...original.request, amount }),
-          );
+          const build = await buildSwapInstructions({ ...original.request, amount });
           const adverse = await moonshotFixture(signer.address, {
             curveType,
             buy,
@@ -202,9 +192,14 @@ test(
             position:
               curveType === 1 ? 800_000_000_000_000_000n : 815_000_000_000_000_000n,
           });
-          const rejected = await buildSwapInstructions({ ...complete.request, amount });
-          assert.equal(rejected.ok, false);
-          assert.equal(rejected.error.code, "INSUFFICIENT_LIQUIDITY");
+          await assert.rejects(
+            () => buildSwapInstructions({ ...complete.request, amount }),
+            (error) => {
+              assert.ok(error instanceof InsufficientLiquidityError);
+              assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+              return true;
+            },
+          );
           await install(complete, signer);
           await assertUnchangedFailure(
             build,
@@ -234,7 +229,7 @@ test(
           kind === "exactIn"
             ? { kind, amountIn: 1_000_001n }
             : { kind, amountOut: 2_000_000_000_000n };
-        const build = value(await buildSwapInstructions({ ...fixture.request, amount }));
+        const build = await buildSwapInstructions({ ...fixture.request, amount });
         assert.equal(build.execution.mayPartiallyFill, false);
         assert.ok(position + build.quote.expectedAmountOut > threshold);
         await install(fixture, signer);
@@ -280,13 +275,11 @@ test(
           kind === "exactIn"
             ? { kind, amountIn: curveType === 1 ? 20_000_000_001n : 10_000_000_001n }
             : { kind, amountOut: 60_000_000_000_000_000n };
-        const oversize = value(
-          await buildSwapInstructions({
-            ...old.request,
-            amount: allocationAmount,
-            slippageBps: 9999,
-          }),
-        );
+        const oversize = await buildSwapInstructions({
+          ...old.request,
+          amount: allocationAmount,
+          slippageBps: 9999,
+        });
         assert.equal(oversize.execution.mayPartiallyFill, false);
         assert.ok(
           750_000_000_000_000_000n + oversize.quote.expectedAmountOut <=
@@ -297,13 +290,19 @@ test(
           label,
           position: 790_000_000_000_000_000n,
         });
-        const declined = await buildSwapInstructions({
-          ...depleted.request,
-          amount: allocationAmount,
-          slippageBps: 9999,
-        });
-        assert.equal(declined.ok, false);
-        assert.equal(declined.error.code, "INSUFFICIENT_LIQUIDITY");
+        await assert.rejects(
+          () =>
+            buildSwapInstructions({
+              ...depleted.request,
+              amount: allocationAmount,
+              slippageBps: 9999,
+            }),
+          (error) => {
+            assert.ok(error instanceof InsufficientLiquidityError);
+            assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+            return true;
+          },
+        );
         await install(depleted, signer);
         const vaultBefore = await tokenAmount(depleted.vault);
         const dexBefore = await solAmount(depleted.dexFee);
@@ -332,7 +331,7 @@ test(
       f.request.snapshot.accounts[f.user] = null;
       const amount =
         kind === "exactIn" ? f.request.amount : { kind, amountOut: 1_000_000_000_001n };
-      const build = value(await buildSwapInstructions({ ...f.request, amount }));
+      const build = await buildSwapInstructions({ ...f.request, amount });
       assert.equal(build.setupInstructions.length, 1);
       await install(f, signer);
       const before = await solAmount(signer.address);
@@ -360,9 +359,11 @@ test(
     for (const buy of [true, false]) {
       const f = await moonshotFixture(signer.address, { buy, label: `small:${buy}` });
       const amount = { kind: "exactIn", amountIn: buy ? 1n : 20_000_000n };
-      const build = value(
-        await buildSwapInstructions({ ...f.request, amount, slippageBps: 9999 }),
-      );
+      const build = await buildSwapInstructions({
+        ...f.request,
+        amount,
+        slippageBps: 9999,
+      });
       if (!buy) {
         assert.equal(build.quote.expectedAmountOut, 1n);
         assert.equal(build.quote.minimumAmountOut, 0n);

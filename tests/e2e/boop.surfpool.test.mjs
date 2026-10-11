@@ -1,3 +1,9 @@
+import {
+  InsufficientLiquidityError,
+  UnsupportedFillPolicyError,
+  createProtocolSdk,
+  compileTransaction,
+} from "../../dist/index.js";
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
@@ -8,7 +14,7 @@ import {
   getBase64EncodedWireTransaction,
   signTransaction,
 } from "@solana/kit";
-import { createProtocolSdk, compileTransaction } from "../../dist/index.js";
+
 import { buy_token, sell_token } from "../../dist/protocols/boop/instructions/index.js";
 import { boopAdapter } from "../../dist/protocols/boop/adapter.js";
 const { buildSwapInstructions } = createProtocolSdk([boopAdapter]);
@@ -58,8 +64,8 @@ async function send(instruction, signer) {
       lastValidBlockHeight: BigInt(latest.lastValidBlockHeight),
     },
   });
-  assert.equal(result.ok, true);
-  const signed = await signTransaction([signer.keyPair], result.value.transaction);
+
+  const signed = await signTransaction([signer.keyPair], result.transaction);
   return rpc("sendTransaction", [
     getBase64EncodedWireTransaction(signed),
     { encoding: "base64", preflightCommitment: "confirmed" },
@@ -95,16 +101,6 @@ function raw(f, signer, reverse) {
       );
 }
 
-function value(result) {
-  assert.equal(
-    result.ok,
-    true,
-    JSON.stringify(result, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value,
-    ),
-  );
-  return result.value;
-}
 function accountIndex(receipt, address) {
   return receipt.transaction.message.accountKeys.findIndex(
     (key) => (typeof key === "string" ? key : key.pubkey) === address,
@@ -145,7 +141,7 @@ function write(data, offset, amount) {
 }
 async function checkSwap(f, signer, context) {
   await install(f, signer);
-  const built = value(await buildSwapInstructions(f.request));
+  const built = await buildSwapInstructions(f.request);
   const signature = await send(built.instructions, signer);
   const receipt = await rpc("getTransaction", [
     signature,
@@ -211,9 +207,14 @@ test(
     const signer = await generateKeyPairSigner();
     const f = await boopFixture(signer.address, { label: "boundary" });
     f.request.amount.amountIn = 80_000_000_003n;
-    const full = await buildSwapInstructions({ ...f.request, fillPolicy: "requireFull" });
-    assert.equal(full.ok, false);
-    assert.equal(full.error.code, "UNSUPPORTED_FILL_POLICY");
+    await assert.rejects(
+      () => buildSwapInstructions({ ...f.request, fillPolicy: "requireFull" }),
+      (error) => {
+        assert.ok(error instanceof UnsupportedFillPolicyError);
+        assert.equal(error.code, "UNSUPPORTED_FILL_POLICY");
+        return true;
+      },
+    );
     const { built, state } = await checkSwap(f, signer, context);
     assert.equal(built.execution.mayPartiallyFill, true);
     assert.ok(built.quote.expectedAmountIn < built.quote.amountIn);
@@ -247,7 +248,7 @@ test(
     for (const reverse of [false, true]) {
       const f = await boopFixture(signer.address, { reverse, label: "failure" });
       f.request.amount.amountIn = reverse ? 1_000_000_000_000_099n : 100_000_099n;
-      const built = value(await buildSwapInstructions(f.request));
+      const built = await buildSwapInstructions(f.request);
       const newSol = reverse ? 5_000_000_000n : 20_000_000_000n;
       const newTokens =
         (30_000_000_000n * 1_000_000_000_000_000_000n) / (newSol + 30_000_000_000n);
@@ -276,9 +277,14 @@ test(
     const f = await boopFixture(signer.address, { reverse: true, label: "failure" });
     f.request.amount.amountIn = 300_000_000_000_000_003n;
     write(f.request.snapshot.accounts[f.userToken].data, 64, 400_000_000_000_000_003n);
-    const rejected = await buildSwapInstructions(f.request);
-    assert.equal(rejected.ok, false);
-    assert.equal(rejected.error.code, "INSUFFICIENT_LIQUIDITY");
+    await assert.rejects(
+      () => buildSwapInstructions(f.request),
+      (error) => {
+        assert.ok(error instanceof InsufficientLiquidityError);
+        assert.equal(error.code, "INSUFFICIENT_LIQUIDITY");
+        return true;
+      },
+    );
     await install(f, signer);
     const before = await Promise.all([
       account(f.pool),

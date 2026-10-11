@@ -1,12 +1,13 @@
-import { assertAmount, ceilDiv, maximumInput, minimumOutput } from "../../core/amounts";
-import { fail } from "../../core/errors";
-import type { SwapQuote, SwapRequest } from "../../core/types";
+import { InvalidRequestError } from "../../shared/errors";
+import { InsufficientLiquidityError, UnsupportedSwapModeError } from "../errors";
+import { assertAmount, ceilDiv, maximumInput, minimumOutput } from "../amounts";
+
+import type { SwapQuote, SwapRequest } from "../types";
 import type { Address } from "@solana/kit";
 import { AMM_QUOTE_MINT, type PumpAmmFeeRates } from "./amm-state";
 
 function insufficientLiquidity(): never {
-  fail({
-    code: "INSUFFICIENT_LIQUIDITY",
+  throw new InsufficientLiquidityError({
     protocol: "pump-amm",
     message: "Swap exceeds usable Pump AMM reserves or rounds to zero",
   });
@@ -16,6 +17,7 @@ function fees(amount: bigint, rates: PumpAmmFeeRates, quoteMint: Address) {
   const lp = ceilDiv(amount * rates.lpBps, 10_000n);
   const protocol = ceilDiv(amount * rates.protocolBps, 10_000n);
   const creator = ceilDiv(amount * rates.creatorBps, 10_000n);
+
   return {
     lp,
     total: lp + protocol + creator,
@@ -43,24 +45,32 @@ export function quotePumpAmm(
   quoteMint: Address = AMM_QUOTE_MINT,
   route = false,
 ): SwapQuote {
+  // Virtual reserves affect pricing; retained fees still limit spendable quote liquidity.
   const effectiveQuoteReserve = quoteReserve + virtualQuoteReserves;
-  if (baseReserve === 0n || effectiveQuoteReserve <= 0n || feeBuckets > quoteReserve)
+  if (baseReserve === 0n || effectiveQuoteReserve <= 0n || feeBuckets > quoteReserve) {
     insufficientLiquidity();
+  }
+
   if (request.amount.kind === "exactOut") {
-    if (!isBuy)
-      fail({
-        code: "UNSUPPORTED_SWAP_MODE",
+    if (!isBuy) {
+      throw new UnsupportedSwapModeError({
         protocol: "pump-amm",
         mode: "exactOut",
         message:
           "Pump AMM has no supported native base-to-quote exact-output instruction",
       });
+    }
+
     const amountOut = request.amount.amountOut;
-    if (amountOut >= baseReserve) insufficientLiquidity();
+    if (amountOut >= baseReserve) {
+      insufficientLiquidity();
+    }
+
     const netQuote = ceilDiv(effectiveQuoteReserve * amountOut, baseReserve - amountOut);
     const charged = fees(netQuote, rates, quoteMint);
     const expectedAmountIn = netQuote + charged.total;
     assertAmount(expectedAmountIn, "expectedAmountIn");
+
     return {
       kind: "exactOut",
       amountOut,
@@ -70,33 +80,55 @@ export function quotePumpAmm(
       fees: charged.breakdown,
     };
   }
+
   const amountIn = request.amount.amountIn;
   let expectedAmountOut: bigint;
   let charged: ReturnType<typeof fees>;
+
   if (isBuy) {
+    // Fees round independently before the native buy formula removes its one-atom margin.
     let netQuote =
       (amountIn * 10_000n) /
       (10_000n + rates.lpBps + rates.protocolBps + rates.creatorBps);
     charged = fees(netQuote, rates, quoteMint);
-    if (route || netQuote + charged.total > amountIn) netQuote = amountIn - charged.total;
-    if (netQuote <= 1n) insufficientLiquidity();
+
+    // Routes consume the remainder; single-hop buys keep the initially grossed-down net.
+    if (route || netQuote + charged.total > amountIn) {
+      netQuote = amountIn - charged.total;
+    }
+
+    if (netQuote <= 1n) {
+      insufficientLiquidity();
+    }
+
     expectedAmountOut =
       (baseReserve * (netQuote - 1n)) / (effectiveQuoteReserve + netQuote - 1n);
   } else {
     const grossQuote = (effectiveQuoteReserve * amountIn) / (baseReserve + amountIn);
     charged = fees(grossQuote, rates, quoteMint);
-    if (grossQuote - charged.lp > quoteReserve - feeBuckets) insufficientLiquidity();
+
+    // LP fees stay in the vault; protocol and creator fee buckets are already reserved.
+    if (grossQuote - charged.lp > quoteReserve - feeBuckets) {
+      insufficientLiquidity();
+    }
+
     expectedAmountOut = grossQuote - charged.total;
   }
-  if (expectedAmountOut <= 0n) insufficientLiquidity();
+
+  if (expectedAmountOut <= 0n) {
+    insufficientLiquidity();
+  }
+
   assertAmount(expectedAmountOut, "expectedAmountOut");
+
   const minimumAmountOut = minimumOutput(expectedAmountOut, request.slippageBps);
-  if (minimumAmountOut === 0n)
-    fail({
-      code: "INVALID_REQUEST",
+  if (minimumAmountOut === 0n) {
+    throw new InvalidRequestError({
       field: "slippageBps",
       message: "Slippage would permit zero output",
     });
+  }
+
   return {
     kind: "exactIn",
     amountIn,
