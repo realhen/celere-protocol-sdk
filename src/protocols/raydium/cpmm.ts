@@ -1,8 +1,15 @@
 /** Adapted from raydium-io/raydium-cp-swap (Apache-2.0); see NOTICE.md. */
-import { getAddressDecoder, type Address } from "@solana/kit";
+import type { Address } from "@solana/kit";
 import { readMint, readTokenAccount } from "../../accounts/tokens";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
+import {
+  invalidAccount,
+  accountDataView,
+  matchesDiscriminator,
+  readAddress,
+  readU64,
+} from "../shared/accounts";
 import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
@@ -34,7 +41,6 @@ const FEE_DENOMINATOR = 1_000_000n;
 const POOL_DISCRIMINATOR = [247, 237, 227, 245, 215, 195, 222, 70];
 const CONFIG_DISCRIMINATOR = [218, 244, 33, 104, 203, 203, 43, 111];
 const OBSERVATION_DISCRIMINATOR = [122, 174, 197, 53, 129, 9, 165, 132];
-const addressDecoder = getAddressDecoder();
 
 interface PoolState {
   readonly config: Address;
@@ -68,10 +74,6 @@ interface CurveQuote {
   readonly creatorFee: bigint;
 }
 
-function invalidAccount(account: Address, message: string): never {
-  fail({ code: "INVALID_ACCOUNT", message, address: account });
-}
-
 function validateLayout(
   account: SnapshotAccount,
   length: number,
@@ -79,24 +81,13 @@ function validateLayout(
 ): void {
   if (
     account.data.length !== length ||
-    !discriminator.every((byte, index) => account.data[index] === byte)
+    !matchesDiscriminator(account.data, discriminator)
   ) {
     invalidAccount(
       account.address,
       "Unsupported Raydium CPMM account layout or discriminator",
     );
   }
-}
-
-function readAddress(data: Uint8Array, offset: number): Address {
-  return addressDecoder.decode(data.subarray(offset, offset + 32));
-}
-
-function readU64(data: Uint8Array, offset: number): bigint {
-  return new DataView(data.buffer, data.byteOffset, data.byteLength).getBigUint64(
-    offset,
-    true,
-  );
 }
 
 function decodePool(request: SwapRequest): PoolState {
@@ -109,9 +100,11 @@ function decodePool(request: SwapRequest): PoolState {
   validateLayout(account, 637, POOL_DISCRIMINATOR);
   const data = account.data;
   const creatorFeeOn = data[389]!;
+
   if (creatorFeeOn > 2 || data[390]! > 1 || data[329]! > 7) {
     invalidAccount(request.pool, "Unsupported Raydium CPMM pool flags");
   }
+
   const pool: PoolState = {
     config: readAddress(data, 8),
     vault0: readAddress(data, 72),
@@ -131,6 +124,7 @@ function decodePool(request: SwapRequest): PoolState {
     creatorFeeOn,
     creatorFeeEnabled: data[390] === 1,
   };
+
   if (pool.mint0 === pool.mint1 || pool.vault0 === pool.vault1) {
     invalidAccount(request.pool, "Pool token mints and vaults must be distinct");
   }
@@ -144,6 +138,7 @@ function decodePool(request: SwapRequest): PoolState {
       field: "inputMint",
     });
   }
+
   return pool;
 }
 
@@ -157,15 +152,18 @@ async function readFees(request: SwapRequest, pool: PoolState): Promise<FeeRates
   validateLayout(account, 236, CONFIG_DISCRIMINATOR);
   const data = account.data;
   const [expectedConfig, bump] = await findRaydiumCpmmConfigPda(
-    new DataView(data.buffer, data.byteOffset, data.byteLength).getUint16(10, true),
+    accountDataView(data).getUint16(10, true),
   );
+
   if (pool.config !== expectedConfig || data[8] !== bump || data[9]! > 1) {
     invalidAccount(pool.config, "Invalid Raydium CPMM configuration address or flags");
   }
+
   const trade = readU64(data, 12);
   const creator = pool.creatorFeeEnabled ? readU64(data, 108) : 0n;
   const protocol = readU64(data, 20);
   const fund = readU64(data, 28);
+
   if (
     trade + creator >= FEE_DENOMINATOR ||
     trade + creator === 0n ||
@@ -173,6 +171,7 @@ async function readFees(request: SwapRequest, pool: PoolState): Promise<FeeRates
   ) {
     invalidAccount(pool.config, "Invalid Raydium CPMM fee rates");
   }
+
   return { trade, creator };
 }
 
@@ -205,6 +204,7 @@ function quoteCurve(
   let output: bigint;
   let tradeFee: bigint;
   let creatorFee: bigint;
+
   if (request.amount.kind === "exactIn") {
     input = request.amount.amountIn;
     const totalFee = fee(input, rates.trade + (creatorOnInput ? rates.creator : 0n));
@@ -213,27 +213,41 @@ function quoteCurve(
       : 0n;
     tradeFee = totalFee - creatorFee;
     const curveInput = input - totalFee;
-    if (curveInput <= 0n)
+
+    if (curveInput <= 0n) {
       insufficientLiquidity("Input amount is consumed by rounded protocol fees");
+    }
+
     const curveOutput = (curveInput * outputReserve) / (inputReserve + curveInput);
-    if (!creatorOnInput) creatorFee = fee(curveOutput, rates.creator);
+
+    if (!creatorOnInput) {
+      creatorFee = fee(curveOutput, rates.creator);
+    }
+
     output = curveOutput - (creatorOnInput ? 0n : creatorFee);
   } else {
     output = request.amount.amountOut;
     const curveOutput = creatorOnInput ? output : beforeFee(output, rates.creator);
-    if (curveOutput >= outputReserve)
+
+    if (curveOutput >= outputReserve) {
       insufficientLiquidity("Requested output exhausts the pool reserve");
+    }
+
     creatorFee = creatorOnInput ? 0n : curveOutput - output;
     const curveInput = ceilDiv(inputReserve * curveOutput, outputReserve - curveOutput);
     input = beforeFee(curveInput, rates.trade + (creatorOnInput ? rates.creator : 0n));
     const totalFee = input - curveInput;
-    if (creatorOnInput)
+
+    if (creatorOnInput) {
       creatorFee = (totalFee * rates.creator) / (rates.trade + rates.creator);
+    }
+
     tradeFee = totalFee - (creatorOnInput ? creatorFee : 0n);
   }
   if (output <= 0n || input <= 0n || input > U64_MAX || output > U64_MAX) {
     insufficientLiquidity("Requested swap cannot produce nonzero u64 token amounts");
   }
+
   return { input, output, tradeFee, creatorFee };
 }
 
@@ -241,6 +255,7 @@ async function requirements(
   request: SwapRequest,
 ): Promise<readonly AccountRequirement[]> {
   const pool = decodePool(request);
+
   return [
     { address: request.pool, role: "pool" },
     { address: pool.config, role: "AMM configuration" },
@@ -257,18 +272,26 @@ async function build(
   tokenAccounts: ResolvedTokenAccounts,
 ): Promise<ProtocolSwap> {
   const pool = decodePool(request);
+
   if ((pool.status & 4) !== 0 || request.snapshot.unixTimestamp < pool.openTime) {
     invalidAccount(
       request.pool,
       "Raydium CPMM swaps are disabled or the pool has not opened",
     );
   }
+
   const [authority, authorityBump] = await findRaydiumCpmmAuthorityPda();
-  if (pool.authorityBump !== authorityBump)
+
+  if (pool.authorityBump !== authorityBump) {
     invalidAccount(request.pool, "Invalid pool authority bump");
+  }
+
   const observationAddress = await getRaydiumCpmmObservationAddress(request.pool);
-  if (pool.observation !== observationAddress)
+
+  if (pool.observation !== observationAddress) {
     invalidAccount(pool.observation, "Invalid observation address");
+  }
+
   const observation = requireAccount(
     request.snapshot,
     pool.observation,
@@ -276,11 +299,8 @@ async function build(
     RAYDIUM_CPMM_PROGRAM,
   );
   validateLayout(observation, 4075, OBSERVATION_DISCRIMINATOR);
-  const observationIndex = new DataView(
-    observation.data.buffer,
-    observation.data.byteOffset,
-    observation.data.byteLength,
-  ).getUint16(9, true);
+  const observationIndex = accountDataView(observation.data).getUint16(9, true);
+
   if (
     readAddress(observation.data, 11) !== request.pool ||
     observation.data[8]! > 1 ||
@@ -288,8 +308,10 @@ async function build(
   ) {
     invalidAccount(pool.observation, "Invalid observation state pool link or index");
   }
+
   const mint0 = readMint(request.snapshot, pool.mint0);
   const mint1 = readMint(request.snapshot, pool.mint1);
+
   if (
     mint0.tokenProgram !== pool.tokenProgram0 ||
     mint1.tokenProgram !== pool.tokenProgram1 ||
@@ -298,6 +320,7 @@ async function build(
   ) {
     invalidAccount(request.pool, "Pool token program or decimals do not match its mints");
   }
+
   const vault0 = readTokenAccount(
     request.snapshot,
     pool.vault0,
@@ -312,12 +335,18 @@ async function build(
     pool.tokenProgram1,
     authority,
   );
-  if (pool.fees0 > vault0.amount || pool.fees1 > vault1.amount)
+
+  if (pool.fees0 > vault0.amount || pool.fees1 > vault1.amount) {
     invalidAccount(request.pool, "Accrued pool fees exceed vault balances");
+  }
+
   const reserve0 = vault0.amount - pool.fees0;
   const reserve1 = vault1.amount - pool.fees1;
-  if (reserve0 === 0n || reserve1 === 0n)
+
+  if (reserve0 === 0n || reserve1 === 0n) {
     insufficientLiquidity("Pool reserves are empty after accrued fees");
+  }
+
   const zeroForOne = request.inputMint === pool.mint0;
   const creatorOnInput =
     pool.creatorFeeOn === 0 || pool.creatorFeeOn === (zeroForOne ? 1 : 2);
@@ -328,17 +357,23 @@ async function build(
     await readFees(request, pool),
     creatorOnInput,
   );
-  if ((zeroForOne ? vault0.amount : vault1.amount) + curve.input > U64_MAX)
+
+  if ((zeroForOne ? vault0.amount : vault1.amount) + curve.input > U64_MAX) {
     insufficientLiquidity("Swap would overflow the input token vault");
+  }
+
   const fees: SwapFee[] = [
     { kind: "trade", mint: request.inputMint, amount: curve.tradeFee },
   ];
-  if (curve.creatorFee > 0n)
+
+  if (curve.creatorFee > 0n) {
     fees.push({
       kind: "creator",
       mint: creatorOnInput ? request.inputMint : request.outputMint,
       amount: curve.creatorFee,
     });
+  }
+
   const quote: SwapQuote =
     request.amount.kind === "exactIn"
       ? {
@@ -357,6 +392,7 @@ async function build(
           expectedAmountOut: curve.output,
           fees,
         };
+
   const instructionAccounts = {
     owner: request.owner,
     authority,
@@ -372,6 +408,7 @@ async function build(
     outputMint: request.outputMint,
     observationState: pool.observation,
   };
+
   const instruction =
     quote.kind === "exactIn"
       ? swap_base_input(instructionAccounts, {
@@ -382,6 +419,7 @@ async function build(
           maximumAmountIn: quote.maximumAmountIn,
           amountOut: quote.amountOut,
         });
+
   return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
 

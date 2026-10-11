@@ -41,6 +41,7 @@ async function commonAddresses() {
     getPumpAmmFeeConfigAddress(),
     getPumpAmmEventAuthorityAddress(),
   ]);
+
   return { global, feeConfig, eventAuthority };
 }
 
@@ -56,8 +57,10 @@ async function requirements(
   if (
     request.snapshot.accounts[request.pool] === undefined ||
     request.snapshot.accounts[request.pool] === null
-  )
+  ) {
     return result;
+  }
+
   const pool = readAmmPool(request.snapshot, request.pool);
   result.push(
     { address: pool.baseMint, role: "Pump AMM base mint" },
@@ -78,6 +81,7 @@ async function requirements(
       optional: true,
     });
   }
+
   return result;
 }
 
@@ -91,40 +95,49 @@ async function build(
   if (
     !isBuy &&
     !(request.inputMint === pool.baseMint && request.outputMint === pool.quoteMint)
-  )
+  ) {
     fail({
       code: "INVALID_REQUEST",
       field: "inputMint",
       message: "Requested mints do not match the Pump AMM pool",
     });
+  }
+
+  // Validate pool identity and vault relationships before using balances in the quote.
   const [expectedPool, bump] = await findPumpAmmPoolPda(pool);
-  if (request.pool !== expectedPool || pool.bump !== bump)
+  if (request.pool !== expectedPool || pool.bump !== bump) {
     fail({
       code: "INVALID_ACCOUNT",
       address: request.pool,
       message: "Pump AMM pool PDA or bump does not match its state",
     });
+  }
+
   const { global, feeConfig, eventAuthority } = await commonAddresses();
   const globalState = readAmmGlobal(request.snapshot, global);
-  if (globalState.disabled & (isBuy ? 8 : 16))
+  if (globalState.disabled & (isBuy ? 8 : 16)) {
     fail({
       code: "UNSUPPORTED_POOL_FEATURE",
       protocol: "pump-amm",
       feature: "disabled-swap-direction",
       message: "Pump AMM global configuration disables this swap direction",
     });
+  }
+
   const base = readMint(request.snapshot, pool.baseMint);
   const quoteMint = readMint(request.snapshot, pool.quoteMint);
   const [expectedBaseVault, expectedQuoteVault] = await Promise.all([
     associatedTokenAddress(request.pool, pool.baseMint, base.tokenProgram),
     associatedTokenAddress(request.pool, pool.quoteMint, quoteMint.tokenProgram),
   ]);
-  if (pool.baseVault !== expectedBaseVault || pool.quoteVault !== expectedQuoteVault)
+  if (pool.baseVault !== expectedBaseVault || pool.quoteVault !== expectedQuoteVault) {
     fail({
       code: "INVALID_ACCOUNT",
       address: request.pool,
       message: "Pump AMM pool vault addresses are not canonical",
     });
+  }
+
   const baseVault = readTokenAccount(
     request.snapshot,
     pool.baseVault,
@@ -139,6 +152,8 @@ async function build(
     quoteMint.tokenProgram,
     request.pool,
   );
+
+  // The buyback ATA can be absent in the snapshot and created by this transaction.
   const buybackTokenAccount = await associatedTokenAddress(
     globalState.buybackRecipient,
     pool.quoteMint,
@@ -164,22 +179,28 @@ async function build(
       globalState.buybackRecipient,
     );
   }
+
   if (
     pool.isHolderReward &&
     pool.coinCreator !== (await getPumpHolderRewardsAddress(pool.baseMint))
-  )
+  ) {
     fail({
       code: "INVALID_ACCOUNT",
       address: request.pool,
       message: "Pump AMM holder-reward creator is not the canonical rewards PDA",
     });
+  }
+
   const canonical = pool.creator === (await getPumpPoolAuthorityAddress(pool.baseMint));
-  if (baseVault.amount === 0n)
+  if (baseVault.amount === 0n) {
     fail({
       code: "INSUFFICIENT_LIQUIDITY",
       protocol: "pump-amm",
       message: "Pump AMM base reserve is empty",
     });
+  }
+
+  // Resolve effective fee rates before applying the directional native quote formula.
   const rates = readAmmFees(
     request.snapshot,
     feeConfig,
@@ -202,6 +223,7 @@ async function build(
     rates,
     pool.quoteMint,
   );
+
   const instructionAccounts = {
     pool: request.pool,
     user: request.owner,
@@ -221,6 +243,7 @@ async function build(
     eventAuthority,
     program: PUMP_AMM_PROGRAM,
   };
+
   let instruction: Instruction;
   if (quote.kind === "exactOut") {
     assertAmount(quote.amountOut, "instructionAmount");
@@ -244,6 +267,7 @@ async function build(
       minQuoteAmountOut: quote.minimumAmountOut,
     });
   }
+
   return {
     quote,
     mayPartiallyFill: false,

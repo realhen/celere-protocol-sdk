@@ -1,13 +1,20 @@
-import { getAddressDecoder, type Address } from "@solana/kit";
+import type { Address } from "@solana/kit";
+import {
+  invalidAccount,
+  accountDataView,
+  readAddress,
+  readU128,
+  matchesDiscriminator,
+} from "../shared/accounts";
 import type { TickArrayFacade, WhirlpoolFacade } from "@orca-so/whirlpools-core";
 import { fail } from "../../core/errors";
 import type { SnapshotAccount } from "../../core/types";
 
 export { WHIRLPOOL_PROGRAM } from "./constants";
+
 const POOL_DISCRIMINATOR = Uint8Array.of(63, 149, 209, 12, 225, 128, 99, 9);
 const FIXED_TICK_DISCRIMINATOR = Uint8Array.of(69, 97, 189, 190, 110, 7, 66, 187);
 const DYNAMIC_TICK_DISCRIMINATOR = Uint8Array.of(17, 216, 246, 142, 225, 199, 218, 56);
-const decodeAddress = getAddressDecoder();
 
 export type Pool = WhirlpoolFacade & {
   whirlpoolsConfig: Address;
@@ -19,47 +26,37 @@ export type Pool = WhirlpoolFacade & {
   tokenVaultB: Address;
 };
 
-function invalid(account: SnapshotAccount, message: string): never {
-  return fail({ code: "INVALID_ACCOUNT", address: account.address, message });
-}
-function matches(data: Uint8Array, discriminator: Uint8Array): boolean {
-  return discriminator.every((byte, index) => data[index] === byte);
-}
-function view(data: Uint8Array): DataView {
-  return new DataView(data.buffer, data.byteOffset, data.byteLength);
-}
-function u128(data: DataView, offset: number): bigint {
-  return data.getBigUint64(offset, true) | (data.getBigUint64(offset + 8, true) << 64n);
-}
-function pubkey(data: Uint8Array, offset: number): Address {
-  return decodeAddress.decode(data.subarray(offset, offset + 32));
-}
-
 /** Decode the stable 653-byte Whirlpool layout without accepting unrelated account types. */
 export function decodePool(account: SnapshotAccount): Pool {
-  if (account.data.length !== 653 || !matches(account.data, POOL_DISCRIMINATOR))
-    invalid(account, "Invalid Whirlpool layout or discriminator");
-  const data = view(account.data);
+  if (
+    account.data.length !== 653 ||
+    !matchesDiscriminator(account.data, POOL_DISCRIMINATOR)
+  ) {
+    invalidAccount(account.address, "Invalid Whirlpool layout or discriminator");
+  }
+
+  const data = accountDataView(account.data);
+
   return {
-    whirlpoolsConfig: pubkey(account.data, 8),
+    whirlpoolsConfig: readAddress(account.data, 8),
     bump: account.data[40]!,
     tickSpacing: data.getUint16(41, true),
     feeTierIndex: data.getUint16(43, true),
     feeRate: data.getUint16(45, true),
     protocolFeeRate: data.getUint16(47, true),
-    liquidity: u128(data, 49),
-    sqrtPrice: u128(data, 65),
+    liquidity: readU128(data, 49),
+    sqrtPrice: readU128(data, 65),
     tickCurrentIndex: data.getInt32(81, true),
-    tokenMintA: pubkey(account.data, 101),
-    tokenVaultA: pubkey(account.data, 133),
-    feeGrowthGlobalA: u128(data, 165),
-    tokenMintB: pubkey(account.data, 181),
-    tokenVaultB: pubkey(account.data, 213),
-    feeGrowthGlobalB: u128(data, 245),
+    tokenMintA: readAddress(account.data, 101),
+    tokenVaultA: readAddress(account.data, 133),
+    feeGrowthGlobalA: readU128(data, 165),
+    tokenMintB: readAddress(account.data, 181),
+    tokenVaultB: readAddress(account.data, 213),
+    feeGrowthGlobalB: readU128(data, 245),
     rewardLastUpdatedTimestamp: data.getBigUint64(261, true),
     rewardInfos: Array.from({ length: 3 }, (_, index) => ({
-      emissionsPerSecondX64: u128(data, 269 + index * 128 + 96),
-      growthGlobalX64: u128(data, 269 + index * 128 + 112),
+      emissionsPerSecondX64: readU128(data, 269 + index * 128 + 96),
+      growthGlobalX64: readU128(data, 269 + index * 128 + 112),
     })),
   };
 }
@@ -70,34 +67,56 @@ export function decodeFixedArray(
   pool: Address,
   startTickIndex: number,
 ): TickArrayFacade {
-  if (matches(account.data, DYNAMIC_TICK_DISCRIMINATOR))
+  if (matchesDiscriminator(account.data, DYNAMIC_TICK_DISCRIMINATOR)) {
     fail({
       code: "UNSUPPORTED_POOL_FEATURE",
       protocol: "orca-whirlpool",
       feature: "dynamicTickArrays",
       message: "Dynamic Whirlpool tick arrays are not qualified in this release",
     });
-  if (account.data.length !== 9988 || !matches(account.data, FIXED_TICK_DISCRIMINATOR))
-    invalid(account, "Invalid fixed Whirlpool tick-array layout or discriminator");
-  const data = view(account.data);
-  if (data.getInt32(8, true) !== startTickIndex || pubkey(account.data, 9956) !== pool)
-    invalid(account, "Tick array does not match its pool and derived tick range");
+  }
+  if (
+    account.data.length !== 9988 ||
+    !matchesDiscriminator(account.data, FIXED_TICK_DISCRIMINATOR)
+  ) {
+    invalidAccount(
+      account.address,
+      "Invalid fixed Whirlpool tick-array layout or discriminator",
+    );
+  }
+
+  const data = accountDataView(account.data);
+  if (
+    data.getInt32(8, true) !== startTickIndex ||
+    readAddress(account.data, 9956) !== pool
+  ) {
+    invalidAccount(
+      account.address,
+      "Tick array does not match its pool and derived tick range",
+    );
+  }
+
   return {
     startTickIndex,
     ticks: Array.from({ length: 88 }, (_, index) => {
       const offset = 12 + index * 113;
-      if (account.data[offset]! > 1) invalid(account, "Invalid tick initialization flag");
-      const net = u128(data, offset + 1);
+      if (account.data[offset]! > 1) {
+        invalidAccount(account.address, "Invalid tick initialization flag");
+      }
+
+      // Interpret the stored u128 bits as the native signed liquidity delta.
+      const net = readU128(data, offset + 1);
+
       return {
         initialized: account.data[offset] === 1,
         liquidityNet: net >= 1n << 127n ? net - (1n << 128n) : net,
-        liquidityGross: u128(data, offset + 17),
-        feeGrowthOutsideA: u128(data, offset + 33),
-        feeGrowthOutsideB: u128(data, offset + 49),
+        liquidityGross: readU128(data, offset + 17),
+        feeGrowthOutsideA: readU128(data, offset + 33),
+        feeGrowthOutsideB: readU128(data, offset + 49),
         rewardGrowthsOutside: [
-          u128(data, offset + 65),
-          u128(data, offset + 81),
-          u128(data, offset + 97),
+          readU128(data, offset + 65),
+          readU128(data, offset + 81),
+          readU128(data, offset + 97),
         ],
       };
     }),

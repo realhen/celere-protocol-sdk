@@ -1,5 +1,12 @@
 /** Offline bigint adaptation of the ISC Meteora DLMM TypeScript SDK; see NOTICE.md. */
-import { getAddressDecoder, type Address } from "@solana/kit";
+import type { Address } from "@solana/kit";
+import {
+  invalidAccount,
+  accountDataView,
+  readAddress,
+  readU128,
+  matchesDiscriminator,
+} from "../shared/accounts";
 import { readMint, readTokenAccount, TOKEN_PROGRAM } from "../../accounts/tokens";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
@@ -14,7 +21,7 @@ import type {
 } from "../../core/types";
 
 import { METEORA_DLMM_PROGRAM } from "./constants";
-export * from "./dlmm-pda";
+
 import {
   findMeteoraDlmmPoolPda,
   getMeteoraDlmmReserveAddress,
@@ -25,10 +32,12 @@ import {
 } from "./dlmm-pda";
 import { swap2 } from "./instructions/dlmm/swap2";
 import { swap_exact_out2 } from "./instructions/dlmm/swap_exact_out2";
+
+export * from "./dlmm-pda";
 export { METEORA_DLMM_PROGRAM } from "./constants";
+
 const Q64 = 1n << 64n;
 const FEE_PRECISION = 1_000_000_000n;
-const decodeAddress = getAddressDecoder();
 const POOL_DISCRIMINATOR = [33, 11, 49, 98, 181, 101, 177, 13];
 const ARRAY_DISCRIMINATOR = [92, 142, 92, 220, 5, 148, 70, 181];
 const BITMAP_DISCRIMINATOR = [80, 111, 124, 113, 55, 237, 18, 5];
@@ -52,15 +61,14 @@ interface Pool {
   readonly volatilityReference: bigint;
   readonly indexReference: number;
 }
+
 interface Walk {
   readonly arrays: readonly Address[];
   readonly input: bigint;
   readonly output: bigint;
   readonly fee: bigint;
 }
-function invalid(accountAddress: Address, message: string): never {
-  fail({ code: "INVALID_ACCOUNT", address: accountAddress, message });
-}
+
 function unsupported(feature: string): never {
   fail({
     code: "UNSUPPORTED_POOL_FEATURE",
@@ -69,6 +77,7 @@ function unsupported(feature: string): never {
     message: `Meteora DLMM ${feature} is not qualified for this release`,
   });
 }
+
 function insufficient(): never {
   fail({
     code: "INSUFFICIENT_LIQUIDITY",
@@ -76,18 +85,7 @@ function insufficient(): never {
     message: "Requested swap exceeds the supplied DLMM liquidity",
   });
 }
-function viewOf(data: Uint8Array): DataView {
-  return new DataView(data.buffer, data.byteOffset, data.byteLength);
-}
-function readAddress(data: Uint8Array, offset: number): Address {
-  return decodeAddress.decode(data.subarray(offset, offset + 32));
-}
-function u128(view: DataView, offset: number): bigint {
-  return view.getBigUint64(offset, true) + (view.getBigUint64(offset + 8, true) << 64n);
-}
-function discriminator(data: Uint8Array, expected: readonly number[]): boolean {
-  return expected.every((byte, index) => data[index] === byte);
-}
+
 function decodePool(request: SwapRequest): Pool {
   const { data } = requireAccount(
     request.snapshot,
@@ -95,18 +93,33 @@ function decodePool(request: SwapRequest): Pool {
     "DLMM pool",
     METEORA_DLMM_PROGRAM,
   );
-  if (data.length !== 904 || !discriminator(data, POOL_DISCRIMINATOR))
-    invalid(request.pool, "Unsupported DLMM pool layout or discriminator");
-  const view = viewOf(data);
-  if (data[75] !== 0) unsupported("permissioned, customizable or v2 pool addressing");
-  if (data[82] !== 0) invalid(request.pool, "DLMM pool is disabled");
-  if (data[83]! > 1 || data[86]! > 1 || data[882]! > 1 || data[35]! > 2)
-    invalid(request.pool, "Unknown DLMM pool version or flags");
-  if (data[36] !== 0) unsupported("output-side fee collection");
-  if (data[880] !== 0 || data[881] !== 0) unsupported("Token-2022 pools");
-  if (data[35] === 2) unsupported("limit-order pools");
-  if (data.subarray(883).some((byte) => byte !== 0))
+  if (data.length !== 904 || !matchesDiscriminator(data, POOL_DISCRIMINATOR)) {
+    invalidAccount(request.pool, "Unsupported DLMM pool layout or discriminator");
+  }
+
+  const view = accountDataView(data);
+  if (data[75] !== 0) {
+    unsupported("permissioned, customizable or v2 pool addressing");
+  }
+  if (data[82] !== 0) {
+    invalidAccount(request.pool, "DLMM pool is disabled");
+  }
+  if (data[83]! > 1 || data[86]! > 1 || data[882]! > 1 || data[35]! > 2) {
+    invalidAccount(request.pool, "Unknown DLMM pool version or flags");
+  }
+  if (data[36] !== 0) {
+    unsupported("output-side fee collection");
+  }
+  if (data[880] !== 0 || data[881] !== 0) {
+    unsupported("Token-2022 pools");
+  }
+  if (data[35] === 2) {
+    unsupported("limit-order pools");
+  }
+  if (data.subarray(883).some((byte) => byte !== 0)) {
     unsupported("reserved pool features");
+  }
+
   const binStep = view.getUint16(80, true);
   const activeId = view.getInt32(76, true);
   const minBinId = view.getInt32(24, true);
@@ -127,25 +140,32 @@ function decodePool(request: SwapRequest): Pool {
     filterPeriod > decayPeriod ||
     reduction > 10_000n ||
     view.getUint16(32, true) > 10_000
-  )
-    invalid(request.pool, "Invalid DLMM bin range or fee parameters");
-  if (lastUpdate > request.snapshot.unixTimestamp || lastUpdate < 0n)
+  ) {
+    invalidAccount(request.pool, "Invalid DLMM bin range or fee parameters");
+  }
+  if (lastUpdate > request.snapshot.unixTimestamp || lastUpdate < 0n) {
     fail({
       code: "INVALID_SNAPSHOT_CONTEXT",
       message: "DLMM volatility state is newer than the caller's chain timestamp",
     });
+  }
+
   const maxVolatility = BigInt(view.getUint32(20, true));
   const volatilityAccumulator = BigInt(view.getUint32(40, true));
   let volatilityReference = BigInt(view.getUint32(44, true));
   let indexReference = view.getInt32(48, true);
-  if (volatilityAccumulator > maxVolatility || volatilityReference > maxVolatility)
-    invalid(request.pool, "Invalid DLMM volatility state");
+  if (volatilityAccumulator > maxVolatility || volatilityReference > maxVolatility) {
+    invalidAccount(request.pool, "Invalid DLMM volatility state");
+  }
+
+  // Reset the volatility reference only after the native filter period has elapsed.
   const elapsed = request.snapshot.unixTimestamp - lastUpdate;
   if (elapsed >= filterPeriod) {
     indexReference = activeId;
     volatilityReference =
       elapsed < decayPeriod ? (volatilityAccumulator * reduction) / 10_000n : 0n;
   }
+
   const pool: Pool = {
     data,
     view,
@@ -169,17 +189,20 @@ function decodePool(request: SwapRequest): Pool {
     pool.baseFee > 100_000_000n ||
     pool.mintX === pool.mintY ||
     pool.reserveX === pool.reserveY
-  )
-    invalid(request.pool, "Invalid DLMM fee or token pair");
+  ) {
+    invalidAccount(request.pool, "Invalid DLMM fee or token pair");
+  }
   if (!(
     (request.inputMint === pool.mintX && request.outputMint === pool.mintY) ||
     (request.inputMint === pool.mintY && request.outputMint === pool.mintX)
-  ))
+  )) {
     fail({
       code: "INVALID_REQUEST",
       field: "inputMint",
       message: "Requested token pair does not match the DLMM pool",
     });
+  }
+
   return pool;
 }
 
@@ -194,24 +217,31 @@ async function validateAddresses(request: SwapRequest, pool: Pool): Promise<void
     expectedPool !== request.pool ||
     bump !== pool.data[72] ||
     pool.view.getUint16(73, true) !== pool.binStep
-  )
-    invalid(request.pool, "Invalid DLMM pool PDA or seeds");
+  ) {
+    invalidAccount(request.pool, "Invalid DLMM pool PDA or seeds");
+  }
+
   for (const [mint, reserve] of [
     [pool.mintX, pool.reserveX],
     [pool.mintY, pool.reserveY],
   ] as const) {
-    if (reserve !== (await getMeteoraDlmmReserveAddress(request.pool, mint)))
-      invalid(reserve, "Invalid DLMM reserve PDA");
+    if (reserve !== (await getMeteoraDlmmReserveAddress(request.pool, mint))) {
+      invalidAccount(reserve, "Invalid DLMM reserve PDA");
+    }
   }
-  if (pool.oracle !== (await getMeteoraDlmmOracleAddress(request.pool)))
-    invalid(pool.oracle, "Invalid DLMM oracle PDA");
+  if (pool.oracle !== (await getMeteoraDlmmOracleAddress(request.pool))) {
+    invalidAccount(pool.oracle, "Invalid DLMM oracle PDA");
+  }
 }
 
 async function bitmapState(
   request: SwapRequest,
 ): Promise<{ address: Address; data: Uint8Array | null }> {
   const bitmap = await getMeteoraDlmmBitmapExtensionAddress(request.pool);
-  if (request.snapshot.accounts[bitmap] === null) return { address: bitmap, data: null };
+  if (request.snapshot.accounts[bitmap] === null) {
+    return { address: bitmap, data: null };
+  }
+
   const { data } = requireAccount(
     request.snapshot,
     bitmap,
@@ -220,22 +250,31 @@ async function bitmapState(
   );
   if (
     data.length !== 1576 ||
-    !discriminator(data, BITMAP_DISCRIMINATOR) ||
+    !matchesDiscriminator(data, BITMAP_DISCRIMINATOR) ||
     readAddress(data, 8) !== request.pool
-  )
-    invalid(bitmap, "Invalid DLMM bitmap extension");
+  ) {
+    invalidAccount(bitmap, "Invalid DLMM bitmap extension");
+  }
+
   return { address: bitmap, data };
 }
+
 function initialized(pool: Pool, bitmap: Uint8Array | null, index: number): boolean {
   if (index >= -512 && index <= 511) {
     const bit = index + 512;
+
     return (pool.data[584 + Math.floor(bit / 8)]! & (1 << (bit % 8))) !== 0;
   }
-  if (!bitmap || index < -6656 || index > 6655) return false;
+  if (!bitmap || index < -6656 || index > 6655) {
+    return false;
+  }
+
   const bit = index >= 512 ? index - 512 : -index - 513;
   const start = index >= 512 ? 40 : 808;
+
   return (bitmap[start + Math.floor(bit / 8)]! & (1 << (bit % 8))) !== 0;
 }
+
 function feeRate(pool: Pool, binId: number): bigint {
   const reference =
     pool.volatilityReference + BigInt(Math.abs(pool.indexReference - binId)) * 10_000n;
@@ -243,6 +282,7 @@ function feeRate(pool: Pool, binId: number): bigint {
   const scaled = volatility * BigInt(pool.binStep);
   const rate =
     pool.baseFee + ceilDiv(pool.variableFeeControl * scaled * scaled, 100_000_000_000n);
+
   return rate < 100_000_000n ? rate : 100_000_000n;
 }
 
@@ -267,36 +307,50 @@ async function walk(
   let output = 0n;
   let fee = 0n;
   const arrays: Address[] = [];
+
   while (left > 0n) {
+    // Skip uninitialized arrays before requesting the next observed liquidity account.
     while (
       index >= minimumIndex &&
       index <= maximumIndex &&
       !initialized(pool, bitmap, index)
-    )
+    ) {
       index += step;
-    if (index < minimumIndex || index > maximumIndex) insufficient();
-    if (arrays.length >= 8) unsupported("swaps requiring more than eight bin arrays");
+    }
+    if (index < minimumIndex || index > maximumIndex) {
+      insufficient();
+    }
+    if (arrays.length >= 8) {
+      unsupported("swaps requiring more than eight bin arrays");
+    }
+
     const arrayAddress = await getMeteoraDlmmBinArrayAddress(request.pool, BigInt(index));
     requirements?.push({ address: arrayAddress, role: "DLMM bin array" });
-    if (requirements && request.snapshot.accounts[arrayAddress] === undefined)
+    // Discovery stops at missing data so the caller can supply it in the next round.
+    if (requirements && request.snapshot.accounts[arrayAddress] === undefined) {
       return null;
+    }
+
     const { data } = requireAccount(
       request.snapshot,
       arrayAddress,
       "DLMM bin array",
       METEORA_DLMM_PROGRAM,
     );
-    const view = viewOf(data);
+    const view = accountDataView(data);
     if (
       data.length !== 10136 ||
-      !discriminator(data, ARRAY_DISCRIMINATOR) ||
+      !matchesDiscriminator(data, ARRAY_DISCRIMINATOR) ||
       view.getBigInt64(8, true) !== BigInt(index) ||
       readAddress(data, 24) !== request.pool ||
       data[16]! > 1
-    )
-      invalid(arrayAddress, "Invalid DLMM bin array layout, index or identity");
+    ) {
+      invalidAccount(arrayAddress, "Invalid DLMM bin array layout, index or identity");
+    }
+
     arrays.push(arrayAddress);
     binId = Math.max(index * 70, Math.min(index * 70 + 69, binId));
+
     while (
       binId >= index * 70 &&
       binId < (index + 1) * 70 &&
@@ -309,19 +363,29 @@ async function walk(
         view.getBigUint64(offset + 112, true) !== 0n ||
         view.getBigUint64(offset + 120, true) !== 0n ||
         view.getBigUint64(offset + 128, true) !== 0n
-      )
+      ) {
         unsupported("bins containing limit orders");
+      }
+
       const available = view.getBigUint64(offset + (swapForY ? 8 : 0), true);
       if (available > 0n) {
-        const price = u128(view, offset + 16);
-        if (price === 0n || u128(view, offset + 32) === 0n)
-          invalid(arrayAddress, "DLMM liquid bin has zero price or liquidity supply");
+        const price = readU128(view, offset + 16);
+        if (price === 0n || readU128(view, offset + 32) === 0n) {
+          invalidAccount(
+            arrayAddress,
+            "DLMM liquid bin has zero price or liquidity supply",
+          );
+        }
+
         const rate = feeRate(pool, binId);
         const amountInFor = (amountOut: bigint): bigint =>
           swapForY ? ceilDiv(amountOut * Q64, price) : ceilDiv(amountOut * price, Q64);
+
         let binInput: bigint;
         let binOutput: bigint;
         let binFee: bigint;
+
+        // Fees are rounded per bin, including the final partially consumed bin.
         if (request.amount.kind === "exactIn") {
           const offeredFee = ceilDiv(left * rate, FEE_PRECISION);
           const offered = left - offeredFee;
@@ -335,6 +399,7 @@ async function walk(
             binFee = offeredFee;
             binOutput = swapForY ? (offered * price) / Q64 : (offered * Q64) / price;
           }
+
           left -= binInput;
         } else {
           binOutput = left < available ? left : available;
@@ -343,15 +408,21 @@ async function walk(
           binInput = excludedInput + binFee;
           left -= binOutput;
         }
+
         input += binInput;
         output += binOutput;
         fee += binFee;
       }
+
       binId += step;
     }
+
     index += step;
   }
-  if (input <= 0n || output <= 0n || input > U64_MAX || output > U64_MAX) insufficient();
+  if (input <= 0n || output <= 0n || input > U64_MAX || output > U64_MAX) {
+    insufficient();
+  }
+
   return { arrays, input, output, fee };
 }
 
@@ -370,9 +441,13 @@ async function requirements(
     { address: pool.oracle, role: "DLMM oracle" },
     { address: bitmapAddress, role: "DLMM bitmap extension", optional: true },
   ];
-  if (request.snapshot.accounts[bitmapAddress] === undefined) return result;
+  if (request.snapshot.accounts[bitmapAddress] === undefined) {
+    return result;
+  }
+
   const bitmap = await bitmapState(request);
   await walk(request, pool, bitmap.data, result);
+
   return result;
 }
 
@@ -383,10 +458,13 @@ async function build(
   const pool = decodePool(request);
   await validateAddresses(request, pool);
   const bitmap = await bitmapState(request);
+
   for (const mint of [pool.mintX, pool.mintY]) {
-    if (readMint(request.snapshot, mint).tokenProgram !== TOKEN_PROGRAM)
-      invalid(mint, "DLMM pool token program flag does not match mint");
+    if (readMint(request.snapshot, mint).tokenProgram !== TOKEN_PROGRAM) {
+      invalidAccount(mint, "DLMM pool token program flag does not match mint");
+    }
   }
+
   const reserveX = readTokenAccount(
     request.snapshot,
     pool.reserveX,
@@ -403,30 +481,36 @@ async function build(
   ).amount;
   const protocolX = pool.view.getBigUint64(216, true);
   const protocolY = pool.view.getBigUint64(224, true);
-  if (reserveX < protocolX || reserveY < protocolY)
-    invalid(request.pool, "DLMM protocol fees exceed reserve balances");
+  if (reserveX < protocolX || reserveY < protocolY) {
+    invalidAccount(request.pool, "DLMM protocol fees exceed reserve balances");
+  }
+
   const oracle = requireAccount(
     request.snapshot,
     pool.oracle,
     "DLMM oracle",
     METEORA_DLMM_PROGRAM,
   ).data;
-  const oracleView = viewOf(oracle);
+  const oracleView = accountDataView(oracle);
   if (
     oracle.length < 64 ||
-    !discriminator(oracle, ORACLE_DISCRIMINATOR) ||
+    !matchesDiscriminator(oracle, ORACLE_DISCRIMINATOR) ||
     BigInt(oracle.length - 32) !== oracleView.getBigUint64(24, true) * 32n ||
     oracleView.getBigUint64(8, true) >= oracleView.getBigUint64(24, true) ||
     oracleView.getBigUint64(16, true) > oracleView.getBigUint64(24, true)
-  )
-    invalid(pool.oracle, "Invalid DLMM oracle layout");
+  ) {
+    invalidAccount(pool.oracle, "Invalid DLMM oracle layout");
+  }
+
   const curve = (await walk(request, pool, bitmap.data))!;
   const swapForY = request.inputMint === pool.mintX;
   if (
     curve.output > (swapForY ? reserveY - protocolY : reserveX - protocolX) ||
     (swapForY ? reserveX : reserveY) + curve.input > U64_MAX
-  )
+  ) {
     insufficient();
+  }
+
   const fees = [{ kind: "trade" as const, mint: request.inputMint, amount: curve.fee }];
   const quote: SwapQuote =
     request.amount.kind === "exactIn"
@@ -446,6 +530,7 @@ async function build(
           expectedAmountOut: curve.output,
           fees,
         };
+
   const instructionAccounts = {
     pool: request.pool,
     bitmapExtension: bitmap.data ? bitmap.address : null,
@@ -472,6 +557,7 @@ async function build(
           maximumAmountIn: quote.maximumAmountIn,
           amountOut: quote.amountOut,
         });
+
   return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
 

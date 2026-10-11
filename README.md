@@ -40,6 +40,16 @@ Expected construction failures reject with `SwapBuildError`; its `code` and `det
 
 Protocol-owned PDA helpers are exported from the root and each protocol entrypoint. They cover the derivations used by every implemented adapter, with historical helpers for Sugar. See the [address helper inventory](docs/addresses.md#address-helpers) for coverage, native parameter meanings, and the streaming workflow. Standard token-account derivation continues to use `findAssociatedTokenPda` from `@solana-program/token`.
 
+When reading the implementation, each protocol folder owns its native account layouts,
+PDA seeds, fee and curve math, validation rules, and instructions. Common account-byte
+readers and invalid-account error construction live in
+[`src/protocols/shared/accounts.ts`](src/protocols/shared/accounts.ts);
+token-account handling lives in `src/accounts`, and shared amount/slippage arithmetic
+lives in `src/core/amounts.ts`. The byte readers are internal building blocks, not a
+separate public entrypoint. They operate on caller-supplied data without fetching or
+streaming accounts; each protocol validates its owner, applicable discriminator, and
+supported layout before interpreting fields.
+
 ## Concurrent sender
 
 Import from `celere-protocol-sdk/sender`. Configure once, supply protocol instructions, signer(s), nonce, and fees per transaction. Start with the [sender guide](docs/sender.md) for configuration, fees, signing, errors, and transport behavior. See the standalone [Pump.fun](example/pumpfun) and [Meteora DLMM](example/meteora-dlmm) projects for complete buy-and-send flows.

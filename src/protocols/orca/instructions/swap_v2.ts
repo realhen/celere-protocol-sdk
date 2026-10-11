@@ -57,6 +57,7 @@ export interface OrcaSwapV2Accounts {
   /** Optional writable tick arrays follow the oracle in native traversal order. */
   readonly supplementalTickArrays?: readonly Address[];
 }
+
 /**
  * Native arguments for {@link swap_v2}.
  *
@@ -188,6 +189,7 @@ export function swap_v2(accounts: OrcaSwapV2Accounts, args: OrcaSwapV2Args): Ins
       : {
           slices: [{ accountsType: 6, length: supplementalTickArrays.length }],
         };
+
   return {
     programAddress: WHIRLPOOL_PROGRAM,
     accounts: [

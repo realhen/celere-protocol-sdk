@@ -1,8 +1,9 @@
 /** Modified offline adaptation of raydium-io/raydium-amm (Apache-2.0); see NOTICE.md. */
-import { getAddressDecoder, type Address } from "@solana/kit";
+import type { Address } from "@solana/kit";
 import { TOKEN_PROGRAM, readMint, readTokenAccount } from "../../accounts/tokens";
 import { ceilDiv, maximumInput, minimumOutput, U64_MAX } from "../../core/amounts";
 import { fail } from "../../core/errors";
+import { invalidAccount, accountDataView, readAddress } from "../shared/accounts";
 import { requireAccount } from "../../core/snapshot";
 import type {
   AccountRequirement,
@@ -18,7 +19,6 @@ export { RAYDIUM_AMM_V4_PROGRAM } from "./constants";
 import { findRaydiumAmmV4AuthorityPda } from "./pda";
 export { findRaydiumAmmV4AuthorityPda, getRaydiumAmmV4AuthorityAddress } from "./pda";
 
-const decoder = getAddressDecoder();
 const U128_MAX = (1n << 128n) - 1n;
 
 interface PoolState {
@@ -37,10 +37,6 @@ interface PoolState {
   readonly mint1: Address;
 }
 
-function invalid(account: Address, message: string): never {
-  fail({ code: "INVALID_ACCOUNT", address: account, message });
-}
-
 function insufficient(message: string): never {
   fail({ code: "INSUFFICIENT_LIQUIDITY", protocol: "raydium-amm-v4", message });
 }
@@ -52,10 +48,13 @@ function readPool(request: SwapRequest): PoolState {
     "AMM v4 pool",
     RAYDIUM_AMM_V4_PROGRAM,
   );
-  if (account.data.length !== 752)
-    invalid(request.pool, "Unsupported Raydium AMM v4 pool layout");
+
+  if (account.data.length !== 752) {
+    invalidAccount(request.pool, "Unsupported Raydium AMM v4 pool layout");
+  }
+
   const data = account.data;
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const view = accountDataView(data);
   const pool: PoolState = {
     status: view.getBigUint64(0, true),
     nonce: view.getBigUint64(8, true),
@@ -66,22 +65,29 @@ function readPool(request: SwapRequest): PoolState {
     pendingPnl0: view.getBigUint64(192, true),
     pendingPnl1: view.getBigUint64(200, true),
     openTime: view.getBigUint64(224, true),
-    vault0: decoder.decode(data.subarray(336, 368)),
-    vault1: decoder.decode(data.subarray(368, 400)),
-    mint0: decoder.decode(data.subarray(400, 432)),
-    mint1: decoder.decode(data.subarray(432, 464)),
+    vault0: readAddress(data, 336),
+    vault1: readAddress(data, 368),
+    mint0: readAddress(data, 400),
+    mint1: readAddress(data, 432),
   };
-  if (pool.status === 1n || pool.status === 5n)
+
+  if (pool.status === 1n || pool.status === 5n) {
     fail({
       code: "UNSUPPORTED_POOL_FEATURE",
       protocol: "raydium-amm-v4",
       feature: "orderbook-active-status",
       message: "Only vault-backed SwapOnly and opened WaitingTrade pools are qualified",
     });
-  if (pool.status !== 6n && pool.status !== 7n)
-    invalid(request.pool, "Raydium AMM v4 swaps are disabled or the status is invalid");
-  if (pool.status === 7n && request.snapshot.unixTimestamp < pool.openTime)
-    invalid(request.pool, "Raydium AMM v4 pool has not opened");
+  }
+  if (pool.status !== 6n && pool.status !== 7n) {
+    invalidAccount(
+      request.pool,
+      "Raydium AMM v4 swaps are disabled or the status is invalid",
+    );
+  }
+  if (pool.status === 7n && request.snapshot.unixTimestamp < pool.openTime) {
+    invalidAccount(request.pool, "Raydium AMM v4 pool has not opened");
+  }
   if (
     pool.nonce > 255n ||
     pool.decimals0 > 255n ||
@@ -90,17 +96,20 @@ function readPool(request: SwapRequest): PoolState {
     pool.feeNumerator >= pool.feeDenominator ||
     pool.mint0 === pool.mint1 ||
     pool.vault0 === pool.vault1
-  )
-    invalid(request.pool, "Invalid Raydium AMM v4 pool parameters");
+  ) {
+    invalidAccount(request.pool, "Invalid Raydium AMM v4 pool parameters");
+  }
   if (!(
     (request.inputMint === pool.mint0 && request.outputMint === pool.mint1) ||
     (request.inputMint === pool.mint1 && request.outputMint === pool.mint0)
-  ))
+  )) {
     fail({
       code: "INVALID_REQUEST",
       field: "inputMint",
       message: "Requested token pair does not match the AMM v4 pool",
     });
+  }
+
   return pool;
 }
 
@@ -108,6 +117,7 @@ async function requirements(
   request: SwapRequest,
 ): Promise<readonly AccountRequirement[]> {
   const pool = readPool(request);
+
   return [
     { address: request.pool, role: "AMM v4 pool" },
     { address: pool.vault0, role: "token 0 vault" },
@@ -129,33 +139,49 @@ function quoteCurve(
   inputReserve: bigint,
   outputReserve: bigint,
 ): SwapQuote {
-  if (inputReserve === 0n || outputReserve === 0n)
+  if (inputReserve === 0n || outputReserve === 0n) {
     insufficient("Pool reserves are empty after pending PnL");
+  }
+
   let input: bigint;
   let output: bigint;
   let fee: bigint;
+
   if (request.amount.kind === "exactIn") {
     input = request.amount.amountIn;
     fee = ceilDiv(input * pool.feeNumerator, pool.feeDenominator);
     const curveInput = input - fee;
-    if (curveInput <= 0n) insufficient("Input is consumed by the rounded swap fee");
+
+    if (curveInput <= 0n) {
+      insufficient("Input is consumed by the rounded swap fee");
+    }
+
     output = (curveInput * outputReserve) / (inputReserve + curveInput);
   } else {
     output = request.amount.amountOut;
-    if (output >= outputReserve)
+
+    if (output >= outputReserve) {
       insufficient("Requested output exhausts the pool reserve");
+    }
+
     const curveInput = ceilDiv(inputReserve * output, outputReserve - output);
-    if (curveInput * pool.feeDenominator > U128_MAX)
+
+    if (curveInput * pool.feeDenominator > U128_MAX) {
       insufficient("Exact-output fee calculation exceeds the native arithmetic range");
+    }
+
     input = ceilDiv(
       curveInput * pool.feeDenominator,
       pool.feeDenominator - pool.feeNumerator,
     );
     fee = input - curveInput;
   }
-  if (input <= 0n || output <= 0n || input > U64_MAX || output > U64_MAX)
+  if (input <= 0n || output <= 0n || input > U64_MAX || output > U64_MAX) {
     insufficient("Swap cannot produce nonzero u64 token amounts");
+  }
+
   const fees = [{ kind: "trade" as const, mint: request.inputMint, amount: fee }];
+
   return request.amount.kind === "exactIn"
     ? {
         kind: "exactIn",
@@ -181,23 +207,29 @@ async function build(
 ): Promise<ProtocolSwap> {
   const pool = readPool(request);
   const [authority, nonce] = await findRaydiumAmmV4AuthorityPda();
-  if (pool.nonce !== BigInt(nonce))
-    invalid(request.pool, "Invalid AMM v4 authority nonce");
+
+  if (pool.nonce !== BigInt(nonce)) {
+    invalidAccount(request.pool, "Invalid AMM v4 authority nonce");
+  }
   for (const [mint, decimals] of [
     [pool.mint0, pool.decimals0],
     [pool.mint1, pool.decimals1],
   ] as const) {
     const info = readMint(request.snapshot, mint);
-    if (info.tokenProgram !== TOKEN_PROGRAM)
+
+    if (info.tokenProgram !== TOKEN_PROGRAM) {
       fail({
         code: "UNSUPPORTED_POOL_FEATURE",
         protocol: "raydium-amm-v4",
         feature: "token-2022",
         message: "Raydium AMM v4 native swaps require classic SPL Token mints",
       });
-    if (BigInt(info.decimals) !== decimals)
-      invalid(mint, "Mint decimals do not match the AMM v4 pool");
+    }
+    if (BigInt(info.decimals) !== decimals) {
+      invalidAccount(mint, "Mint decimals do not match the AMM v4 pool");
+    }
   }
+
   const vault0 = readTokenAccount(
     request.snapshot,
     pool.vault0,
@@ -212,14 +244,18 @@ async function build(
     TOKEN_PROGRAM,
     authority,
   );
-  if (pool.pendingPnl0 > vault0.amount || pool.pendingPnl1 > vault1.amount)
-    invalid(request.pool, "Pending PnL exceeds an AMM v4 vault balance");
+
+  if (pool.pendingPnl0 > vault0.amount || pool.pendingPnl1 > vault1.amount) {
+    invalidAccount(request.pool, "Pending PnL exceeds an AMM v4 vault balance");
+  }
   if (
     [pool.vault0, pool.vault1].some(
       (vault) => vault === tokenAccounts.input || vault === tokenAccounts.output,
     )
-  )
-    invalid(request.pool, "User token accounts must differ from pool vaults");
+  ) {
+    invalidAccount(request.pool, "User token accounts must differ from pool vaults");
+  }
+
   const zeroForOne = request.inputMint === pool.mint0;
   const reserve0 = vault0.amount - pool.pendingPnl0;
   const reserve1 = vault1.amount - pool.pendingPnl1;
@@ -229,8 +265,11 @@ async function build(
     zeroForOne ? reserve0 : reserve1,
     zeroForOne ? reserve1 : reserve0,
   );
-  if ((zeroForOne ? vault0.amount : vault1.amount) + quote.expectedAmountIn > U64_MAX)
+
+  if ((zeroForOne ? vault0.amount : vault1.amount) + quote.expectedAmountIn > U64_MAX) {
     insufficient("Swap would overflow the input token vault");
+  }
+
   const instructionAccounts = {
     pool: request.pool,
     authority,
@@ -240,6 +279,7 @@ async function build(
     userOutput: tokenAccounts.output,
     owner: request.owner,
   };
+
   const instruction =
     quote.kind === "exactIn"
       ? swap_base_in_v2(instructionAccounts, {
@@ -250,6 +290,7 @@ async function build(
           maximumAmountIn: quote.maximumAmountIn,
           amountOut: quote.amountOut,
         });
+
   return { instructions: [instruction], quote, mayPartiallyFill: false };
 }
 

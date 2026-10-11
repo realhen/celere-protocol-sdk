@@ -35,6 +35,7 @@ export interface MeteoraDammV2Swap2Accounts {
   readonly tokenProgramB: Address;
   readonly eventAuthority: Address;
 }
+
 /**
  * Native arguments for {@link swap2}.
  *

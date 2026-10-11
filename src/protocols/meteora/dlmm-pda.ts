@@ -19,13 +19,18 @@ export interface MeteoraDlmmPoolAddressParams {
   /** Optional unsigned 16-bit base-factor seed, encoded little-endian; omit for the original addressing variant. */
   readonly baseFactor?: number;
 }
+
 function u16(value: number, field: string): Uint8Array {
-  if (!Number.isSafeInteger(value) || value < 0 || value > 65535)
+  if (!Number.isSafeInteger(value) || value < 0 || value > 65535) {
     throw new RangeError(`${field} must be an unsigned 16-bit integer`);
+  }
+
   const bytes = new Uint8Array(2);
   new DataView(bytes.buffer).setUint16(0, value, true);
+
   return bytes;
 }
+
 /** Derive a legacy permissionless DLMM pool and bump. Optional baseFactor selects the base-factor-seeded legacy variant, not v2/customizable/permissioned addressing. Does not fetch or create accounts. Rejects out-of-range numeric seeds. */
 export function findMeteoraDlmmPoolPda(
   params: MeteoraDlmmPoolAddressParams,
@@ -35,15 +40,20 @@ export function findMeteoraDlmmPoolPda(
     encoder.encode(params.mintY),
     u16(params.binStep, "binStep"),
   ];
-  if (params.baseFactor !== undefined) seeds.push(u16(params.baseFactor, "baseFactor"));
+  if (params.baseFactor !== undefined) {
+    seeds.push(u16(params.baseFactor, "baseFactor"));
+  }
+
   return getProgramDerivedAddress({ programAddress: METEORA_DLMM_PROGRAM, seeds });
 }
+
 /** Derive a supported legacy DLMM pool, without fetching or creating it. Uses native mint order and rejects invalid u16 seeds; see {@link MeteoraDlmmPoolAddressParams}. */
 export async function getMeteoraDlmmPoolAddress(
   params: MeteoraDlmmPoolAddressParams,
 ): Promise<Address> {
   return (await findMeteoraDlmmPoolPda(params))[0];
 }
+
 /** Derive a DLMM reserve token account for a pool and underlying mint, without fetching or creating it. */
 export async function getMeteoraDlmmReserveAddress(
   pool: Address,
@@ -56,6 +66,7 @@ export async function getMeteoraDlmmReserveAddress(
     })
   )[0];
 }
+
 /** Derive a DLMM pool's oracle, without fetching or creating it. */
 export async function getMeteoraDlmmOracleAddress(pool: Address): Promise<Address> {
   return (
@@ -65,6 +76,7 @@ export async function getMeteoraDlmmOracleAddress(pool: Address): Promise<Addres
     })
   )[0];
 }
+
 /** Derive a DLMM pool's optional bitmap extension, without fetching it or asserting that it exists. */
 export async function getMeteoraDlmmBitmapExtensionAddress(
   pool: Address,
@@ -76,15 +88,19 @@ export async function getMeteoraDlmmBitmapExtensionAddress(
     })
   )[0];
 }
+
 /** Derive a DLMM bin array without fetching or creating it. index is the signed array index (floor(binId / 70)), encoded as i64 little-endian, not an individual bin ID. Rejects values outside i64. */
 export async function getMeteoraDlmmBinArrayAddress(
   pool: Address,
   index: bigint,
 ): Promise<Address> {
-  if (typeof index !== "bigint" || index < -(1n << 63n) || index >= 1n << 63n)
+  if (typeof index !== "bigint" || index < -(1n << 63n) || index >= 1n << 63n) {
     throw new RangeError("index must be a signed 64-bit bigint");
+  }
+
   const bytes = new Uint8Array(8);
   new DataView(bytes.buffer).setBigInt64(0, index, true);
+
   return (
     await getProgramDerivedAddress({
       programAddress: METEORA_DLMM_PROGRAM,
@@ -92,6 +108,7 @@ export async function getMeteoraDlmmBinArrayAddress(
     })
   )[0];
 }
+
 /** Derive the DLMM program's singleton Anchor event authority, without fetching or creating it. */
 export async function getMeteoraDlmmEventAuthorityAddress(): Promise<Address> {
   return (

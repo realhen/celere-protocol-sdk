@@ -14,6 +14,7 @@ import {
 } from "@solana/kit";
 import { WRAPPED_SOL_MINT } from "../../../accounts/tokens";
 import { BOOP_PROGRAM } from "../constants";
+
 /** Identifies Boop’s native `buy_token` instruction. */
 const DISCRIMINATOR = new Uint8Array([138, 127, 14, 91, 38, 87, 115, 105]);
 /** Encodes the native `buy_token` arguments and instruction discriminator. */
@@ -22,6 +23,7 @@ const instructionDataEncoder = getStructEncoder([
   ["buyAmount", getU64Encoder()],
   ["amountOutMin", getU64Encoder()],
 ]);
+
 /** Accounts required by Boop’s native `buy_token` instruction. */
 export interface BoopBuyTokenAccounts {
   readonly mint: Address;
@@ -34,6 +36,7 @@ export interface BoopBuyTokenAccounts {
   readonly config: Address;
   readonly vaultAuthority: Address;
 }
+
 /**
  * Native arguments for {@link buy_token}.
  *
@@ -75,6 +78,7 @@ export interface BoopBuyTokenArgs {
    */
   readonly amountOutMin: bigint;
 }
+
 /**
  * Creates a Boop buy instruction for a specified input budget.
  *

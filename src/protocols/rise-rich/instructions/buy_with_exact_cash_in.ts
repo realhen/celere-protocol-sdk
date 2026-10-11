@@ -8,6 +8,7 @@ import {
   type Instruction,
 } from "@solana/kit";
 import { RISE_RICH_PROGRAM } from "../constants";
+
 /** Identifies Rise Rich’s native `buy_with_exact_cash_in` instruction. */
 const DISCRIMINATOR = new Uint8Array([53, 248, 95, 20, 54, 162, 146, 247]);
 /** Encodes the native `buy_with_exact_cash_in` arguments and instruction discriminator. */
@@ -193,12 +194,16 @@ export function buy_with_exact_cash_in(
   accounts: RiseRichBuyExactCashInAccounts,
   args: RiseRichBuyExactCashInArgs,
 ): Instruction {
-  if (args.floorIncreaseRatio.length !== 16)
+  if (args.floorIncreaseRatio.length !== 16) {
     throw new RangeError("floorIncreaseRatio must contain exactly 16 bytes");
-  if (args.maxNewFloor.length !== 16)
+  }
+  if (args.maxNewFloor.length !== 16) {
     throw new RangeError("maxNewFloor must contain exactly 16 bytes");
-  if (args.minLiqRatio.length !== 16)
+  }
+  if (args.minLiqRatio.length !== 16) {
     throw new RangeError("minLiqRatio must contain exactly 16 bytes");
+  }
+
   const data = instructionDataEncoder.encode({
     discriminator: DISCRIMINATOR,
     cashIn: args.cashIn,
@@ -209,6 +214,7 @@ export function buy_with_exact_cash_in(
     maxAreaShrinkageToleranceUnits: args.maxAreaShrinkageToleranceUnits,
     minLiqRatio: args.minLiqRatio,
   });
+
   return {
     programAddress: RISE_RICH_PROGRAM,
     accounts: [

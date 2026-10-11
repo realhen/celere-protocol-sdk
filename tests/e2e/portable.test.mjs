@@ -142,12 +142,32 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
       ["raydium-cpmm", (await raydiumCpmmFixture(signer.address)).request],
       ["orca-whirlpool", (await orcaWhirlpoolFixture(signer.address)).request],
     ];
+    // Streaming clients may retain account bytes as slices of a larger receive buffer.
+    // Padding must never become part of a decoded field or change a built transaction.
+    const slicedRequests = fixtures.map(([, request]) => ({
+      ...request,
+      snapshot: {
+        ...request.snapshot,
+        accounts: Object.fromEntries(
+          Object.entries(request.snapshot.accounts).map(([address, account]) => {
+            if (!account) return [address, account];
+
+            const buffer = new Uint8Array(account.data.length + 29).fill(0xa5);
+            buffer.set(account.data, 13);
+            const data = buffer.subarray(13, 13 + account.data.length);
+
+            return [address, { ...account, data }];
+          }),
+        ),
+      },
+    }));
+
     await writeFile(join(directory, "worker.mjs"), workerScript);
     const results = await new Promise((resolve, reject) => {
       const worker = new Worker(join(directory, "worker.mjs"), {
         workerData: {
           module: pathToFileURL(browserPath).href,
-          requests: fixtures.map(([, request]) => request),
+          requests: [...fixtures.map(([, request]) => request), ...slicedRequests],
         },
       });
       worker.once("message", resolve);
@@ -156,8 +176,14 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
         if (code !== 0) reject(new Error(`Worker exited ${code}`));
       });
     });
-    assert.equal(results.length, fixtures.length);
-    for (const [index, { discovery, build: built, compiled }] of results.entries()) {
+    assert.equal(results.length, fixtures.length * 2);
+    const originalResults = results.slice(0, fixtures.length);
+    assert.deepEqual(results.slice(fixtures.length), originalResults);
+
+    for (const [
+      index,
+      { discovery, build: built, compiled },
+    ] of originalResults.entries()) {
       for (const result of [discovery, built, compiled]) {
         assert.equal(
           result?.ok,

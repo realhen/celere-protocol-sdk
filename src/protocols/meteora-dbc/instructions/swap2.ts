@@ -19,6 +19,7 @@ const dataEncoder = getStructEncoder([
   ["otherAmountThreshold", getU64Encoder()],
   ["swapMode", getU8Encoder()],
 ]);
+
 /** Accounts required by Meteora DBC’s native `swap2` instruction. */
 export interface MeteoraDbcSwap2Accounts {
   readonly config: Address;
@@ -32,6 +33,7 @@ export interface MeteoraDbcSwap2Accounts {
   readonly payer: Address;
   readonly eventAuthority: Address;
 }
+
 /**
  * Native arguments for {@link swap2}.
  *
@@ -75,6 +77,7 @@ export interface MeteoraDbcSwap2Args {
    */
   readonly swapMode: 0 | 2;
 }
+
 /**
  * Creates a Meteora DBC swap instruction with caller-selected amount interpretation.
  *

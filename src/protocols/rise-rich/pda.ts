@@ -23,6 +23,7 @@ export function findRiseRichMarketPda(
     seeds: ["market", encoder.encode(tenant), encoder.encode(marketMeta)],
   });
 }
+
 /** Get the market offline; inputs match {@link findRiseRichMarketPda}. Does not check existence. */
 export async function getRiseRichMarketAddress(
   tenant: Address,
@@ -44,6 +45,7 @@ export function findRiseRichCreatorEscrowPda(
     seeds: ["creator_escrow", encoder.encode(pool)],
   });
 }
+
 /** Get the creator escrow offline; inputs match {@link findRiseRichCreatorEscrowPda}. Does not check existence. */
 export async function getRiseRichCreatorEscrowAddress(pool: Address): Promise<Address> {
   return (await findRiseRichCreatorEscrowPda(pool))[0];
@@ -60,6 +62,7 @@ export function findRiseRichTeamEscrowPda(mint: Address): Promise<ProgramDerived
     seeds: ["team_escrow", encoder.encode(mint)],
   });
 }
+
 /** Get the team escrow for the collateral mint offline; inputs match {@link findRiseRichTeamEscrowPda}. Does not check existence. */
 export async function getRiseRichTeamEscrowAddress(mint: Address): Promise<Address> {
   return (await findRiseRichTeamEscrowPda(mint))[0];
@@ -72,6 +75,7 @@ export async function getRiseRichTeamEscrowAddress(mint: Address): Promise<Addre
 export function findRiseRichMayflowerLogPda(): Promise<ProgramDerivedAddress> {
   return getProgramDerivedAddress({ programAddress: MAYFLOWER_PROGRAM, seeds: ["log"] });
 }
+
 /** Get the Mayflower log account offline; inputs match {@link findRiseRichMayflowerLogPda}. Does not check existence. */
 export async function getRiseRichMayflowerLogAddress(): Promise<Address> {
   return (await findRiseRichMayflowerLogPda())[0];
@@ -87,6 +91,7 @@ export function findRiseRichEventAuthorityPda(): Promise<ProgramDerivedAddress> 
     seeds: ["__event_authority"],
   });
 }
+
 /** Get the event authority offline; inputs match {@link findRiseRichEventAuthorityPda}. Does not check existence. */
 export async function getRiseRichEventAuthorityAddress(): Promise<Address> {
   return (await findRiseRichEventAuthorityPda())[0];
@@ -110,6 +115,7 @@ export async function getRiseRichMarketAddresses(
     getRiseRichMayflowerLogAddress(),
     getRiseRichEventAuthorityAddress(),
   ]);
+
   return { pool, marketBump, creatorEscrow, teamEscrow, mayLogAccount, eventAuthority };
 }
 
@@ -126,6 +132,7 @@ export function findRiseRichTenantPda(
     seeds: ["tenant", encoder.encode(tenantSeed)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichTenantPda}. Does not check existence. */
 export async function getRiseRichTenantAddress(tenantSeed: Address): Promise<Address> {
   return (await findRiseRichTenantPda(tenantSeed))[0];
@@ -144,6 +151,7 @@ export function findRiseRichMayflowerTenantPda(
     seeds: ["tenant", encoder.encode(tenantSeed)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichMayflowerTenantPda}. Does not check existence. */
 export async function getRiseRichMayflowerTenantAddress(
   tenantSeed: Address,
@@ -164,6 +172,7 @@ export function findRiseRichMayflowerMarketGroupPda(
     seeds: ["market_group", encoder.encode(groupSeed)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichMayflowerMarketGroupPda}. Does not check existence. */
 export async function getRiseRichMayflowerMarketGroupAddress(
   groupSeed: Address,
@@ -184,6 +193,7 @@ export function findRiseRichMayflowerMarketMetaPda(
     seeds: ["market_meta", encoder.encode(metaSeed)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichMayflowerMarketMetaPda}. Does not check existence. */
 export async function getRiseRichMayflowerMarketMetaAddress(
   metaSeed: Address,
@@ -204,6 +214,7 @@ export function findRiseRichMayflowerLinearMarketPda(
     seeds: ["market_linear", encoder.encode(marketMeta)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichMayflowerLinearMarketPda}. Does not check existence. */
 export async function getRiseRichMayflowerLinearMarketAddress(
   marketMeta: Address,
@@ -222,6 +233,7 @@ export function findRiseRichCashEscrowPda(pool: Address): Promise<ProgramDerived
     seeds: ["cash_escrow", encoder.encode(pool)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichCashEscrowPda}. Does not check existence. */
 export async function getRiseRichCashEscrowAddress(pool: Address): Promise<Address> {
   return (await findRiseRichCashEscrowPda(pool))[0];
@@ -240,6 +252,7 @@ export function findRiseRichMayflowerLiquidityVaultPda(
     seeds: ["liq_vault_main", encoder.encode(marketMeta)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichMayflowerLiquidityVaultPda}. Does not check existence. */
 export async function getRiseRichMayflowerLiquidityVaultAddress(
   marketMeta: Address,
@@ -260,6 +273,7 @@ export function findRiseRichMayflowerGroupRevenueEscrowPda(
     seeds: ["rev_escrow_group", encoder.encode(marketMeta)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichMayflowerGroupRevenueEscrowPda}. Does not check existence. */
 export async function getRiseRichMayflowerGroupRevenueEscrowAddress(
   marketMeta: Address,
@@ -280,6 +294,7 @@ export function findRiseRichMayflowerTenantRevenueEscrowPda(
     seeds: ["rev_escrow_tenant", encoder.encode(marketMeta)],
   });
 }
+
 /** Get the account offline; inputs match {@link findRiseRichMayflowerTenantRevenueEscrowPda}. Does not check existence. */
 export async function getRiseRichMayflowerTenantRevenueEscrowAddress(
   marketMeta: Address,

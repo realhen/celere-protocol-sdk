@@ -9,14 +9,19 @@ export async function getMeteoraDbcPoolAddress(
   baseMint: Address,
   quoteMint: Address,
 ): Promise<Address> {
-  const base = encoder.encode(baseMint),
-    quote = encoder.encode(quoteMint);
+  const base = encoder.encode(baseMint);
+  const quote = encoder.encode(quoteMint);
   let baseLarger = false;
+
   for (let i = 0; i < base.length; i++) {
-    if (base[i] === quote[i]) continue;
+    if (base[i] === quote[i]) {
+      continue;
+    }
+
     baseLarger = base[i]! > quote[i]!;
     break;
   }
+
   return (
     await getProgramDerivedAddress({
       programAddress: METEORA_DBC_PROGRAM,
@@ -29,6 +34,7 @@ export async function getMeteoraDbcPoolAddress(
     })
   )[0];
 }
+
 /** Derive a DBC pool's vault for an underlying base or quote mint; mint precedes pool in the seeds. Does not fetch or create it. */
 export async function getMeteoraDbcTokenVaultAddress(
   mint: Address,
@@ -41,6 +47,7 @@ export async function getMeteoraDbcTokenVaultAddress(
     })
   )[0];
 }
+
 /** Derive the DBC program's singleton Anchor event authority, without fetching or creating it. */
 export async function getMeteoraDbcEventAuthorityAddress(): Promise<Address> {
   return (

@@ -25,6 +25,7 @@ export function findVertigoPoolPda(
     seeds: ["pool", encoder.encode(owner), encoder.encode(mintA), encoder.encode(mintB)],
   });
 }
+
 /** Get the pool offline; inputs match {@link findVertigoPoolPda}. Does not check existence. */
 export async function getVertigoPoolAddress(
   owner: Address,
@@ -49,6 +50,7 @@ export function findVertigoVaultPda(
     seeds: [encoder.encode(pool), encoder.encode(mint)],
   });
 }
+
 /** Get the pool token vault offline; inputs match {@link findVertigoVaultPda}. Does not check existence. */
 export async function getVertigoVaultAddress(
   pool: Address,
@@ -73,5 +75,6 @@ export async function getVertigoPoolAddresses(
     getVertigoVaultAddress(pool, mintA),
     getVertigoVaultAddress(pool, mintB),
   ]);
+
   return { pool, bump, vaultA, vaultB };
 }

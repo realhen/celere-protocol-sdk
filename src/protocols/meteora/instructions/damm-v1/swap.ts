@@ -35,6 +35,7 @@ export interface MeteoraDammV1SwapAccounts {
   readonly protocolTokenFee: Address;
   readonly user: Address;
 }
+
 /**
  * Native arguments for {@link swap}.
  *

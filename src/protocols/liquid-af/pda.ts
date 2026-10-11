@@ -31,6 +31,7 @@ export function findLiquidAfBondingCurvePda(
     seeds: ["bonding_curve", encoder.encode(mint)],
   });
 }
+
 /** Get the bonding curve offline; inputs match {@link findLiquidAfBondingCurvePda}. Does not check existence. */
 export async function getLiquidAfBondingCurveAddress(mint: Address): Promise<Address> {
   return (await findLiquidAfBondingCurvePda(mint))[0];
@@ -46,6 +47,7 @@ export function findLiquidAfGlobalConfigPda(): Promise<ProgramDerivedAddress> {
     seeds: ["global_config"],
   });
 }
+
 /** Get the curve global configuration offline; inputs match {@link findLiquidAfGlobalConfigPda}. Does not check existence. */
 export async function getLiquidAfGlobalConfigAddress(): Promise<Address> {
   return (await findLiquidAfGlobalConfigPda())[0];
@@ -62,6 +64,7 @@ export function findLiquidAfSolVaultPda(pool: Address): Promise<ProgramDerivedAd
     seeds: ["bonding_curve_sol_vault", encoder.encode(pool)],
   });
 }
+
 /** Get the native SOL curve vault offline; inputs match {@link findLiquidAfSolVaultPda}. Does not check existence. */
 export async function getLiquidAfSolVaultAddress(pool: Address): Promise<Address> {
   return (await findLiquidAfSolVaultPda(pool))[0];
@@ -80,6 +83,7 @@ export function findLiquidAfBuybackVaultPda(
     seeds: ["buyback_vault", encoder.encode(pool)],
   });
 }
+
 /** Get the curve buyback vault offline; inputs match {@link findLiquidAfBuybackVaultPda}. Does not check existence. */
 export async function getLiquidAfBuybackVaultAddress(pool: Address): Promise<Address> {
   return (await findLiquidAfBuybackVaultPda(pool))[0];
@@ -95,6 +99,7 @@ export function findLiquidAfCpiAuthorityPda(): Promise<ProgramDerivedAddress> {
     seeds: ["cpi_authority"],
   });
 }
+
 /** Get the curve CPI authority offline; inputs match {@link findLiquidAfCpiAuthorityPda}. Does not check existence. */
 export async function getLiquidAfCpiAuthorityAddress(): Promise<Address> {
   return (await findLiquidAfCpiAuthorityPda())[0];
@@ -115,6 +120,7 @@ export function findLiquidAfFeeConfigPda(
     seeds: ["fee_config", encoder.encode(baseMint), encoder.encode(quoteMint)],
   });
 }
+
 /** Get the shared fee configuration offline; inputs match {@link findLiquidAfFeeConfigPda}. Does not check existence. */
 export async function getLiquidAfFeeConfigAddress(
   baseMint: Address,
@@ -136,6 +142,7 @@ export function findLiquidAfFeeVaultPda(
     seeds: ["fee_vault", encoder.encode(feeConfig)],
   });
 }
+
 /** Get the shared fee vault offline; inputs match {@link findLiquidAfFeeVaultPda}. Does not check existence. */
 export async function getLiquidAfFeeVaultAddress(feeConfig: Address): Promise<Address> {
   return (await findLiquidAfFeeVaultPda(feeConfig))[0];
@@ -154,6 +161,7 @@ export function findLiquidAfUserPropertiesPda(
     seeds: ["user_properties", encoder.encode(owner)],
   });
 }
+
 /** Get the user properties offline; inputs match {@link findLiquidAfUserPropertiesPda}. Does not check existence. */
 export async function getLiquidAfUserPropertiesAddress(owner: Address): Promise<Address> {
   return (await findLiquidAfUserPropertiesPda(owner))[0];
@@ -169,6 +177,7 @@ export function findLiquidAfGlobalCurveVolumePda(): Promise<ProgramDerivedAddres
     seeds: ["global_curve_volume"],
   });
 }
+
 /** Get the global curve volume offline; inputs match {@link findLiquidAfGlobalCurveVolumePda}. Does not check existence. */
 export async function getLiquidAfGlobalCurveVolumeAddress(): Promise<Address> {
   return (await findLiquidAfGlobalCurveVolumePda())[0];
@@ -184,6 +193,7 @@ export function findLiquidAfGlobalAmmVolumePda(): Promise<ProgramDerivedAddress>
     seeds: ["global_amm_volume"],
   });
 }
+
 /** Get the global AMM volume offline; inputs match {@link findLiquidAfGlobalAmmVolumePda}. Does not check existence. */
 export async function getLiquidAfGlobalAmmVolumeAddress(): Promise<Address> {
   return (await findLiquidAfGlobalAmmVolumePda())[0];
@@ -202,6 +212,7 @@ export function findLiquidAfTokenVolumePda(
     seeds: ["token_volume", encoder.encode(mint)],
   });
 }
+
 /** Get the token volume offline; inputs match {@link findLiquidAfTokenVolumePda}. Does not check existence. */
 export async function getLiquidAfTokenVolumeAddress(mint: Address): Promise<Address> {
   return (await findLiquidAfTokenVolumePda(mint))[0];
@@ -217,6 +228,7 @@ export function findLiquidAfCashbackConfigPda(): Promise<ProgramDerivedAddress> 
     seeds: ["cashback_config"],
   });
 }
+
 /** Get the cashback configuration offline; inputs match {@link findLiquidAfCashbackConfigPda}. Does not check existence. */
 export async function getLiquidAfCashbackConfigAddress(): Promise<Address> {
   return (await findLiquidAfCashbackConfigPda())[0];
@@ -232,6 +244,7 @@ export function findLiquidAfStateCpiAuthorityPda(): Promise<ProgramDerivedAddres
     seeds: ["cpi_authority"],
   });
 }
+
 /** Get the state CPI authority offline; inputs match {@link findLiquidAfStateCpiAuthorityPda}. Does not check existence. */
 export async function getLiquidAfStateCpiAuthorityAddress(): Promise<Address> {
   return (await findLiquidAfStateCpiAuthorityPda())[0];
@@ -253,8 +266,10 @@ export async function getLiquidAfSharedAddresses(
   quoteMint: Address,
   marketKind: "curve" | "amm",
 ) {
-  if (marketKind !== "curve" && marketKind !== "amm")
+  if (marketKind !== "curve" && marketKind !== "amm") {
     throw new RangeError("LiquidAF market kind must be curve or amm");
+  }
+
   const [
     [feeConfig, feeBump],
     creatorUserProperties,
@@ -275,6 +290,7 @@ export async function getLiquidAfSharedAddresses(
     getLiquidAfStateCpiAuthorityAddress(),
   ]);
   const feeVault = await getLiquidAfFeeVaultAddress(feeConfig);
+
   return {
     feeConfig,
     feeBump,
@@ -312,8 +328,10 @@ export function getLiquidAfFeeVaultTokenAddress(
   quoteMint: Address,
   quoteTokenProgram: Address,
 ): Promise<Address> {
-  if (quoteTokenProgram !== TOKEN_PROGRAM && quoteTokenProgram !== TOKEN_2022_PROGRAM)
+  if (quoteTokenProgram !== TOKEN_PROGRAM && quoteTokenProgram !== TOKEN_2022_PROGRAM) {
     throw new RangeError("LiquidAF fee vault requires SPL Token or Token-2022");
+  }
+
   return associatedTokenAddress(feeVault, quoteMint, quoteTokenProgram);
 }
 
@@ -344,6 +362,7 @@ export async function getLiquidAfCurveAddresses(
     getLiquidAfTokenVaultAddress(pool, mint),
     getLiquidAfSharedAddresses(owner, creator, mint, WRAPPED_SOL_MINT, "curve"),
   ]);
+
   return {
     pool,
     bump,

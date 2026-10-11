@@ -6,6 +6,7 @@ import {
   type ProgramDerivedAddress,
 } from "@solana/kit";
 import { HEAVEN_PROGRAM } from "./constants";
+
 const encoder = getAddressEncoder();
 
 /**
@@ -23,6 +24,7 @@ export function findHeavenPoolPda(
     seeds: ["liquidity_pool_state", encoder.encode(baseMint), encoder.encode(quoteMint)],
   });
 }
+
 /** Get the liquidity pool offline; inputs match {@link findHeavenPoolPda}. Does not check existence. */
 export async function getHeavenPoolAddress(
   baseMint: Address,
@@ -40,13 +42,16 @@ export async function getHeavenPoolAddress(
 export async function findHeavenProtocolConfigPda(
   version: 1 | 2,
 ): Promise<ProgramDerivedAddress> {
-  if (!Number.isSafeInteger(version) || (version !== 1 && version !== 2))
+  if (!Number.isSafeInteger(version) || (version !== 1 && version !== 2)) {
     throw new RangeError("Heaven configuration version must be 1 or 2");
+  }
+
   return getProgramDerivedAddress({
     programAddress: HEAVEN_PROGRAM,
     seeds: ["protocol_config_state", Uint8Array.of(version >> 8, version & 255)],
   });
 }
+
 /** Get Heaven's version 1 or 2 configuration offline; does not check existence. */
 export async function getHeavenProtocolConfigAddress(version: 1 | 2): Promise<Address> {
   return (await findHeavenProtocolConfigPda(version))[0];

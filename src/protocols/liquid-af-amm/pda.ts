@@ -42,6 +42,7 @@ export function findLiquidAfAmmPoolPda(
     seeds: ["pool", encoder.encode(baseMint), encoder.encode(quoteMint)],
   });
 }
+
 /** Get the AMM pool offline; inputs match {@link findLiquidAfAmmPoolPda}. Does not check existence. */
 export async function getLiquidAfAmmPoolAddress(
   baseMint: Address,
@@ -65,6 +66,7 @@ export function findLiquidAfAmmVaultPda(
     seeds: ["pool_vault", encoder.encode(pool), encoder.encode(mint)],
   });
 }
+
 /** Get the AMM token vault offline; inputs match {@link findLiquidAfAmmVaultPda}. Does not check existence. */
 export async function getLiquidAfAmmVaultAddress(
   pool: Address,
@@ -84,6 +86,7 @@ export function findLiquidAfAmmLpMintPda(pool: Address): Promise<ProgramDerivedA
     seeds: ["pool_lp_mint", encoder.encode(pool)],
   });
 }
+
 /** Get the AMM LP mint offline; inputs match {@link findLiquidAfAmmLpMintPda}. Does not check existence. */
 export async function getLiquidAfAmmLpMintAddress(pool: Address): Promise<Address> {
   return (await findLiquidAfAmmLpMintPda(pool))[0];
@@ -102,6 +105,7 @@ export function findLiquidAfAmmObservationPda(
     seeds: ["observation", encoder.encode(pool)],
   });
 }
+
 /** Get the AMM observation offline; inputs match {@link findLiquidAfAmmObservationPda}. Does not check existence. */
 export async function getLiquidAfAmmObservationAddress(pool: Address): Promise<Address> {
   return (await findLiquidAfAmmObservationPda(pool))[0];
@@ -117,6 +121,7 @@ export function findLiquidAfAmmAuthorityPda(): Promise<ProgramDerivedAddress> {
     seeds: ["vault_and_lp_mint_auth_seed"],
   });
 }
+
 /** Get the vault and LP mint authority offline; inputs match {@link findLiquidAfAmmAuthorityPda}. Does not check existence. */
 export async function getLiquidAfAmmAuthorityAddress(): Promise<Address> {
   return (await findLiquidAfAmmAuthorityPda())[0];
@@ -132,6 +137,7 @@ export function findLiquidAfAmmGlobalConfigPda(): Promise<ProgramDerivedAddress>
     seeds: ["global_config"],
   });
 }
+
 /** Get the AMM global configuration offline; inputs match {@link findLiquidAfAmmGlobalConfigPda}. Does not check existence. */
 export async function getLiquidAfAmmGlobalConfigAddress(): Promise<Address> {
   return (await findLiquidAfAmmGlobalConfigPda())[0];
@@ -147,6 +153,7 @@ export function findLiquidAfAmmCpiAuthorityPda(): Promise<ProgramDerivedAddress>
     seeds: ["cpi_authority"],
   });
 }
+
 /** Get the AMM CPI authority offline; inputs match {@link findLiquidAfAmmCpiAuthorityPda}. Does not check existence. */
 export async function getLiquidAfAmmCpiAuthorityAddress(): Promise<Address> {
   return (await findLiquidAfAmmCpiAuthorityPda())[0];
@@ -167,6 +174,7 @@ export function findLiquidAfAmmBuybackVaultPda(
     seeds: ["buyback_vault", encoder.encode(pool), encoder.encode(quoteMint)],
   });
 }
+
 /** Get the AMM buyback vault offline; inputs match {@link findLiquidAfAmmBuybackVaultPda}. Does not check existence. */
 export async function getLiquidAfAmmBuybackVaultAddress(
   pool: Address,
@@ -190,6 +198,7 @@ export function findLiquidAfAmmProtocolFeeVaultPda(
     seeds: ["global_fee", encoder.encode(feeRecipient), encoder.encode(quoteMint)],
   });
 }
+
 /** Get the AMM protocol fee vault offline; inputs match {@link findLiquidAfAmmProtocolFeeVaultPda}. Does not check existence. */
 export async function getLiquidAfAmmProtocolFeeVaultAddress(
   feeRecipient: Address,
@@ -233,6 +242,7 @@ export async function getLiquidAfAmmPoolAddresses(
     getLiquidAfAmmBuybackVaultAddress(pool, quoteMint),
     getLiquidAfSharedAddresses(owner, creator, baseMint, quoteMint, "amm"),
   ]);
+
   return {
     pool,
     baseVault,
