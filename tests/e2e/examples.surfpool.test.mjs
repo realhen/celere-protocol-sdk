@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -15,9 +15,15 @@ import {
   SYSTEM_PROGRAM_ADDRESS,
   getCreateAccountInstruction,
   getInitializeNonceAccountInstruction,
+  getTransferSolInstruction,
 } from "@solana-program/system";
 import { SYSVAR_CLOCK_ADDRESS } from "@solana/sysvars";
-import { TOKEN_PROGRAM_ADDRESS, findAssociatedTokenPda } from "@solana-program/token";
+import {
+  TOKEN_PROGRAM_ADDRESS,
+  findAssociatedTokenPda,
+  getCreateAssociatedTokenIdempotentInstruction,
+  getSyncNativeInstruction,
+} from "@solana-program/token";
 import { installExampleProject } from "../fixtures/example-projects.mjs";
 import { meteoraDlmmFixture } from "../fixtures/meteora-dlmm.mjs";
 import { pumpV3Fixture } from "../fixtures/pump-v3.mjs";
@@ -127,84 +133,86 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
             executable: false,
           },
         ]);
-        const env = {
-          RPC_URL: endpoint,
-          KEYPAIR_PATH: keyPath,
-          TOKEN_MINT: outputMint,
-          AMOUNT_IN_ATOMS: "2100001",
-          SLIPPAGE_BPS: "100",
-          CU_PRICE_MICROLAMPORTS: "1000",
-          POOL_ADDRESS: fixture.pool,
-          INPUT_MINT: SOL,
-        };
-        // Exercise RPC-only blockhash sending for Pump, nonce fan-out for DLMM.
+        const nonce = await generateKeyPairSigner();
+        await submitInstructions(
+          endpoint,
+          [
+            getCreateAccountInstruction({
+              payer: wallet,
+              newAccount: nonce,
+              lamports: BigInt(
+                await rpc(endpoint, "getMinimumBalanceForRentExemption", [80]),
+              ),
+              space: 80n,
+              programAddress: SYSTEM_PROGRAM_ADDRESS,
+            }),
+            getInitializeNonceAccountInstruction({
+              nonceAccount: nonce.address,
+              nonceAuthority: wallet.address,
+            }),
+          ],
+          wallet,
+          [wallet, nonce],
+        );
         if (project === "meteora-dlmm") {
-          const nonce = await generateKeyPairSigner();
+          // The simplified example explicitly expects a pre-funded canonical WSOL ATA.
+          const [ata] = await findAssociatedTokenPda({
+            owner: wallet.address,
+            mint: SOL,
+            tokenProgram: TOKEN_PROGRAM_ADDRESS,
+          });
           await submitInstructions(
             endpoint,
             [
-              getCreateAccountInstruction({
+              getCreateAssociatedTokenIdempotentInstruction({
                 payer: wallet,
-                newAccount: nonce,
-                lamports: BigInt(
-                  await rpc(endpoint, "getMinimumBalanceForRentExemption", [80]),
-                ),
-                space: 80n,
-                programAddress: SYSTEM_PROGRAM_ADDRESS,
+                ata,
+                owner: wallet.address,
+                mint: SOL,
               }),
-              getInitializeNonceAccountInstruction({
-                nonceAccount: nonce.address,
-                nonceAuthority: wallet.address,
+              getTransferSolInstruction({
+                source: wallet,
+                destination: ata,
+                amount: 10_000_000n,
               }),
+              getSyncNativeInstruction({ account: ata }),
             ],
             wallet,
-            [wallet, nonce],
           );
-          Object.assign(env, {
-            NONCE_ACCOUNT: nonce.address,
-            ZERO_SLOT_API_KEY: "simulator",
-            ZERO_SLOT_ENDPOINT: endpoint,
-          });
         }
-        await writeFile(
-          join(application, ".env"),
-          Object.entries(env)
-            .map(([key, value]) => `${key}=${value}`)
-            .join("\n"),
-        );
-        const cleanEnv = { PATH: process.env.PATH, HOME: process.env.HOME };
-        const beforeSol = (await rpc(endpoint, "getBalance", [wallet.address])).value;
+        // Fill in the copied script exactly as a reader would. Both provider URLs
+        // point to the disposable simulator; the test never contacts live senders.
+        const scriptPath = join(application, "main.ts");
+        let source = await readFile(scriptPath, "utf8");
+        for (const [placeholder, value] of [
+          ["https://YOUR_RPC_ENDPOINT", endpoint],
+          ["/absolute/path/to/your/keypair.json", keyPath],
+          ["YOUR_TOKEN_MINT", outputMint],
+          ["YOUR_NONCE_ACCOUNT", nonce.address],
+          ...(project === "meteora-dlmm"
+            ? [["YOUR_DLMM_POOL_ADDRESS", fixture.pool]]
+            : []),
+        ]) {
+          assert.ok(source.includes(JSON.stringify(placeholder)));
+          source = source.replace(JSON.stringify(placeholder), JSON.stringify(value));
+        }
+        for (const key of ["YOUR_HELIUS_API_KEY", "YOUR_ZERO_SLOT_API_KEY"]) {
+          assert.ok(source.includes(JSON.stringify(key)));
+          source = source.replace(
+            JSON.stringify(key),
+            `"simulator", endpoint: ${JSON.stringify(endpoint)}`,
+          );
+        }
+        await writeFile(scriptPath, source);
         const beforeTokens = await tokenBalance(outputAta);
-        if (project === "pumpfun") {
-          const simulation = await run("npm", ["run", "simulate"], {
-            cwd: application,
-            env: cleanEnv,
-          });
-          assert.match(
-            simulation.stdout,
-            /Simulation succeeded; nothing was signed or submitted/,
-          );
-        } else {
-          await assert.rejects(
-            () => run("npm", ["run", "simulate"], { cwd: application, env: cleanEnv }),
-            (error) => {
-              assert.match(error.stderr, /Fund your WSOL ATA before simulation/);
-              return true;
-            },
-          );
-        }
-        assert.equal(
-          (await rpc(endpoint, "getBalance", [wallet.address])).value,
-          beforeSol,
-        );
-        assert.equal(await tokenBalance(outputAta), beforeTokens);
-        const sent = await run("npm", ["start"], { cwd: application, env: cleanEnv });
+        const sent = await run("npm", ["start"], {
+          cwd: application,
+          env: { PATH: process.env.PATH, HOME: process.env.HOME },
+        });
         const signatures = [...sent.stdout.matchAll(/Submitted signature: (\w+)/g)].map(
           (match) => match[1],
         );
-        assert.equal(signatures.length, project === "pumpfun" ? 1 : 2);
-        if (project === "meteora-dlmm")
-          assert.match(sent.stdout, /WSOL funding signature:/);
+        assert.equal(signatures.length, 3);
         const successful = [];
         for (const signature of signatures) {
           const receipt = await rpc(endpoint, "getTransaction", [

@@ -158,7 +158,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         manifest.dependencies["celere-protocol-sdk"],
         "git+https://github.com/realhen/celere-protocol-sdk.git#e98c8095a8a19b512639ce21905f68518ad862d0",
       );
-      await readFile(join(source, ".env.example"), "utf8");
+      await readFile(join(source, "main.ts"), "utf8");
       await installExampleProject(
         source,
         join(directory, project),
