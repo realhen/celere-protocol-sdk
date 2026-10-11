@@ -6,15 +6,39 @@ Typed native Solana protocol instruction builders, offline transaction compilati
 
 Callers select the protocol and native instruction, supply accounts and arguments, and receive a portable unsigned instruction. Builders encode the native ABI without choosing routes, inspecting trading activity, fetching accounts, quoting amounts, or applying the optional swap API's fill policy. Callers own wallets and execution policy. The optional `/sender` entrypoint accepts caller-owned Kit signers and submits transactions.
 
-Optional offline helpers provide account discovery, state validation, quotes, and swap limits from caller-supplied snapshots. Their supported variants and execution guarantees are separate from direct instruction construction.
+Use `fetchSwapInstructions(rpc, request)` to fetch the required accounts, quote a swap, and receive unsigned instructions in one call. Optional offline helpers provide the same account discovery, state validation, quotes, and swap limits from caller-supplied snapshots. Their supported variants and execution guarantees are separate from direct instruction construction.
 
-Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto. Protocol builders and `/transactions` remain strictly offline. Root imports and client construction perform no I/O; sender methods perform explicitly requested signing and network operations. The root exports the sender API for convenience, and `/sender` remains available as a focused import.
+Requires Node.js 22.16+ for development. The ESM package also bundles for secure browser contexts and workers. PDA derivation uses WebCrypto. Protocol builders and `/transactions` remain strictly offline. Root imports and client construction perform no I/O; `fetchSwapInstructions` performs explicitly requested account reads, and sender methods perform explicitly requested signing and submission. The root exports the sender API for convenience, and `/sender` remains available as a focused import.
 
 ```sh
 npm ci --ignore-scripts
 npm run build
 npm pack
 ```
+
+## Build a swap from RPC
+
+```ts
+import { fetchSwapInstructions, getPumpBondingCurveAddress } from "celere-protocol-sdk";
+
+const buy = await fetchSwapInstructions(rpc, {
+  pool: await getPumpBondingCurveAddress(outputMint),
+  owner: wallet.address,
+  payer: wallet.address,
+  inputMint, // WSOL's mint identifies native SOL for a Pump SOL curve.
+  outputMint,
+  amount: { kind: "exactIn", amountIn: 10_000_000n },
+  slippageBps: 100,
+  fillPolicy: "requireFull",
+});
+// Pass buy.instructions to your sender with your signer, nonce and fees.
+```
+
+The same function handles a Meteora DLMM pool or another supported adapter; the pool's owner selects the protocol. It defaults to `confirmed` and accepts `{ commitment, abortSignal }` as its third argument. It fetches all discovered accounts together with Clock at one bank context per round, preserving observed absence for ATA creation. It supports up to 99 swap accounts plus Clock and 20 discovery rounds. Larger account sets need a caller-maintained coherent snapshot and the offline API.
+
+Expected construction failures reject with `SwapBuildError`; its `code` and `detail` preserve the structured errors returned by the offline API. RPC and cancellation errors propagate unchanged. There is no `unwrap` helper to copy. The function performs fresh RPC reads per call, without caching, signing, wrapping SOL, sending, or confirmation. Latency-sensitive applications with their own data feed can keep using `getSwapRequirements` and `buildSwapInstructions` to avoid these RPC round trips.
+
+Pump PDA helpers live in `src/protocols/pump/pda.ts` and are exported from both the root and `/protocols/pump`. They derive the bonding curve, auxiliary v2 curve, global configuration, fee configuration, creator vault, event authority, and volume accumulators without fetching or creating accounts. Standard token-account derivation continues to use `findAssociatedTokenPda` from `@solana-program/token`.
 
 ## Concurrent sender
 
@@ -184,7 +208,7 @@ const poolBuy = pumpAmm.buy_v2(poolAccounts, poolArgs);
 
 For example, [CPMM swap base input](src/protocols/raydium/instructions/cpmm/swap_base_input.ts) shows the named instruction-data encoder followed by every account in native order with its signer/writable role. TSDoc explains argument units, amount bounds, concrete values, and native execution caveats, with a typed usage example for every function. [Pump buy](src/protocols/pump/instructions/bonding-curve/buy.ts) also makes the trailing native flags explicit. The adapters call these same builders.
 
-The [`example/` folder](example/README.md) contains two independently runnable projects: Pump.fun and Meteora DLMM. Each has one readable `main.ts` showing sender setup, swap construction, and submission, with inline configuration and fixed fees. Account-fetching plumbing is kept at the bottom of the same file. Native instruction usage remains documented in each builder’s TSDoc. The packed-package consumer test compiles those snippets and independently builds both copied projects.
+The [`example/` folder](example/README.md) contains two independently runnable projects: Pump.fun and Meteora DLMM. Each has one readable `main.ts` showing sender setup, swap construction, and submission, with inline configuration and fixed fees. The SDK handles account discovery and fetching through `fetchSwapInstructions`; there is no application-side discovery loop. Native instruction usage remains documented in each builder’s TSDoc. The packed-package consumer test compiles those snippets and independently builds both copied projects.
 
 Instruction entrypoints expose functions named exactly after the native instructions and their readonly account/argument interfaces. Available subpaths are `/instructions/pump`, `/instructions/pump-amm`, `/instructions/raydium-amm-v4`, `/instructions/raydium-cpmm`, `/instructions/raydium-clmm`, `/instructions/raydium-launchlab`, `/instructions/meteora-damm-v1`, `/instructions/meteora-damm-v2`, `/instructions/meteora-dlmm`, `/instructions/moonshot`, `/instructions/vertigo`, `/instructions/orca`, `/instructions/boop`, `/instructions/meteora-dbc`, `/instructions/heaven`, `/instructions/rise-rich`, `/instructions/liquid-af`, `/instructions/liquid-af-amm`, `/instructions/metadao`, and historical `/instructions/sugar`. They do not import quote adapters or Orca's math WASM.
 
@@ -428,7 +452,7 @@ Sugar is an explicit exception: its four historical instructions must produce th
 
 The workflow uploads `native-coverage.json`, `results.tap`, stderr and simulator diagnostics as the `native-execution-<commit>` artifact. The report marks a run passed only when the tests and instruction coverage both pass. Program fingerprints identify what was executed; each fresh run loads the current deployment, rather than pinning historical binaries. Mainnet RPC availability is required, and an unavailable program fails the job instead of skipping it. There is no automatic npm publication; this job is the native validation gate for future release workflows.
 
-The runner starts an isolated simulator on available loopback ports, runs the full suite, and stops its own simulator afterward. Diagnostics remain in ignored `outputs/surfpool/` logs. Initial program hydration requires access to public mainnet RPC; SDK runtime operations remain offline. To run one native workflow:
+The runner starts an isolated simulator on available loopback ports, runs the full suite, and stops its own simulator afterward. Diagnostics remain in ignored `outputs/surfpool/` logs. Initial program hydration requires access to public mainnet RPC; offline builders remain free of network operations. To run one native workflow:
 
 ```sh
 npm run test:surfpool -- tests/e2e/raydium-clmm.surfpool.test.mjs

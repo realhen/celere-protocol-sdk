@@ -1,6 +1,7 @@
 export { createProtocolSdk } from "./sdk";
 export type { ProtocolSdk } from "./sdk";
 export { basisPoints } from "./amounts";
+export { SwapBuildError } from "./errors";
 export type { BuildError, Result } from "./errors";
 export type {
   AccountSnapshot,

@@ -180,6 +180,58 @@ for (const project of ["pumpfun", "meteora-dlmm"]) {
             wallet,
           );
         }
+        // Exercise error handling and cancellation through the installed public API,
+        // before the same package builds and submits the real buy below.
+        await writeFile(
+          join(application, "errors.mjs"),
+          `
+          import assert from "node:assert/strict";
+          import { createSolanaRpc, createSolanaRpcFromTransport, createDefaultRpcTransport } from "@solana/kit";
+          import { fetchSwapInstructions, SwapBuildError, getPumpBondingCurveAddress } from "celere-protocol-sdk";
+          import { getPumpBondingCurveAddress as getCurve } from "celere-protocol-sdk/protocols/pump";
+          const rpc = createSolanaRpc(${JSON.stringify(endpoint)});
+          const request = {
+            pool: ${JSON.stringify(fixture.pool ?? fixture.request.pool)},
+            owner: ${JSON.stringify(wallet.address)}, payer: ${JSON.stringify(wallet.address)},
+            inputMint: ${JSON.stringify(SOL)}, outputMint: ${JSON.stringify(outputMint)},
+            amount: { kind: "exactIn", amountIn: 10_000_000n }, slippageBps: 100,
+            fillPolicy: "requireFull",
+          };
+          assert.equal(await getCurve(request.outputMint), await getPumpBondingCurveAddress(request.outputMint));
+          await assert.rejects(fetchSwapInstructions(rpc, { ...request, slippageBps: 10001 }),
+            error => error instanceof SwapBuildError && error.code === "INVALID_REQUEST" && error.detail.field === "slippageBps");
+          // This wallet exists but is owned by System, so discovery must preserve the
+          // unsupported-program detail from the offline builder after an actual RPC read.
+          await assert.rejects(fetchSwapInstructions(rpc, { ...request, pool: request.owner }),
+            error => error instanceof SwapBuildError && error.code === "UNSUPPORTED_PROTOCOL");
+          // Observe real RPC discovery, then cancel just after the final batch.
+          // PDA derivation yields during final discovery/build after network I/O ends.
+          const transport = createDefaultRpcTransport({ url: ${JSON.stringify(endpoint)} });
+          let rounds = 0;
+          await fetchSwapInstructions(createSolanaRpcFromTransport(async (...args) => {
+            rounds++;
+            return transport(...args);
+          }), request);
+          let reads = 0;
+          const duringBuild = new AbortController();
+          const buildReason = new Error("Cancelled during final construction");
+          const abortingRpc = createSolanaRpcFromTransport(async (...args) => {
+            const response = await transport(...args);
+            if (++reads === rounds) setImmediate(() => duringBuild.abort(buildReason));
+            return response;
+          });
+          await assert.rejects(fetchSwapInstructions(abortingRpc, request, { abortSignal: duringBuild.signal }),
+            error => error === buildReason);
+          assert.equal(reads, rounds);
+          const controller = new AbortController();
+          const reason = new Error("Caller cancelled the build");
+          controller.abort(reason);
+          await assert.rejects(fetchSwapInstructions(rpc, request, { abortSignal: controller.signal }),
+            error => error === reason);
+        `,
+        );
+        await run("node", ["errors.mjs"], { cwd: application });
+
         // Fill in the copied script exactly as a reader would. Both provider URLs
         // point to the disposable simulator; the test never contacts live senders.
         const scriptPath = join(application, "main.ts");

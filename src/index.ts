@@ -1,3 +1,10 @@
+import type { GetMultipleAccountsApi, Rpc } from "@solana/kit";
+import {
+  fetchSwapWithSdk,
+  type FetchSwapRequest,
+  type FetchSwapConfig,
+} from "./fetch-swap";
+import type { SwapBuild } from "./core/types";
 import { createRouteSdk } from "./core/routes";
 import { pumpRouteAdapter } from "./protocols/pump/route";
 import { createProtocolSdk } from "./core/sdk";
@@ -59,3 +66,39 @@ export * from "./transactions/index";
 export { PROTOCOL_COVERAGE, type ProtocolCoverage } from "./protocols/coverage";
 
 export * from "./sender/index";
+
+export * from "./protocols/pump/pda";
+export type { FetchSwapRequest, FetchSwapConfig } from "./fetch-swap";
+
+/**
+ * Fetch the accounts needed for a swap, quote it, and return unsigned instructions.
+ *
+ * @param rpc - Caller-owned Kit RPC used only for account reads.
+ * @param request - Swap intent; pool ownership selects the protocol automatically.
+ * @param config - Optional commitment and cancellation signal.
+ * @returns The quote and ordered instructions, including required token-account setup.
+ * @throws {@link SwapBuildError} for expected protocol or request failures, preserving
+ * the offline builder's structured error in `detail`. RPC and cancellation failures
+ * propagate unchanged. Invalid RPC batches and discovery limits raise `Error`.
+ * @remarks Each discovery round refetches all known accounts and Clock together at
+ * one bank context, up to 99 swap accounts and 20 RPC rounds. No accounts are cached.
+ * For an application-maintained cache or feed, use `buildSwapInstructions` with your
+ * own snapshot instead. This function does not wrap SOL, sign, send, or confirm.
+ * @example
+ * ```ts
+ * const buy = await fetchSwapInstructions(rpc, {
+ *   pool: await getPumpBondingCurveAddress(outputMint),
+ *   owner, payer: owner, inputMint, outputMint,
+ *   amount: { kind: "exactIn", amountIn: 10_000_000n },
+ *   slippageBps: 100, fillPolicy: "requireFull",
+ * });
+ * // Supply buy.instructions to SenderClient.send with your signer, nonce and fees.
+ * ```
+ */
+export function fetchSwapInstructions(
+  rpc: Rpc<GetMultipleAccountsApi>,
+  request: FetchSwapRequest,
+  config?: FetchSwapConfig,
+): Promise<SwapBuild> {
+  return fetchSwapWithSdk(sdk, rpc, request, config);
+}

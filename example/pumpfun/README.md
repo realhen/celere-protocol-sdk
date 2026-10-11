@@ -1,6 +1,6 @@
 # Pump.fun: build a buy and send it
 
-Everything is in [main.ts](main.ts). Read the sender setup, swap build, and send call from top to bottom; the account-fetching helper is at the bottom.
+Everything is in [main.ts](main.ts). Read the sender setup, swap build, and send call from top to bottom. `fetchSwapInstructions` handles account discovery, fetching, quoting, and instruction construction.
 
 1. From the SDK repository root, run `npm ci` to install and build the SDK (Node.js 22.16+ required). Then run `npm ci` inside this example folder.
 2. Edit the RPC URL, wallet-file path, token/pool addresses, nonce address, and API-key placeholders directly in `main.ts`.

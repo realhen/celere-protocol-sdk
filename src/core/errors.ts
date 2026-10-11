@@ -61,6 +61,21 @@ export type Result<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly error: BuildError };
 
+/**
+ * An expected swap construction failure raised by the RPC convenience API.
+ * @remarks The offline builders return the same structured details in a `Result`.
+ * Inspect `code` or `detail` rather than matching error messages.
+ */
+export class SwapBuildError extends Error {
+  readonly code: BuildError["code"];
+
+  constructor(readonly detail: BuildError) {
+    super(detail.message);
+    this.name = "SwapBuildError";
+    this.code = detail.code;
+  }
+}
+
 /** Internal control-flow error, converted into a portable Result at the public boundary. */
 export class BuildFailure extends Error {
   constructor(readonly detail: BuildError) {

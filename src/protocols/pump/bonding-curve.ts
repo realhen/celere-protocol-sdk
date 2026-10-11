@@ -1,9 +1,4 @@
-import {
-  getAddressEncoder,
-  getProgramDerivedAddress,
-  type Address,
-  type Instruction,
-} from "@solana/kit";
+import { type Address, type Instruction } from "@solana/kit";
 import {
   readMint,
   readTokenAccount,
@@ -39,24 +34,18 @@ import {
   readPumpGlobal,
 } from "./state";
 
-const addressEncoder = getAddressEncoder();
-const utf8 = new TextEncoder();
+import {
+  getPumpBondingCurveAddress,
+  getPumpBondingCurveV2Address,
+  getPumpGlobalAddress,
+  getPumpFeeConfigAddress,
+  getPumpEventAuthorityAddress,
+  getPumpCreatorVaultAddress,
+  getPumpGlobalVolumeAccumulatorAddress,
+  getPumpUserVolumeAccumulatorAddress,
+} from "./pda";
 
-async function pda(
-  programAddress: Address,
-  label: string,
-  ...addresses: readonly Address[]
-): Promise<Address> {
-  return (
-    await getProgramDerivedAddress({
-      programAddress,
-      seeds: [
-        utf8.encode(label),
-        ...addresses.map((value) => addressEncoder.encode(value)),
-      ],
-    })
-  )[0];
-}
+export * from "./pda";
 
 function direction(request: SwapRequest): {
   isBuy: boolean;
@@ -91,9 +80,9 @@ function usesLegacyBuy(request: SwapRequest): boolean {
 
 async function commonAddresses() {
   const [global, feeConfig, eventAuthority] = await Promise.all([
-    pda(PUMP_PROGRAM, "global"),
-    pda(PUMP_FEE_PROGRAM, "fee_config", PUMP_PROGRAM),
-    pda(PUMP_PROGRAM, "__event_authority"),
+    getPumpGlobalAddress(),
+    getPumpFeeConfigAddress(),
+    getPumpEventAuthorityAddress(),
   ]);
   return { global, feeConfig, eventAuthority };
 }
@@ -150,7 +139,7 @@ async function build(
 ): Promise<ProtocolSwap> {
   const { isBuy, mint, quoteMint } = direction(request);
   const curve = readCurve(request.snapshot, request.pool);
-  if ((await pda(PUMP_PROGRAM, "bonding-curve", mint)) !== request.pool) {
+  if ((await getPumpBondingCurveAddress(mint)) !== request.pool) {
     fail({
       code: "INVALID_ACCOUNT",
       address: request.pool,
@@ -211,12 +200,12 @@ async function build(
     migrationFee: quoteMint === NATIVE_SOL_MINT ? globalState.migrationFee : 0n,
     allowSynthetic: !legacyBuy,
   });
-  const userVolume = await pda(PUMP_PROGRAM, "user_volume_accumulator", request.owner);
+  const userVolume = await getPumpUserVolumeAccumulatorAddress(request.owner);
   if (legacyBuy && quote.kind === "exactIn") {
     const [creatorVault, curveV2, globalVolume] = await Promise.all([
-      pda(PUMP_PROGRAM, "creator-vault", curve.creator),
-      pda(PUMP_PROGRAM, "bonding-curve-v2", mint),
-      pda(PUMP_PROGRAM, "global_volume_accumulator"),
+      getPumpCreatorVaultAddress(curve.creator),
+      getPumpBondingCurveV2Address(mint),
+      getPumpGlobalVolumeAccumulatorAddress(),
     ]);
     const instructionAccounts = {
       global,
