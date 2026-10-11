@@ -20,6 +20,11 @@ export default tseslint.config(
     },
   },
   {
+    files: ["example/**/*.ts"],
+    languageOptions: { globals: { console: "readonly", TextEncoder: "readonly" } },
+    rules: { "no-restricted-imports": "off" },
+  },
+  {
     files: ["src/sender/**/*.ts"],
     rules: { "no-restricted-globals": "off" },
   },
