@@ -29,7 +29,7 @@ import {
   SenderSigningError,
   TipTooLowError,
 } from "./errors/index";
-import type { ConfiguredRoute } from "./providers/configuration";
+import type { ConfiguredRoute } from "./client";
 import { SenderProvider } from "./providers/route";
 import type { SenderRoute } from "./providers/route";
 import type { BlockhashLifetime, DurableNonce, LookupTable } from "../transactions/index";

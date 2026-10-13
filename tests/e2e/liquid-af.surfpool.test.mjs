@@ -90,7 +90,7 @@ async function poolData(fixture) {
 
 import { SYSVAR_CLOCK_ADDRESS } from "@solana/sysvars";
 import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budget";
-import * as raw from "../../dist/protocols/liquid-af/instructions/index.js";
+import * as raw from "../../dist/protocols/liquid-af/instructions/curve/index.js";
 async function clockTime() {
   const account = (
     await rpc("getAccountInfo", [SYSVAR_CLOCK_ADDRESS, { encoding: "base64" }])

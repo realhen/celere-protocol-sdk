@@ -1,5 +1,3 @@
-import type { TransactionPartialSigner } from "@solana/kit";
-import type { PrepareRequest } from "./transaction";
 import type { SenderProvider } from "./providers/route";
 
 /** Submission observations only: none of these indicate on-chain execution. */
@@ -13,32 +11,6 @@ export enum SubmissionStatus {
   /** Cancellation was observed before this route attempted its HTTP request. */
   NotSubmitted = "not-submitted",
 }
-
-/** Optional controls shared by {@link SenderClient.send} and {@link SenderClient.submitSigned}. */
-export interface SubmitSignedOptions {
-  /**
-   * Cancel signing/submission work. Cancellation before dispatch rejects the send;
-   * cancellation during HTTP submission yields route observations. It cannot undo a transaction.
-   */
-  readonly signal?: AbortSignal;
-  /**
-   * Observe each route as its HTTP attempt settles. The callback receives the same result
-   * included in {@link Submission.results}; it performs no on-chain tracking.
-   * The sender does not await callback work and isolates thrown/rejected callback errors.
-   */
-  readonly onRouteResult?: (result: RouteResult) => void | Promise<void>;
-}
-
-/** Inputs for preparing and signing a send with caller-owned Kit partial signers. */
-export type SendRequest = PrepareRequest &
-  SubmitSignedOptions & {
-    /**
-     * Exactly one partial signer for every required address: fee payer, nonce authority,
-     * and any instruction signers. Each signs the full variant batch without modifying messages.
-     * Supply a shared payer/authority signer only once. No private keys are accepted directly.
-     */
-    readonly signers: readonly TransactionPartialSigner[];
-  };
 
 /** Local signature and immutable route assignment. Wire bytes are defensively copied. */
 export interface SubmittedVariant {

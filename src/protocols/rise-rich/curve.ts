@@ -16,9 +16,9 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { MAYFLOWER_PROGRAM, RISE_RICH_PROGRAM } from "./constants";
 import { buy_with_exact_cash_in, sell_with_exact_token_in } from "./instructions/index";

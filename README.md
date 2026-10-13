@@ -315,7 +315,7 @@ Pump's native route charges protocol fees at the currency end and creator/LP fee
 
 A native SOL curve endpoint still requires a WSOL token account as the router's mint-bearing sentinel, even though settlement changes wallet lamports. That sentinel's wrapped balance is not spent; inspect `build.assets` for settlement semantics. Input endpoint accounts must exist; an observed-absent output ATA can be created. The SDK does not wrap SOL. Larger routes may require caller-supplied lookup tables to fit the transaction size limit.
 
-For a smaller bundle, use `createRouteSdk([pumpRouteAdapter])` from `/protocols` with `pumpRouteAdapter` from `/protocols/pump-routes`.
+For a smaller bundle, import `createRouteSdk`, `pumpRouteAdapter`, and the route types together from `/protocols/pump-routes`. The route implementation and its contracts live under Pump because Pump is the only built-in native router. Existing root and `/protocols` exports remain available.
 
 ## Account snapshots
 
@@ -353,6 +353,7 @@ Public inputs and successful return values use addresses, bigint amounts, byte a
 - Token accounts default to the owner's ATAs. An observed-absent output ATA is created idempotently. Input accounts and custom token accounts must already exist. The SDK never closes an existing account or generates temporary keys.
 - For PumpSwap, Raydium, Meteora, and Orca, WSOL uses an existing wrapped token account. This alpha does not automatically wrap or unwrap SOL. For Pump, Moonshot/Moonit, Boop, and LiquidAF's native SOL curve instructions, the WSOL mint identifies native wallet lamports; `build.assets` makes this distinction explicit.
 - Token transfer fees, hooks, and other unqualified extensions are rejected. Basic Token-2022 metadata extensions are accepted; see the execution coverage below.
+- Token accounts and extensions are decoded with the official Solana clients. Recognized unsupported extensions raise `UnsupportedTokenExtensionError` with a readable `extension` name, such as `TransferHook`. Malformed or unrecognized encodings raise `InvalidAccountError`.
 - Building does not prove wallet affordability, transaction landing, or execution success. Consumers may compose funding instructions before the returned swap plan.
 
 The result includes ordered instructions, setup/swap/cleanup boundaries, quote/limit fields, fee components, signer addresses, state context, and execution semantics. No result is signed.
@@ -433,7 +434,7 @@ Heaven qualifies standard classic-token pools with constant quote-denominated pr
 
 LiquidAF curve and AMM reject referrals and cashback spending; cashback earning is supported. AMM quotes must be USDC or WSOL, with classic or basic Token-2022 base tokens. Tiered fees require a caller-supplied verified SOL/USD oracle observation no more than 30 seconds old, including USDC pools. Native AMM fee splitting computes the LP share before waiving it for exact-input buys and exact-output sells; exact-input sells retain it. The public adapter rejects exact-output buys because the native program can succeed one base-token atom short. Raw builders expose this native limitation in their contracts.
 
-Sugar's deployment at slot `450795393` contains an entrypoint that returns `Custom(1)` immediately. The Surfpool E2E verifies a correctly encoded instruction fails in two compute units with unchanged pool state. Historical `/instructions/sugar` builders preserve the published interface for inspection; they cannot make the currently disabled program execute. `PROTOCOL_COVERAGE` describes optional adapter status and deployed execution limitations; it does not gate raw instruction construction.
+Sugar's deployment at slot `450795393` contains an entrypoint that returns `Custom(1)` immediately. The Surfpool E2E verifies a correctly encoded instruction fails in two compute units with unchanged pool state. Historical `/instructions/sugar` builders preserve the published interface for inspection; they cannot make the currently disabled program execute.
 
 ## Package build and imports
 

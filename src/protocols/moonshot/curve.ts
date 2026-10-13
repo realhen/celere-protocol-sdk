@@ -16,10 +16,10 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 
 import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { MOONSHOT_PROGRAM } from "./constants";

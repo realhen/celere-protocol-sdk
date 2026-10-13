@@ -17,9 +17,9 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { accountDataView, readAddress } from "../accounts/bytes";
 import { LIQUID_AF_PROGRAM } from "./constants";
 import {
@@ -27,7 +27,7 @@ import {
   sell_exact_in_native,
   sell_exact_out_native,
   type LiquidAfNativeSwapAccounts,
-} from "./instructions/index";
+} from "./instructions/curve/index";
 import {
   liquidAccount,
   readLiquidSolPrice,

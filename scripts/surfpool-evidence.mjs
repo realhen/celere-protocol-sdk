@@ -95,6 +95,37 @@ export async function createSurfpoolEvidence(endpoint) {
       throw new Error(`Surfpool HTTP ${response.status} during ${method}`);
     return response.json();
   }
+  // Fan-out requests can reach the same cold account concurrently. Share only the
+  // in-flight read so Surfpool does not issue duplicate remote fetches; subsequent
+  // requests still observe fixture updates and transaction writes.
+  const pendingHydrations = new Map();
+  function hydrateTransactionAccount(address) {
+    const pending = pendingHydrations.get(address);
+    if (pending) return pending;
+
+    const hydration = loadTransactionAccount(address).finally(() => {
+      pendingHydrations.delete(address);
+    });
+    pendingHydrations.set(address, hydration);
+    return hydration;
+  }
+
+  async function loadTransactionAccount(address) {
+    const hydrated = await rpc("getAccountInfo", [
+      address,
+      { encoding: "base64", commitment: "confirmed" },
+    ]);
+    assert.ok(
+      !hydrated.error && hydrated.result && "value" in hydrated.result,
+      `Unable to hydrate transaction account ${address}: ${JSON.stringify(hydrated.error ?? "Missing account result")}`,
+    );
+    if (hydrated.result.value === null) {
+      // Preserve verified absence without re-fetching uncreated accounts or virtual sysvars.
+      const absent = await rpc("surfnet_offlineAccount", [address]);
+      assert.ok(!absent.error, `Unable to retain absent account ${address}`);
+    }
+  }
+
   async function account(address) {
     const response = await rpc("getAccountInfo", [
       address,
@@ -288,19 +319,7 @@ export async function createSurfpoolEvidence(endpoint) {
           }
         }
         for (const address of addresses) {
-          const hydrated = await rpc("getAccountInfo", [
-            address,
-            { encoding: "base64", commitment: "confirmed" },
-          ]);
-          assert.ok(
-            !hydrated.error && hydrated.result && "value" in hydrated.result,
-            `Unable to hydrate transaction account ${address}`,
-          );
-          if (hydrated.result.value === null) {
-            // Preserve verified absence without re-fetching uncreated accounts or virtual sysvars.
-            const absent = await rpc("surfnet_offlineAccount", [address]);
-            assert.ok(!absent.error, `Unable to retain absent account ${address}`);
-          }
+          await hydrateTransactionAccount(address);
         }
       }
       const response = await rpc(request.method, request.params);

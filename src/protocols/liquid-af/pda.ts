@@ -250,6 +250,11 @@ export async function getLiquidAfStateCpiAuthorityAddress(): Promise<Address> {
   return (await findLiquidAfStateCpiAuthorityPda())[0];
 }
 
+/** Shared fee and volume addresses returned by {@link getLiquidAfSharedAddresses}. */
+export type LiquidSharedAddresses = Awaited<
+  ReturnType<typeof getLiquidAfSharedAddresses>
+>;
+
 /**
  * Derive shared LiquidAF fee and volume accounts offline, without checking existence.
  * @param owner - Trading user authority.

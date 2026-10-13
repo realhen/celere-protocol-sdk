@@ -15,10 +15,18 @@ import { missingAccounts, requireAccount } from "./accounts/snapshot";
 import type {
   AccountRequirement,
   ProtocolAdapter,
+  ProtocolId,
   SwapBuild,
   SwapRequest,
-  SwapRequirements,
 } from "./types";
+
+/** Discovery can need multiple rounds as newly supplied state reveals dependencies. */
+export interface SwapRequirements {
+  readonly protocol: ProtocolId | null;
+  readonly accounts: readonly AccountRequirement[];
+  readonly missing: readonly AccountRequirement[];
+  readonly complete: boolean;
+}
 
 /** Validate caller intent and immutable observation metadata without performing I/O. */
 export function validateRequest(request: SwapRequest): void {
@@ -177,7 +185,9 @@ async function discover(
   const requirements: AccountRequirement[] = [poolRequirement];
   try {
     requirements.push(...(await adapter.requirements(request)));
-    requirements.push(...(await tokenRequirements(request, adapter)));
+    requirements.push(
+      ...(await tokenRequirements(request, adapter.tokenAccountKinds?.(request))),
+    );
   } catch (error) {
     if (!(error instanceof MissingAccountsError)) {
       throw error;
@@ -246,7 +256,10 @@ export function createProtocolSdk(protocols: readonly ProtocolAdapter[]): Protoc
         });
       }
       const adapter = selectAdapter(request, adapters);
-      const tokenPlan = await planTokenAccounts(request, adapter);
+      const tokenPlan = await planTokenAccounts(
+        request,
+        adapter.tokenAccountKinds?.(request),
+      );
       const swap = await adapter.build(request, tokenPlan.accounts);
       if (
         (request.fillPolicy ?? "requireFull") === "requireFull" &&

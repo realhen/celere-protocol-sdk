@@ -6,6 +6,7 @@ import {
 } from "../../dist/index.js";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getMintDecoder, getMintEncoder } from "@solana-program/token-2022";
 
 import { deterministicAddress, TOKEN, TOKEN_2022 } from "../fixtures/pump-amm.mjs";
 import { pumpAmmQuotesFixture } from "../fixtures/pump-amm-quotes.mjs";
@@ -108,14 +109,14 @@ test("offline PumpSwap rejects invalid fee schedules, holder destinations and un
     if (mutation === "quote-owner")
       f.request.snapshot.accounts[f.quoteVault].owner = TOKEN_2022;
     if (mutation === "quote-extension") {
-      const a = f.request.snapshot.accounts[f.quoteMint],
-        data = new Uint8Array(174);
-      data.set(a.data);
-      data[165] = 1;
-      new DataView(data.buffer).setUint16(166, 1, true);
-      new DataView(data.buffer).setUint16(168, 4, true);
-      a.data = data;
-      a.owner = TOKEN_2022;
+      const mint = f.request.snapshot.accounts[f.quoteMint];
+      mint.data = Uint8Array.from(
+        getMintEncoder().encode({
+          ...getMintDecoder().decode(mint.data),
+          extensions: [{ __kind: "NonTransferable" }],
+        }),
+      );
+      mint.owner = TOKEN_2022;
     }
     await assert.rejects(
       () => buildSwapInstructions(f.request),

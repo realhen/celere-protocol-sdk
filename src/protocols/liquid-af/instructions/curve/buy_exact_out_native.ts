@@ -9,16 +9,16 @@ import {
   getU64Encoder,
   type Instruction,
 } from "@solana/kit";
-import { WRAPPED_SOL_MINT } from "../../accounts/tokens";
+import { WRAPPED_SOL_MINT } from "../../../accounts/tokens";
 import {
   LIQUID_AF_PROGRAM,
   LIQUID_AF_STATE_PROGRAM,
   LIQUID_AF_EVENTS_PROGRAM,
-} from "../constants";
+} from "../../constants";
 import type { LiquidAfNativeSwapAccounts } from "./accounts";
 
 /**
- * Native arguments for {@link sell_exact_out_native}.
+ * Native arguments for {@link buy_exact_out_native}.
  *
  * Amounts use each asset’s smallest unit as bigint; read the mint’s decimals before
  * converting display quantities. The builder does not quote, convert units, or choose a
@@ -28,30 +28,37 @@ import type { LiquidAfNativeSwapAccounts } from "./accounts";
  * Amount fields must fit an unsigned 64-bit integer (0 through 2^64 - 1). Encoding
  * successfully does not establish that the trade can execute.
  */
-export interface LiquidAfSellExactOutNativeArgs {
+export interface LiquidAfBuyExactOutNativeArgs {
   /**
-   * Requested native SOL output, in lamports. For example, `1_000_000_000n` means 1 SOL.
+   * Requested base token output, in base-token atomic units. For example, `500_000_000n`
+   * means 500 tokens when the base mint has six decimals.
    *
    * Quote the input required for this output, then set the maximum-input argument from
    * that quote and your chosen tolerance. This value is not a price or a slippage
    * percentage.
+   *
+   * See the instruction’s execution caveat below; the native buy is not a full-fill
+   * guarantee.
    */
   readonly amountOut: bigint;
   /**
-   * Maximum acceptable base token input, in base-token atomic units. For example,
-   * `500_000_000n` means 500 tokens when the base mint has six decimals.
+   * Maximum acceptable native SOL input, in lamports. For example, `1_000_000_000n` means
+   * 1 SOL.
    *
    * Increase the required input from a quote for the requested output by your chosen
-   * slippage tolerance, rounding up in atomic units. A quote of `500_000_000n` with a 1%
-   * tolerance gives `505_000_000n`. Include applicable trading fees in that input quote;
+   * slippage tolerance, rounding up in atomic units. A quote of `1_000_000_000n` with a 1%
+   * tolerance gives `1_010_000_000n`. Include applicable trading fees in that input quote;
    * transaction fees and rent remain separate SOL costs.
    *
    * Zero is a zero spending limit, not an unlimited-input sentinel.
+   *
+   * See the instruction’s execution caveat below; the native buy is not a full-fill
+   * guarantee.
    */
   readonly maximumAmountIn: bigint;
 }
 
-/** Encodes the native `sell_exact_out_native` arguments and instruction discriminator. */
+/** Encodes the native `buy_exact_out_native` arguments and instruction discriminator. */
 const instructionDataEncoder = getStructEncoder([
   ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
   ["amountOut", getU64Encoder()],
@@ -59,7 +66,7 @@ const instructionDataEncoder = getStructEncoder([
 ]);
 
 /**
- * Creates a LiquidAF curve sell instruction for a requested output amount.
+ * Creates a LiquidAF curve buy instruction for a requested output amount.
  *
  * Accounts and arguments are supplied by the caller. This function performs no fetching,
  * address derivation, quoting, signing, or transaction submission.
@@ -77,39 +84,40 @@ const instructionDataEncoder = getStructEncoder([
  *
  * ```ts
  * import {
- *   sell_exact_out_native,
+ *   buy_exact_out_native,
  *   type LiquidAfNativeSwapAccounts,
- *   type LiquidAfSellExactOutNativeArgs,
+ *   type LiquidAfBuyExactOutNativeArgs,
  * } from "celere-protocol-sdk/instructions/liquid-af";
  *
  * // Resolve these accounts from your application's account data.
  * declare const accounts: LiquidAfNativeSwapAccounts;
  *
- * const amountOut = 1_000_000_000n; // 1 SOL.
- * const quotedAmountIn = 500_000_000n; // Hypothetical quote: 500 base tokens with six decimals.
+ * const amountOut = 500_000_000n; // 500 base tokens with six decimals.
+ * const quotedAmountIn = 1_000_000_000n; // Hypothetical quote: 1 SOL.
  * const slippageBps = 100n; // 1%; chosen by the caller.
  * const maximumAmountIn =
  *   (quotedAmountIn * (10_000n + slippageBps) + 9_999n) / 10_000n;
  *
- * const args: LiquidAfSellExactOutNativeArgs = {
+ * const args: LiquidAfBuyExactOutNativeArgs = {
  *   amountOut,
  *   maximumAmountIn,
  * };
  *
- * const instruction = sell_exact_out_native(accounts, args);
+ * const instruction = buy_exact_out_native(accounts, args);
  * ```
  *
  * @remarks
  * These instructions transfer native SOL. Omitted referral accounts use the Anchor
  * program-ID sentinel. Validate referral relationships and the curve state before
- * execution.
+ * execution. Graduation can clip the requested token output and reduce the SOL debit.
+ * Even the native exact-output buy does not guarantee the full requested output.
  *
  * @see {@link LiquidAfNativeSwapAccounts}
- * @see {@link LiquidAfSellExactOutNativeArgs}
+ * @see {@link LiquidAfBuyExactOutNativeArgs}
  */
-export function sell_exact_out_native(
+export function buy_exact_out_native(
   accounts: LiquidAfNativeSwapAccounts,
-  args: LiquidAfSellExactOutNativeArgs,
+  args: LiquidAfBuyExactOutNativeArgs,
 ): Instruction {
   return {
     programAddress: LIQUID_AF_PROGRAM,
@@ -151,7 +159,7 @@ export function sell_exact_out_native(
       { address: LIQUID_AF_EVENTS_PROGRAM, role: AccountRole.READONLY },
     ],
     data: instructionDataEncoder.encode({
-      discriminator: new Uint8Array([12, 37, 246, 175, 240, 13, 94, 159]),
+      discriminator: new Uint8Array([32, 69, 113, 201, 72, 30, 181, 249]),
       amountOut: args.amountOut,
       maximumAmountIn: args.maximumAmountIn,
     }),

@@ -15,9 +15,9 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { METADAO_PROGRAM } from "./constants";
 import { spot_swap } from "./instructions/index";

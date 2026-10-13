@@ -4,11 +4,10 @@ import {
   SenderAbortedError,
   PriorityFeeTooLowError,
 } from "./errors/index";
-import type { Transaction } from "@solana/kit";
+import type { Transaction, TransactionPartialSigner } from "@solana/kit";
 import { U64_MAX } from "../shared/numbers";
 import { isValidAddress } from "../shared/addresses";
 import { isConfiguredProvider, validateTimeout } from "./providers/configuration";
-import type { ConfiguredRoute } from "./providers/configuration";
 import { RpcSender } from "./providers/rpc";
 import { sendRouteTransaction } from "./transport";
 import {
@@ -19,10 +18,16 @@ import {
 } from "./transaction";
 import { SenderProvider } from "./providers/route";
 import type { PrepareRequest, PreparedSubmission, PreparedVariant } from "./transaction";
-import type { SendRequest, SubmitSignedOptions, Submission } from "./submission";
+import type { RouteResult, Submission } from "./submission";
 import type { SenderHttpTransport } from "./transport";
 import type { SenderRoute } from "./providers/route";
 import type { RpcRouteOptions } from "./providers/rpc";
+
+/** Immutable provider metadata and the client-assigned observation identity. */
+export interface ConfiguredRoute {
+  readonly id: string;
+  readonly config: SenderRoute;
+}
 
 /** Configuration for the reusable sender client. */
 export interface SenderClientOptions {
@@ -37,6 +42,32 @@ export interface SenderClientOptions {
   /** Initial provider lanes. Multiple regions of the same provider are supported. */
   readonly routes?: readonly SenderRoute[];
 }
+
+/** Optional controls shared by {@link SenderClient.send} and {@link SenderClient.submitSigned}. */
+export interface SubmitSignedOptions {
+  /**
+   * Cancel signing/submission work. Cancellation before dispatch rejects the send;
+   * cancellation during HTTP submission yields route observations. It cannot undo a transaction.
+   */
+  readonly signal?: AbortSignal;
+  /**
+   * Observe each route as its HTTP attempt settles. The callback receives the same result
+   * included in {@link Submission.results}; it performs no on-chain tracking.
+   * The sender does not await callback work and isolates thrown/rejected callback errors.
+   */
+  readonly onRouteResult?: (result: RouteResult) => void | Promise<void>;
+}
+
+/** Inputs for preparing and signing a send with caller-owned Kit partial signers. */
+export type SendRequest = PrepareRequest &
+  SubmitSignedOptions & {
+    /**
+     * Exactly one partial signer for every required address: fee payer, nonce authority,
+     * and any instruction signers. Each signs the full variant batch without modifying messages.
+     * Supply a shared payer/authority signer only once. No private keys are accepted directly.
+     */
+    readonly signers: readonly TransactionPartialSigner[];
+  };
 
 /**
  * Prepares, signs, and concurrently submits transactions through configured routes.

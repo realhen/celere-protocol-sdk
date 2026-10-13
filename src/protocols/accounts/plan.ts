@@ -1,12 +1,7 @@
-import type { Instruction } from "@solana/kit";
+import type { Address, Instruction } from "@solana/kit";
 import { InvalidAccountError, MissingAccountsError } from "../errors";
 
-import type {
-  AccountRequirement,
-  ProtocolAdapter,
-  ResolvedTokenAccounts,
-  SwapRequest,
-} from "../types";
+import type { AccountRequirement, SwapRequest } from "../types";
 import {
   associatedTokenAddress,
   createAssociatedTokenInstruction,
@@ -14,12 +9,29 @@ import {
   readTokenAccount,
 } from "./tokens";
 
+/** Resolved token-account addresses; setup instructions are owned by the shared planner. */
+export interface ResolvedTokenAccounts {
+  readonly input: Address;
+  readonly output: Address;
+}
+
+/** Settlement at each endpoint determines whether a token account is required. */
+export interface TokenAccountKinds {
+  readonly input: "nativeSol" | "spl";
+  readonly output: "nativeSol" | "spl";
+}
+
+/** Only endpoint identities and account observations are needed for account planning. */
+type TokenAccountRequest = Pick<
+  SwapRequest,
+  "owner" | "payer" | "inputMint" | "outputMint" | "snapshot" | "tokenAccounts"
+>;
+
 /** Discover common mint and token-account inputs without fetching them. */
 export async function tokenRequirements(
-  request: SwapRequest,
-  adapter: ProtocolAdapter,
+  request: TokenAccountRequest,
+  kinds: TokenAccountKinds = { input: "spl", output: "spl" },
 ): Promise<readonly AccountRequirement[]> {
-  const kinds = adapter.tokenAccountKinds?.(request) ?? { input: "spl", output: "spl" };
   const result: AccountRequirement[] = [];
   for (const side of ["input", "output"] as const) {
     if (kinds[side] === "nativeSol") {
@@ -44,10 +56,9 @@ export async function tokenRequirements(
 
 /** Preserve caller-owned accounts; only create an observed-absent output ATA, never close one. */
 export async function planTokenAccounts(
-  request: SwapRequest,
-  adapter: ProtocolAdapter,
+  request: TokenAccountRequest,
+  kinds: TokenAccountKinds = { input: "spl", output: "spl" },
 ): Promise<{ accounts: ResolvedTokenAccounts; setup: readonly Instruction[] }> {
-  const kinds = adapter.tokenAccountKinds?.(request) ?? { input: "spl", output: "spl" };
   const result = { input: request.owner, output: request.owner };
   const setup: Instruction[] = [];
   for (const side of ["input", "output"] as const) {

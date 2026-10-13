@@ -16,9 +16,9 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { HEAVEN_PROGRAM } from "./constants";
 import * as instructions from "./instructions/index";

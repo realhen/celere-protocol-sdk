@@ -49,8 +49,8 @@
       "import": "./dist/protocols/liquid-af/curve.js"
     },
     "./protocols/liquid-af-amm": {
-      "types": "./dist/protocols/liquid-af-amm/amm.d.ts",
-      "import": "./dist/protocols/liquid-af-amm/amm.js"
+      "types": "./dist/protocols/liquid-af/amm.d.ts",
+      "import": "./dist/protocols/liquid-af/amm.js"
     },
     "./protocols/metadao": {
       "types": "./dist/protocols/metadao/amm.d.ts",
@@ -125,12 +125,12 @@
       "import": "./dist/protocols/heaven/instructions/index.js"
     },
     "./instructions/liquid-af": {
-      "types": "./dist/protocols/liquid-af/instructions/index.d.ts",
-      "import": "./dist/protocols/liquid-af/instructions/index.js"
+      "types": "./dist/protocols/liquid-af/instructions/curve/index.d.ts",
+      "import": "./dist/protocols/liquid-af/instructions/curve/index.js"
     },
     "./instructions/liquid-af-amm": {
-      "types": "./dist/protocols/liquid-af-amm/instructions/index.d.ts",
-      "import": "./dist/protocols/liquid-af-amm/instructions/index.js"
+      "types": "./dist/protocols/liquid-af/instructions/amm/index.d.ts",
+      "import": "./dist/protocols/liquid-af/instructions/amm/index.js"
     },
     "./instructions/metadao": {
       "types": "./dist/protocols/metadao/instructions/index.d.ts",

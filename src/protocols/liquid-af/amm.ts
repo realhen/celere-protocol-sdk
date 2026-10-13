@@ -18,36 +18,36 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { accountDataView, readAddress } from "../accounts/bytes";
 import {
   liquidAccount,
   readLiquidSolPrice,
   unsupportedLiquidFeature,
   validateLiquidSharedState,
-} from "../liquid-af/shared-state";
-import { LIQUID_AF_AMM_PROGRAM } from "./constants";
+} from "./shared-state";
+import { LIQUID_AF_AMM_PROGRAM } from "./amm-constants";
 import {
   buy_exact_in,
   sell_exact_in,
   sell_exact_out,
   type LiquidAfAmmSwapAccounts,
-} from "./instructions/index";
+} from "./instructions/amm/index";
 import {
   getLiquidAfAmmPoolAddresses,
   findLiquidAfAmmProtocolFeeVaultPda,
   getLiquidAfFeeVaultTokenAddress,
-} from "./pda";
-export * from "./pda";
-export * from "./constants";
+} from "./amm-pda";
+export * from "./amm-pda";
+export * from "./amm-constants";
 export {
   LIQUID_AF_FEES_PROGRAM,
   LIQUID_AF_STATE_PROGRAM,
   LIQUID_AF_EVENTS_PROGRAM,
   LIQUID_AF_PYTH_RECEIVER_PROGRAM,
-} from "../liquid-af/constants";
+} from "./constants";
 
 const USDC_MINT = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 

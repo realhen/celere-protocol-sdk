@@ -1,4 +1,4 @@
-import { getLiquidAfSharedAddresses } from "../liquid-af/pda";
+import { getLiquidAfSharedAddresses } from "./pda";
 export {
   findLiquidAfFeeConfigPda,
   getLiquidAfFeeConfigAddress,
@@ -16,14 +16,14 @@ export {
   findLiquidAfStateCpiAuthorityPda,
   getLiquidAfStateCpiAuthorityAddress,
   getLiquidAfSharedAddresses,
-} from "../liquid-af/pda";
+} from "./pda";
 import {
   getAddressEncoder,
   getProgramDerivedAddress,
   type Address,
   type ProgramDerivedAddress,
 } from "@solana/kit";
-import { LIQUID_AF_AMM_PROGRAM } from "./constants";
+import { LIQUID_AF_AMM_PROGRAM } from "./amm-constants";
 
 const encoder = getAddressEncoder();
 

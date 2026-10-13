@@ -9,6 +9,7 @@ import {
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSigner } from "@solana/kit";
+import { getMintDecoder, getMintEncoder } from "@solana-program/token-2022";
 
 import { pumpV3Fixture, u64 } from "../fixtures/pump-v3.mjs";
 
@@ -96,12 +97,13 @@ test("Pump v3 rejects completed markets, invalid quote backing, unsupported exte
     },
   );
   const t = await pumpV3Fixture(owner.address, { quote: "token", quote2022: true });
-  const d = new Uint8Array(178);
-  d.set(t.request.snapshot.accounts[t.quoteMint].data);
-  d[165] = 1;
-  d[166] = 1;
-  d[168] = 8;
-  t.request.snapshot.accounts[t.quoteMint].data = d;
+  const mint = t.request.snapshot.accounts[t.quoteMint];
+  mint.data = Uint8Array.from(
+    getMintEncoder().encode({
+      ...getMintDecoder().decode(mint.data),
+      extensions: [{ __kind: "NonTransferable" }],
+    }),
+  );
   await assert.rejects(
     () => buildSwapInstructions(t.request),
     (error) => {

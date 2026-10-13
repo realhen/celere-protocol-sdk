@@ -9,12 +9,12 @@ import {
   getU64Encoder,
   type Instruction,
 } from "@solana/kit";
-import { WRAPPED_SOL_MINT } from "../../accounts/tokens";
+import { WRAPPED_SOL_MINT } from "../../../accounts/tokens";
 import {
   LIQUID_AF_PROGRAM,
   LIQUID_AF_STATE_PROGRAM,
   LIQUID_AF_EVENTS_PROGRAM,
-} from "../constants";
+} from "../../constants";
 import type { LiquidAfNativeSwapAccounts } from "./accounts";
 
 /**

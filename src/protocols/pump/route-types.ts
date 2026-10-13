@@ -3,11 +3,11 @@ import type {
   AccountRequirement,
   ProtocolId,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapBuild,
   SwapQuote,
   SwapRequest,
-} from "./types";
+} from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 
 /** One caller-selected venue and its direction. Route selection remains caller-owned. */
 export interface RouteHop {
