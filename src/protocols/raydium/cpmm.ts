@@ -18,12 +18,12 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SnapshotAccount,
   SwapFee,
   SwapQuote,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { swap_base_input, swap_base_output } from "./instructions/cpmm/index";
 import { RAYDIUM_CPMM_PROGRAM } from "./constants";
 export { RAYDIUM_CPMM_PROGRAM } from "./constants";

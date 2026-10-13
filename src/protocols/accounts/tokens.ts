@@ -1,18 +1,29 @@
 import { InvalidAccountError, UnsupportedTokenExtensionError } from "../errors";
-import { SYSTEM_PROGRAM_ADDRESS as SYSTEM_PROGRAM } from "@solana-program/system";
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ADDRESS as ASSOCIATED_TOKEN_PROGRAM,
   TOKEN_PROGRAM_ADDRESS as TOKEN_PROGRAM,
   findAssociatedTokenPda,
-  getCreateAssociatedTokenIdempotentInstructionDataEncoder,
+  getCreateAssociatedTokenIdempotentInstruction,
+  getMintSize,
+  getTokenSize,
 } from "@solana-program/token";
-import { TOKEN_2022_PROGRAM_ADDRESS as TOKEN_2022_PROGRAM } from "@solana-program/token-2022";
-import { address, AccountRole } from "@solana/kit";
-import type { Address, Instruction } from "@solana/kit";
+import {
+  TOKEN_2022_PROGRAM_ADDRESS as TOKEN_2022_PROGRAM,
+  AccountState,
+  getMintDecoder,
+  getTokenDecoder,
+  type Extension,
+} from "@solana-program/token-2022";
+import {
+  address,
+  createNoopSigner,
+  isSolanaError,
+  unwrapOption,
+  SOLANA_ERROR__CODECS__INVALID_BYTE_LENGTH,
+} from "@solana/kit";
+import type { Address, Decoder, Instruction, Option } from "@solana/kit";
 
 import { requireAccount } from "./snapshot";
 import type { AccountSnapshot, SnapshotAccount } from "./snapshot";
-import { accountDataView, readAddress } from "./bytes";
 
 export { TOKEN_PROGRAM, TOKEN_2022_PROGRAM };
 /**
@@ -32,91 +43,127 @@ export interface MintInfo {
   readonly supply: bigint;
 }
 
-function tokenExtensions(
-  account: SnapshotAccount,
-  mint: Address,
-  accountType: number,
-  allowed: ReadonlySet<number>,
-): void {
-  if (account.data.length === (accountType === 1 ? 82 : 165)) {
-    return;
-  }
+// Token-2022 decoders also handle the extension-free base layouts of classic tokens.
+const mintDecoder = getMintDecoder();
+const tokenDecoder = getTokenDecoder();
+// Use codec kinds: the pinned client's numeric ExtensionType enum is not wire-aligned.
+const supportedMintExtensions: ReadonlySet<Extension["__kind"]> = new Set([
+  "MetadataPointer",
+  "TokenMetadata",
+]);
+const supportedAccountExtensions: ReadonlySet<Extension["__kind"]> = new Set([
+  "ImmutableOwner",
+]);
 
-  if (account.data.length < 166 || account.data[165] !== accountType) {
+/** Translate malformed account bytes into the SDK's account error; preserve unexpected failures. */
+function decodeTokenState<T extends { extensions: Option<Extension[]> }>(
+  account: SnapshotAccount,
+  decoder: Decoder<T>,
+): T {
+  try {
+    return decoder.decode(account.data);
+  } catch (error) {
+    if (!isSolanaError(error)) {
+      throw error;
+    }
+
+    // The pinned decoder reads padding as two-byte Uninitialized entries. Complete
+    // a lone zero byte only when decoding proves it is padding, not extension data.
+    if (
+      isSolanaError(error, SOLANA_ERROR__CODECS__INVALID_BYTE_LENGTH) &&
+      error.context.bytesLength === 1 &&
+      error.context.expected === 2 &&
+      account.data.at(-1) === 0
+    ) {
+      const padded = new Uint8Array(account.data.length + 1);
+      padded.set(account.data);
+
+      try {
+        const state = decoder.decode(padded);
+        if (unwrapOption(state.extensions, () => []).at(-1)?.__kind === "Uninitialized") {
+          return state;
+        }
+      } catch (paddingError) {
+        if (!isSolanaError(paddingError)) {
+          throw paddingError;
+        }
+      }
+    }
+
     throw new InvalidAccountError({
       address: account.address,
-      message: "Invalid Token-2022 account type or size",
+      message: "Malformed token account data or extension encoding",
     });
   }
+}
 
-  const view = accountDataView(account.data);
-  const seen = new Set<number>();
-  let offset = 166;
-  while (offset < account.data.length) {
-    if (account.data.subarray(offset).every((byte) => byte === 0)) {
-      break;
+/** Apply SDK support policy to officially decoded extensions, without interpreting TLV bytes. */
+function validateExtensions(
+  account: SnapshotAccount,
+  mint: Address,
+  extensions: Option<Extension[]>,
+  allowed: ReadonlySet<Extension["__kind"]>,
+): void {
+  const seen = new Set<Extension["__kind"]>();
+  let padding = false;
+
+  for (const extension of unwrapOption(extensions, () => [])) {
+    // The official decoder exposes unused trailing TLV space as Uninitialized entries.
+    if (extension.__kind === "Uninitialized") {
+      padding = true;
+      continue;
     }
 
-    if (offset + 4 > account.data.length) {
+    if (padding || seen.has(extension.__kind)) {
       throw new InvalidAccountError({
         address: account.address,
-        message: "Truncated Token-2022 extension header",
+        message: "Duplicate token extension or extension after uninitialized padding",
       });
     }
 
-    const type = view.getUint16(offset, true);
-    const length = view.getUint16(offset + 2, true);
-    if (offset + 4 + length > account.data.length || seen.has(type)) {
-      throw new InvalidAccountError({
-        address: account.address,
-        message: "Invalid Token-2022 extension length or duplicate",
-      });
-    }
-
-    if (!allowed.has(type)) {
+    if (!allowed.has(extension.__kind)) {
       throw new UnsupportedTokenExtensionError({
         message: "Token extension is not qualified for this release",
         mint,
-        extension: String(type),
+        extension: extension.__kind,
       });
     }
 
-    seen.add(type);
-    offset += 4 + length;
+    seen.add(extension.__kind);
   }
 }
 
 /** Decode initialized mint state and reject extensions with unimplemented transfer semantics. */
 export function readMint(snapshot: AccountSnapshot, mint: Address): MintInfo {
   const account = requireAccount(snapshot, mint, "mint");
-  if (
-    (account.owner !== TOKEN_PROGRAM && account.owner !== TOKEN_2022_PROGRAM) ||
-    account.data.length < 82 ||
-    account.data[45] !== 1
-  ) {
+  if (account.owner !== TOKEN_PROGRAM && account.owner !== TOKEN_2022_PROGRAM) {
     throw new InvalidAccountError({
       address: account.address,
-      message: "Invalid or uninitialized token mint",
+      message: "Invalid token mint program",
     });
   }
 
-  if (account.owner === TOKEN_PROGRAM && account.data.length !== 82) {
+  if (account.owner === TOKEN_PROGRAM && account.data.length !== getMintSize()) {
     throw new InvalidAccountError({
       address: account.address,
       message: "Invalid classic token mint size",
     });
   }
 
-  if (account.owner === TOKEN_2022_PROGRAM) {
-    tokenExtensions(account, mint, 1, new Set([18, 19]));
+  const state = decodeTokenState(account, mintDecoder);
+  if (!state.isInitialized) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Uninitialized token mint",
+    });
   }
 
-  const view = accountDataView(account.data);
+  validateExtensions(account, mint, state.extensions, supportedMintExtensions);
 
   return {
     tokenProgram: account.owner,
-    decimals: account.data[44]!,
-    supply: view.getBigUint64(36, true),
+    decimals: state.decimals,
+    supply: state.supply,
   };
 }
 
@@ -129,18 +176,31 @@ export function readTokenAccount(
   expectedAuthority?: Address,
 ): { readonly amount: bigint; readonly authority: Address } {
   const account = requireAccount(snapshot, accountAddress, "token", tokenProgram);
-  if (account.data.length < 165 || account.data[108] !== 1) {
+  if (tokenProgram !== TOKEN_PROGRAM && tokenProgram !== TOKEN_2022_PROGRAM) {
     throw new InvalidAccountError({
       address: account.address,
-      message: "Token account is uninitialized, frozen, or malformed",
+      message: "Invalid token account program",
     });
   }
 
-  const actualMint = readAddress(account.data, 0);
-  const authority = readAddress(account.data, 32);
+  if (tokenProgram === TOKEN_PROGRAM && account.data.length !== getTokenSize()) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Invalid classic token account size",
+    });
+  }
+
+  const state = decodeTokenState(account, tokenDecoder);
+  if (state.state !== AccountState.Initialized) {
+    throw new InvalidAccountError({
+      address: account.address,
+      message: "Token account is uninitialized or frozen",
+    });
+  }
+
   if (
-    actualMint !== mint ||
-    (expectedAuthority !== undefined && authority !== expectedAuthority)
+    state.mint !== mint ||
+    (expectedAuthority !== undefined && state.owner !== expectedAuthority)
   ) {
     throw new InvalidAccountError({
       address: account.address,
@@ -148,20 +208,9 @@ export function readTokenAccount(
     });
   }
 
-  if (tokenProgram === TOKEN_PROGRAM && account.data.length !== 165) {
-    throw new InvalidAccountError({
-      address: account.address,
-      message: "Invalid classic token account size",
-    });
-  }
+  validateExtensions(account, mint, state.extensions, supportedAccountExtensions);
 
-  if (tokenProgram === TOKEN_2022_PROGRAM) {
-    tokenExtensions(account, mint, 2, new Set([7]));
-  }
-
-  const view = accountDataView(account.data);
-
-  return { amount: view.getBigUint64(64, true), authority };
+  return { amount: state.amount, authority: state.owner };
 }
 
 /** Derive an ATA locally. No key generation, wallet access, or network request occurs. */
@@ -183,16 +232,18 @@ export function createAssociatedTokenInstruction(
   tokenProgram: Address,
   ata: Address,
 ): Instruction {
+  const instruction = getCreateAssociatedTokenIdempotentInstruction({
+    payer: createNoopSigner(payer),
+    owner,
+    mint,
+    tokenProgram,
+    ata,
+  });
+
+  // Keep signer roles, but omit the library's signer object from our portable output.
   return {
-    programAddress: ASSOCIATED_TOKEN_PROGRAM,
-    accounts: [
-      { address: payer, role: AccountRole.WRITABLE_SIGNER },
-      { address: ata, role: AccountRole.WRITABLE },
-      { address: owner, role: AccountRole.READONLY },
-      { address: mint, role: AccountRole.READONLY },
-      { address: SYSTEM_PROGRAM, role: AccountRole.READONLY },
-      { address: tokenProgram, role: AccountRole.READONLY },
-    ],
-    data: getCreateAssociatedTokenIdempotentInstructionDataEncoder().encode({}),
+    programAddress: instruction.programAddress,
+    accounts: instruction.accounts.map(({ address, role }) => ({ address, role })),
+    data: instruction.data,
   };
 }

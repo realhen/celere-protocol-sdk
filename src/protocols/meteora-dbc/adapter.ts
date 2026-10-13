@@ -18,10 +18,10 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { METEORA_DBC_PROGRAM, METEORA_DBC_AUTHORITY } from "./constants";
 
 import {

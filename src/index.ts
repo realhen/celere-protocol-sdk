@@ -5,12 +5,12 @@ import {
   type FetchSwapConfig,
 } from "./protocols/fetch-swap";
 import type { SwapBuild } from "./protocols/types";
-import { createRouteSdk } from "./protocols/routes";
+import { createRouteSdk } from "./protocols/pump/routes";
 import { pumpRouteAdapter } from "./protocols/pump/route";
 import { createProtocolSdk } from "./protocols/sdk";
 import { boopAdapter } from "./protocols/boop/adapter";
 import { heavenAdapter } from "./protocols/heaven/amm";
-import { liquidAfAmmAdapter } from "./protocols/liquid-af-amm/amm";
+import { liquidAfAmmAdapter } from "./protocols/liquid-af/amm";
 import { liquidAfAdapter } from "./protocols/liquid-af/curve";
 import { metadaoAdapter } from "./protocols/metadao/amm";
 import { meteoraDammV1Adapter } from "./protocols/meteora/damm-v1";
@@ -63,7 +63,6 @@ export const getSwapRequirements = sdk.getSwapRequirements;
 export const buildSwapInstructions = sdk.buildSwapInstructions;
 export * from "./protocols/index";
 export * from "./transactions/index";
-export { PROTOCOL_COVERAGE, type ProtocolCoverage } from "./protocols/coverage";
 
 export * from "./sender/index";
 
@@ -122,7 +121,7 @@ export * from "./protocols/metadao/pda";
 export * from "./protocols/vertigo/pda";
 export * from "./protocols/rise-rich/pda";
 export * from "./protocols/liquid-af/pda";
-export * from "./protocols/liquid-af-amm/pda";
+export * from "./protocols/liquid-af/amm-pda";
 export * from "./protocols/heaven/constants";
 export * from "./protocols/liquid-af/constants";
-export * from "./protocols/liquid-af-amm/constants";
+export * from "./protocols/liquid-af/amm-constants";

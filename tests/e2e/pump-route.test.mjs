@@ -6,7 +6,7 @@ import {
 import assert from "node:assert/strict";
 import test from "node:test";
 import { address } from "@solana/kit";
-import { createRouteSdk } from "../../dist/protocols/routes.js";
+import { createRouteSdk } from "../../dist/protocols/pump/routes.js";
 import { pumpRouteAdapter } from "../../dist/protocols/pump/route.js";
 
 import { pumpRouteFixture } from "../fixtures/pump-route.mjs";

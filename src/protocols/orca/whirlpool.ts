@@ -23,10 +23,10 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { orcaCore } from "./core";
 
 export * from "./pda";

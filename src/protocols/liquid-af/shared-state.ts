@@ -1,5 +1,5 @@
 import { InvalidAccountError, UnsupportedPoolFeatureError } from "../errors";
-import type { getLiquidAfSharedAddresses } from "./pda";
+import type { LiquidSharedAddresses } from "./pda";
 import type { Address } from "@solana/kit";
 
 import { requireAccount } from "../accounts/snapshot";
@@ -18,8 +18,6 @@ export function unsupportedLiquidFeature(
 ): never {
   throw new UnsupportedPoolFeatureError({ protocol, feature, message });
 }
-
-export { readAddress as readLiquidAddress } from "../accounts/bytes";
 
 export function liquidAccount(
   request: SwapRequest,
@@ -43,10 +41,6 @@ export function liquidAccount(
 
   return observation;
 }
-
-export type LiquidSharedAddresses = Awaited<
-  ReturnType<typeof getLiquidAfSharedAddresses>
->;
 
 /** Validate fee destinations and earning-mode user state; cashback never funds a quoted swap. */
 export function validateLiquidSharedState(

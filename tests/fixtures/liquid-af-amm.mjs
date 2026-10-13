@@ -1,6 +1,6 @@
 import { address } from "@solana/kit";
 import { findAssociatedTokenPda } from "@solana-program/token";
-import { LIQUID_AF_AMM_PROGRAM } from "../../dist/protocols/liquid-af-amm/constants.js";
+import { LIQUID_AF_AMM_PROGRAM } from "../../dist/protocols/liquid-af/amm-constants.js";
 import {
   discriminator,
   derive,

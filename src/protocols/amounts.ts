@@ -1,6 +1,11 @@
 import { U64_MAX } from "../shared/numbers";
 import { InvalidRequestError } from "../shared/errors";
 
+/** Atomic token units. Exact output is available only through a native output-specified instruction. */
+export type SwapAmount =
+  | { readonly kind: "exactIn"; readonly amountIn: bigint }
+  | { readonly kind: "exactOut"; readonly amountOut: bigint };
+
 /** Validate a positive atomic amount; fractional JavaScript numbers are never accepted. */
 export function assertAmount(amount: bigint, field: string): void {
   if (typeof amount !== "bigint" || amount <= 0n || amount > U64_MAX) {

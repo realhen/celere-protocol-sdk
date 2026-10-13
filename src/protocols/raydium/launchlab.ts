@@ -27,10 +27,10 @@ import type {
   ProtocolAdapter,
   ProtocolSwap,
   SwapRequest,
-  ResolvedTokenAccounts,
   SnapshotAccount,
   SwapFee,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import {
   buy_exact_in,
   sell_exact_in,

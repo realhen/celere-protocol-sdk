@@ -2,19 +2,19 @@ import {
   UnsupportedProtocolError,
   MissingAccountsError,
   UnsupportedFillPolicyError,
-} from "./errors";
-import { InvalidRequestError } from "../shared/errors";
+} from "../errors";
+import { InvalidRequestError } from "../../shared/errors";
 import { AccountRole, type Address } from "@solana/kit";
-import { planTokenAccounts, tokenRequirements } from "./accounts/plan";
-import { validateRequest } from "./sdk";
-import { missingAccounts, requireAccount } from "./accounts/snapshot";
+import { planTokenAccounts, tokenRequirements } from "../accounts/plan";
+import { validateRequest } from "../sdk";
+import { missingAccounts, requireAccount } from "../accounts/snapshot";
 import type {
   RouteAdapter,
   RouteBuild,
   RouteRequest,
   RouteRequirements,
 } from "./route-types";
-import type { AccountRequirement, ProtocolAdapter, SwapRequest } from "./types";
+import type { AccountRequirement, SwapRequest } from "../types";
 
 function validateRoute(request: RouteRequest): void {
   if (!request || !Array.isArray(request.hops) || request.hops.length < 2) {
@@ -67,17 +67,6 @@ function endpointRequest(request: RouteRequest): SwapRequest {
   return { ...request, pool: request.hops[0]!.pool };
 }
 
-function endpointAdapter(adapter: RouteAdapter): ProtocolAdapter {
-  return {
-    id: adapter.id,
-    programAddresses: adapter.programAddresses,
-    requirements: async () => [],
-    build: async () => {
-      throw new Error("Endpoint account planner cannot build swaps");
-    },
-  };
-}
-
 function selectAdapter(
   request: RouteRequest,
   adapters: readonly RouteAdapter[],
@@ -113,9 +102,7 @@ async function discover(
   let incomplete = false;
   try {
     requirements.push(...(await adapter.requirements(request)));
-    requirements.push(
-      ...(await tokenRequirements(endpointRequest(request), endpointAdapter(adapter))),
-    );
+    requirements.push(...(await tokenRequirements(request)));
   } catch (error) {
     if (!(error instanceof MissingAccountsError)) {
       throw error;
@@ -182,10 +169,7 @@ export function createRouteSdk(protocols: readonly RouteAdapter[]): RouteSdk {
         });
       }
       const adapter = selectAdapter(request, adapters);
-      const plan = await planTokenAccounts(
-        endpointRequest(request),
-        endpointAdapter(adapter),
-      );
+      const plan = await planTokenAccounts(request);
       const route = await adapter.build(request, plan.accounts);
       if (
         (request.fillPolicy ?? "requireFull") === "requireFull" &&

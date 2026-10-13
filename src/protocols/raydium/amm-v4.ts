@@ -13,10 +13,10 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapQuote,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { swap_base_in_v2, swap_base_out_v2 } from "./instructions/amm-v4/index";
 import { RAYDIUM_AMM_V4_PROGRAM } from "./constants";
 export { RAYDIUM_AMM_V4_PROGRAM } from "./constants";

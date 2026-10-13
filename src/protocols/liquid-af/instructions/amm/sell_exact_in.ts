@@ -11,11 +11,8 @@ import {
   getU64Encoder,
   type Instruction,
 } from "@solana/kit";
-import {
-  LIQUID_AF_STATE_PROGRAM,
-  LIQUID_AF_EVENTS_PROGRAM,
-} from "../../liquid-af/constants";
-import { LIQUID_AF_AMM_PROGRAM } from "../constants";
+import { LIQUID_AF_STATE_PROGRAM, LIQUID_AF_EVENTS_PROGRAM } from "../../constants";
+import { LIQUID_AF_AMM_PROGRAM } from "../../amm-constants";
 import type { LiquidAfAmmSwapAccounts } from "./accounts";
 
 /**

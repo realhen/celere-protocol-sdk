@@ -1,12 +1,6 @@
 import { SenderConfigurationError } from "../errors/index";
 import type { Region, RouteOptions, SenderRoute } from "./route";
 
-/** Immutable provider metadata and the client-assigned observation identity. */
-export interface ConfiguredRoute {
-  readonly id: string;
-  readonly config: SenderRoute;
-}
-
 /** Built-in providers validate their inputs once, before the client receives them. */
 const configuredProviders = new WeakSet<SenderRoute>();
 

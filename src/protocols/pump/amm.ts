@@ -17,9 +17,9 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { quotePumpAmm } from "./amm-math";
 import {
   AMM_SYSTEM_PROGRAM,

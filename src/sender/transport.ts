@@ -1,6 +1,6 @@
 import { SubmissionStatus } from "./submission";
 import type { RouteResult } from "./submission";
-import type { ConfiguredRoute } from "./providers/configuration";
+import type { ConfiguredRoute } from "./client";
 import type { SignedPayload } from "./transaction";
 
 /** A provider-encoded HTTP submission. URLs and headers may contain credentials. */

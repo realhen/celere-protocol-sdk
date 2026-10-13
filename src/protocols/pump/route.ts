@@ -27,14 +27,9 @@ import type {
   RouteHopQuote,
   RouteRequest,
   ProtocolRoute,
-} from "../route-types";
-import type {
-  AccountRequirement,
-  ResolvedTokenAccounts,
-  SwapFee,
-  SwapQuote,
-  SwapRequest,
-} from "../types";
+} from "./route-types";
+import type { AccountRequirement, SwapFee, SwapQuote, SwapRequest } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { quotePumpAmm } from "./amm-math";
 import { readAmmFees, readAmmGlobal, readAmmPool, type PumpAmmPool } from "./amm-state";
 import { PUMP_AMM_PROGRAM, PUMP_PROGRAM } from "./constants";
@@ -59,6 +54,19 @@ import {
   getPumpAmmEventAuthorityAddress,
   getPumpAmmUserVolumeAccumulatorAddress,
 } from "./amm-pda";
+
+// The focused Pump route entrypoint owns the builder and its public contracts.
+export { createRouteSdk } from "./routes";
+export type { RouteSdk } from "./routes";
+export type {
+  RouteHop,
+  RouteRequest,
+  RouteRequirements,
+  RouteHopQuote,
+  RouteBuild,
+  ProtocolRoute,
+  RouteAdapter,
+} from "./route-types";
 
 async function commonAddresses() {
   const [

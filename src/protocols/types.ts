@@ -1,3 +1,5 @@
+import type { ResolvedTokenAccounts, TokenAccountKinds } from "./accounts/plan";
+import type { SwapAmount } from "./amounts";
 import type { AccountSnapshot, AccountRequirement } from "./accounts/snapshot";
 export type {
   AccountSnapshot,
@@ -29,11 +31,6 @@ export type ProtocolId =
   | "rise-rich"
   | "metadao";
 
-/** Atomic token units. Exact output is available only through a native output-specified instruction. */
-export type SwapAmount =
-  | { readonly kind: "exactIn"; readonly amountIn: bigint }
-  | { readonly kind: "exactOut"; readonly amountOut: bigint };
-
 /** Protocol-neutral swap intent. Payer funds account creation; owner authorizes token debit. */
 export interface SwapRequest {
   readonly pool: Address;
@@ -48,14 +45,6 @@ export interface SwapRequest {
   readonly fillPolicy?: "allowPartial" | "requireFull";
   /** Reject observations older than this many slots relative to snapshot.slot. */
   readonly maxAccountAgeSlots?: bigint;
-}
-
-/** Discovery can need multiple rounds as newly supplied state reveals dependencies. */
-export interface SwapRequirements {
-  readonly protocol: ProtocolId | null;
-  readonly accounts: readonly AccountRequirement[];
-  readonly missing: readonly AccountRequirement[];
-  readonly complete: boolean;
 }
 
 /** Fee amounts use the indicated mint's atomic units; components must not be double counted. */
@@ -102,10 +91,7 @@ export interface SwapBuild {
     readonly unixTimestamp: bigint;
   };
   readonly execution: { readonly mayPartiallyFill: boolean };
-  readonly assets: {
-    readonly input: "nativeSol" | "spl";
-    readonly output: "nativeSol" | "spl";
-  };
+  readonly assets: TokenAccountKinds;
 }
 
 /** Internal adapter output uses only portable Solana data, never SDK clients or keypairs. */
@@ -117,20 +103,11 @@ export interface ProtocolSwap {
   readonly mayPartiallyFill: boolean;
 }
 
-/** Resolved token-account addresses; setup instructions are owned by the shared planner. */
-export interface ResolvedTokenAccounts {
-  readonly input: Address;
-  readonly output: Address;
-}
-
 /** Stateless protocol implementation. Async permits local PDA/cryptographic operations only. */
 export interface ProtocolAdapter {
   readonly id: ProtocolId;
   readonly programAddresses: readonly Address[];
-  tokenAccountKinds?(request: SwapRequest): {
-    readonly input: "nativeSol" | "spl";
-    readonly output: "nativeSol" | "spl";
-  };
+  tokenAccountKinds?(request: SwapRequest): TokenAccountKinds;
   requirements(request: SwapRequest): Promise<readonly AccountRequirement[]>;
   build(request: SwapRequest, accounts: ResolvedTokenAccounts): Promise<ProtocolSwap>;
 }

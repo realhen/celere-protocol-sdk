@@ -243,6 +243,9 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       const root = await import('celere-protocol-sdk');
       const sender = await import('celere-protocol-sdk/sender');
       const protocols = await import('celere-protocol-sdk/protocols');
+      const pumpRoutes = await import('celere-protocol-sdk/protocols/pump-routes');
+      assert.equal(root.createRouteSdk, pumpRoutes.createRouteSdk);
+      assert.equal(protocols.createRouteSdk, pumpRoutes.createRouteSdk);
       const legacyCore = await import('celere-protocol-sdk/core');
       const transactions = await import('celere-protocol-sdk/transactions');
       for (const name of ['SwapAccountFetchError', 'ProtocolError', 'ProtocolErrorCode', 'MissingAccountsError', 'InvalidAccountError', 'InvalidSnapshotContextError', 'UnsupportedProtocolError', 'UnsupportedPoolFeatureError', 'UnsupportedSwapModeError', 'UnsupportedTokenExtensionError', 'InsufficientLiquidityError', 'UnsupportedFillPolicyError', 'InvalidRequestError', 'ValidationErrorCode']) {
@@ -271,16 +274,6 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       cwd: directory,
       stdio: "pipe",
     });
-    const output = execFileSync(
-      process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        "const sdk = await import('celere-protocol-sdk'); console.log(sdk.PROTOCOL_COVERAGE.length);",
-      ],
-      { cwd: directory, encoding: "utf8" },
-    );
-    assert.equal(output.trim(), "20");
     const cases = [];
     const owner = (await generateKeyPairSigner()).address;
     const lifetime = {

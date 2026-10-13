@@ -27,11 +27,11 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SnapshotAccount,
   SwapQuote,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import {
   CLMM_MAX_SQRT_PRICE,
   CLMM_MAX_TICK,

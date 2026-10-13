@@ -17,9 +17,9 @@ import type {
   AccountRequirement,
   ProtocolAdapter,
   ProtocolSwap,
-  ResolvedTokenAccounts,
   SwapRequest,
 } from "../types";
+import type { ResolvedTokenAccounts } from "../accounts/plan";
 import { accountDataView, readAddress, matchesDiscriminator } from "../accounts/bytes";
 import { BOOP_PROGRAM } from "./constants";
 import { buy_token, sell_token } from "./instructions/index";
