@@ -1,14 +1,10 @@
 import { pumpV3Fixture } from "../fixtures/pump-v3.mjs";
 import { pumpAmmQuotesFixture } from "../fixtures/pump-amm-quotes.mjs";
 import { pumpRouteFixture } from "../fixtures/pump-route.mjs";
-import { riseRichFixture } from "../fixtures/rise-rich.mjs";
-import { boopFixture } from "../fixtures/boop.mjs";
-import { heavenFixture } from "../fixtures/heaven.mjs";
 import { metadaoFixture } from "../fixtures/metadao.mjs";
 import { meteoraDbcFixture } from "../fixtures/meteora-dbc.mjs";
 import { meteoraDammV1Fixture } from "../fixtures/meteora-damm-v1.mjs";
 import { moonshotFixture } from "../fixtures/moonshot.mjs";
-import { vertigoFixture } from "../fixtures/vertigo.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { build } from "esbuild";
@@ -118,14 +114,10 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
           })
         ).request,
       ],
-      ["rise-rich", (await riseRichFixture(signer.address)).request],
-      ["boop", (await boopFixture(signer.address)).request],
-      ["heaven", (await heavenFixture(signer.address)).request],
       ["metadao", (await metadaoFixture(signer.address)).request],
       ["meteora-dbc", (await meteoraDbcFixture(signer.address)).request],
       ["meteora-damm-v1", (await meteoraDammV1Fixture(signer.address)).request],
       ["moonshot", (await moonshotFixture(signer.address)).request],
-      ["vertigo", (await vertigoFixture(signer.address)).request],
       ["pump", pump.observations[0].request],
       ["raydium-amm-v4", (await raydiumAmmV4Fixture(signer.address)).request],
       ["raydium-clmm", (await raydiumClmmFixture(signer.address)).request],

@@ -1,6 +1,3 @@
-import { riseRichAdapter } from "celere-protocol-sdk/protocols/rise-rich";
-import { boopAdapter } from "celere-protocol-sdk/protocols/boop";
-import { heavenAdapter } from "celere-protocol-sdk/protocols/heaven";
 import { metadaoAdapter } from "celere-protocol-sdk/protocols/metadao";
 import { meteoraDbcAdapter } from "celere-protocol-sdk/protocols/meteora-dbc";
 import type {
@@ -35,18 +32,13 @@ import { raydiumClmmAdapter } from "celere-protocol-sdk/protocols/raydium-clmm";
 import { meteoraDlmmAdapter } from "celere-protocol-sdk/protocols/meteora-dlmm";
 import { meteoraDammV1Adapter } from "celere-protocol-sdk/protocols/meteora-damm-v1";
 import { moonshotAdapter } from "celere-protocol-sdk/protocols/moonshot";
-import { vertigoAdapter } from "celere-protocol-sdk/protocols/vertigo";
 import { compileTransaction as compiler } from "celere-protocol-sdk/transactions";
 declare const request: SwapRequest;
 const subset = createProtocolSdk([
-  riseRichAdapter,
-  boopAdapter,
-  heavenAdapter,
   metadaoAdapter,
   meteoraDbcAdapter,
   meteoraDammV1Adapter,
   moonshotAdapter,
-  vertigoAdapter,
   raydiumCpmmAdapter,
   pumpAdapter,
   orcaWhirlpoolAdapter,

@@ -32,8 +32,6 @@ async function instructionCatalog() {
     {},
     {
       get: (_, name) => {
-        if (["floorIncreaseRatio", "maxNewFloor", "minLiqRatio"].includes(name))
-          return new Uint8Array(16);
         if (["swapMode", "fixedSide", "bondingCurveBump", "solVaultBump"].includes(name))
           return 0;
         if (["amountSpecifiedIsInput", "isBaseInput", "aToB"].includes(name)) return true;

@@ -36,14 +36,6 @@
       "types": "./dist/transactions/index.d.ts",
       "import": "./dist/transactions/index.js"
     },
-    "./protocols/boop": {
-      "types": "./dist/protocols/boop/adapter.d.ts",
-      "import": "./dist/protocols/boop/adapter.js"
-    },
-    "./protocols/heaven": {
-      "types": "./dist/protocols/heaven/amm.d.ts",
-      "import": "./dist/protocols/heaven/amm.js"
-    },
     "./protocols/metadao": {
       "types": "./dist/protocols/metadao/amm.d.ts",
       "import": "./dist/protocols/metadao/amm.js"
@@ -96,25 +88,9 @@
       "types": "./dist/protocols/raydium/launchlab.d.ts",
       "import": "./dist/protocols/raydium/launchlab.js"
     },
-    "./protocols/rise-rich": {
-      "types": "./dist/protocols/rise-rich/curve.d.ts",
-      "import": "./dist/protocols/rise-rich/curve.js"
-    },
-    "./protocols/vertigo": {
-      "types": "./dist/protocols/vertigo/amm.d.ts",
-      "import": "./dist/protocols/vertigo/amm.js"
-    },
     "./protocols/meteora-dbc": {
       "types": "./dist/protocols/meteora-dbc/adapter.d.ts",
       "import": "./dist/protocols/meteora-dbc/adapter.js"
-    },
-    "./instructions/boop": {
-      "types": "./dist/protocols/boop/instructions/index.d.ts",
-      "import": "./dist/protocols/boop/instructions/index.js"
-    },
-    "./instructions/heaven": {
-      "types": "./dist/protocols/heaven/instructions/index.d.ts",
-      "import": "./dist/protocols/heaven/instructions/index.js"
     },
     "./instructions/metadao": {
       "types": "./dist/protocols/metadao/instructions/index.d.ts",
@@ -164,17 +140,9 @@
       "types": "./dist/protocols/raydium/instructions/launchlab/index.d.ts",
       "import": "./dist/protocols/raydium/instructions/launchlab/index.js"
     },
-    "./instructions/rise-rich": {
-      "types": "./dist/protocols/rise-rich/instructions/index.d.ts",
-      "import": "./dist/protocols/rise-rich/instructions/index.js"
-    },
     "./instructions/sugar": {
       "types": "./dist/protocols/sugar/instructions/index.d.ts",
       "import": "./dist/protocols/sugar/instructions/index.js"
-    },
-    "./instructions/vertigo": {
-      "types": "./dist/protocols/vertigo/instructions/index.d.ts",
-      "import": "./dist/protocols/vertigo/instructions/index.js"
     },
     "./instructions/meteora-dbc": {
       "types": "./dist/protocols/meteora-dbc/instructions/index.d.ts",

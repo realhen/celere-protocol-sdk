@@ -8,8 +8,6 @@ import type { SwapBuild } from "./protocols/types";
 import { createRouteSdk } from "./protocols/pump/routes";
 import { pumpRouteAdapter } from "./protocols/pump/route";
 import { createProtocolSdk } from "./protocols/sdk";
-import { boopAdapter } from "./protocols/boop/adapter";
-import { heavenAdapter } from "./protocols/heaven/amm";
 import { metadaoAdapter } from "./protocols/metadao/amm";
 import { meteoraDammV1Adapter } from "./protocols/meteora/damm-v1";
 import { meteoraDammV2Adapter } from "./protocols/meteora/damm-v2";
@@ -22,8 +20,6 @@ import { raydiumAmmV4Adapter } from "./protocols/raydium/amm-v4";
 import { raydiumClmmAdapter } from "./protocols/raydium/clmm";
 import { raydiumCpmmAdapter } from "./protocols/raydium/cpmm";
 import { raydiumLaunchlabAdapter } from "./protocols/raydium/launchlab";
-import { riseRichAdapter } from "./protocols/rise-rich/curve";
-import { vertigoAdapter } from "./protocols/vertigo/amm";
 import { meteoraDbcAdapter } from "./protocols/meteora-dbc/adapter";
 
 const sdk = createProtocolSdk([
@@ -35,14 +31,10 @@ const sdk = createProtocolSdk([
   meteoraDammV1Adapter,
   meteoraDammV2Adapter,
   meteoraDlmmAdapter,
-  boopAdapter,
   moonshotAdapter,
   orcaWhirlpoolAdapter,
   raydiumLaunchlabAdapter,
   meteoraDbcAdapter,
-  vertigoAdapter,
-  heavenAdapter,
-  riseRichAdapter,
   metadaoAdapter,
 ]);
 
@@ -110,10 +102,5 @@ export * from "./protocols/meteora-dbc/pda";
 export * from "./protocols/orca/pda";
 export { METEORA_DAMM_V2_POOL_AUTHORITY } from "./protocols/meteora/constants";
 export { METEORA_DBC_AUTHORITY } from "./protocols/meteora-dbc/constants";
-export * from "./protocols/boop/pda";
 export * from "./protocols/moonshot/pda";
-export * from "./protocols/heaven/pda";
 export * from "./protocols/metadao/pda";
-export * from "./protocols/vertigo/pda";
-export * from "./protocols/rise-rich/pda";
-export * from "./protocols/heaven/constants";

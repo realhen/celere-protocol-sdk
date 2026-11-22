@@ -81,12 +81,8 @@ The public surface covers the derivations already used by the supported adapters
 | `/protocols/meteora-dlmm`      | Legacy permissionless pool, reserves, oracle, bitmap extension, bin arrays, event authority                                                          |
 | `/protocols/meteora-dbc`       | Pool, token vaults, event authority; exported shared pool authority                                                                                  |
 | `/protocols/orca`              | Whirlpool, tick arrays, oracle                                                                                                                       |
-| `/protocols/boop`              | Curve, configuration, curve token/SOL vaults, trading-fee vault, vault authority                                                                     |
 | `/protocols/moonshot`          | Curve, configuration, curve token vault                                                                                                              |
-| `/protocols/heaven`            | Supported pool/configuration, token vaults                                                                                                           |
 | `/protocols/metadao`           | DAO, event authority, token vaults                                                                                                                   |
-| `/protocols/vertigo`           | Pool and token vaults                                                                                                                                |
-| `/protocols/rise-rich`         | Market, tenant, escrows, Mayflower market metadata/liquidity/revenue accounts, event authority                                                       |
 | `/protocols/sugar`             | Historical curve, SOL vault, global state and event authority; no swap adapter or current execution guarantee                                        |
 
 Not every required account has a derivation known to this SDK. Some pools and vaults are independently created accounts whose addresses are stored in pool state. The adapters read those addresses from your snapshot; a helper must not invent a mint-to-pool derivation for them. Standard associated token accounts remain available through `findAssociatedTokenPda` from the compatible `@solana-program/token` package; protocol-specific vault helpers use that primitive where appropriate.

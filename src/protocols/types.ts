@@ -18,15 +18,11 @@ export type ProtocolId =
   | "meteora-damm-v1"
   | "meteora-damm-v2"
   | "meteora-dlmm"
-  | "boop"
   | "moonshot"
   | "orca-whirlpool"
   | "launchlab"
   | "meteora-dbc"
-  | "vertigo"
-  | "heaven"
   | "sugar"
-  | "rise-rich"
   | "metadao";
 
 /** Protocol-neutral swap intent. Payer funds account creation; owner authorizes token debit. */
