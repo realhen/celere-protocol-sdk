@@ -30,7 +30,7 @@ test("packed public package installs offline and exposes usable strict TypeScrip
         file.path.endsWith(".js") &&
         !["index.js", "accounts.js"].includes(file.path.split("/").at(-1)),
     );
-    assert.equal(instructionFiles.length, 51);
+    assert.equal(instructionFiles.length, 43);
     assert.ok(
       packed.files.every((file) => !/\/(virtual-curve|stable-swap)\//.test(file.path)),
     );
@@ -347,9 +347,9 @@ test("packed public package installs offline and exposes usable strict TypeScrip
       encoding: "utf8",
     });
     const nativeResult = JSON.parse(nativeOutput);
-    assert.equal(nativeResult.entrypoints, 20);
+    assert.equal(nativeResult.entrypoints, 18);
     assert.equal(nativeResult.cases, 4);
-    assert.ok(nativeResult.builderCount >= 51);
+    assert.ok(nativeResult.builderCount >= 43);
   } catch (error) {
     // Preserve compiler and package-manager diagnostics when a child process fails.
     if (error.stdout?.length) console.error(error.stdout.toString());

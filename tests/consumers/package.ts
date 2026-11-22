@@ -1,6 +1,4 @@
-import { liquidAfAmmAdapter } from "celere-protocol-sdk/protocols/liquid-af-amm";
 import { riseRichAdapter } from "celere-protocol-sdk/protocols/rise-rich";
-import { liquidAfAdapter } from "celere-protocol-sdk/protocols/liquid-af";
 import { boopAdapter } from "celere-protocol-sdk/protocols/boop";
 import { heavenAdapter } from "celere-protocol-sdk/protocols/heaven";
 import { metadaoAdapter } from "celere-protocol-sdk/protocols/metadao";
@@ -41,9 +39,7 @@ import { vertigoAdapter } from "celere-protocol-sdk/protocols/vertigo";
 import { compileTransaction as compiler } from "celere-protocol-sdk/transactions";
 declare const request: SwapRequest;
 const subset = createProtocolSdk([
-  liquidAfAmmAdapter,
   riseRichAdapter,
-  liquidAfAdapter,
   boopAdapter,
   heavenAdapter,
   metadaoAdapter,

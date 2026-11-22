@@ -10,8 +10,6 @@ import { pumpRouteAdapter } from "./protocols/pump/route";
 import { createProtocolSdk } from "./protocols/sdk";
 import { boopAdapter } from "./protocols/boop/adapter";
 import { heavenAdapter } from "./protocols/heaven/amm";
-import { liquidAfAmmAdapter } from "./protocols/liquid-af/amm";
-import { liquidAfAdapter } from "./protocols/liquid-af/curve";
 import { metadaoAdapter } from "./protocols/metadao/amm";
 import { meteoraDammV1Adapter } from "./protocols/meteora/damm-v1";
 import { meteoraDammV2Adapter } from "./protocols/meteora/damm-v2";
@@ -44,8 +42,6 @@ const sdk = createProtocolSdk([
   meteoraDbcAdapter,
   vertigoAdapter,
   heavenAdapter,
-  liquidAfAdapter,
-  liquidAfAmmAdapter,
   riseRichAdapter,
   metadaoAdapter,
 ]);
@@ -120,8 +116,4 @@ export * from "./protocols/heaven/pda";
 export * from "./protocols/metadao/pda";
 export * from "./protocols/vertigo/pda";
 export * from "./protocols/rise-rich/pda";
-export * from "./protocols/liquid-af/pda";
-export * from "./protocols/liquid-af/amm-pda";
 export * from "./protocols/heaven/constants";
-export * from "./protocols/liquid-af/constants";
-export * from "./protocols/liquid-af/amm-constants";

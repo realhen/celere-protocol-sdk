@@ -1,9 +1,7 @@
 import { pumpV3Fixture } from "../fixtures/pump-v3.mjs";
 import { pumpAmmQuotesFixture } from "../fixtures/pump-amm-quotes.mjs";
 import { pumpRouteFixture } from "../fixtures/pump-route.mjs";
-import { liquidAfAmmFixture } from "../fixtures/liquid-af-amm.mjs";
 import { riseRichFixture } from "../fixtures/rise-rich.mjs";
-import { liquidAfFixture } from "../fixtures/liquid-af.mjs";
 import { boopFixture } from "../fixtures/boop.mjs";
 import { heavenFixture } from "../fixtures/heaven.mjs";
 import { metadaoFixture } from "../fixtures/metadao.mjs";
@@ -120,9 +118,7 @@ test("browser bundle discovers, builds, and compiles all adapters inside an offl
           })
         ).request,
       ],
-      ["liquid-af-amm", (await liquidAfAmmFixture(signer.address)).request],
       ["rise-rich", (await riseRichFixture(signer.address)).request],
-      ["liquid-af", (await liquidAfFixture(signer.address)).request],
       ["boop", (await boopFixture(signer.address)).request],
       ["heaven", (await heavenFixture(signer.address)).request],
       ["metadao", (await metadaoFixture(signer.address)).request],

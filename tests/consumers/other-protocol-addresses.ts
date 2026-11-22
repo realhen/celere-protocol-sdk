@@ -1,6 +1,4 @@
 import type { Address, ProgramDerivedAddress } from "@solana/kit";
-import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import {
   findBoopBondingCurvePda,
   getBoopCurveAddresses,
@@ -41,32 +39,8 @@ import {
   getRiseRichMayflowerGroupRevenueEscrowAddress,
   getRiseRichMayflowerTenantRevenueEscrowAddress,
 } from "celere-protocol-sdk/protocols/rise-rich";
-import {
-  findLiquidAfBondingCurvePda,
-  getLiquidAfCurveAddresses,
-  getLiquidAfSharedAddresses,
-  getLiquidAfFeeVaultTokenAddress,
-  LIQUID_AF_STATE_PROGRAM,
-} from "celere-protocol-sdk/protocols/liquid-af";
-import {
-  findLiquidAfAmmAuthorityPda,
-  getLiquidAfAmmPoolAddresses,
-  getLiquidAfAmmProtocolFeeVaultAddress,
-  getLiquidAfFeeVaultTokenAddress as getAmmFeeVaultTokenAddress,
-  LIQUID_AF_FEES_PROGRAM,
-} from "celere-protocol-sdk/protocols/liquid-af-amm";
 
 type Addresses<Names extends string> = Readonly<Record<Names, Address>>;
-type SharedLiquidAddresses = Addresses<
-  | "feeConfig"
-  | "feeVault"
-  | "creatorUserProperties"
-  | "userProperties"
-  | "globalVolume"
-  | "tokenVolume"
-  | "cashbackConfig"
-  | "stateEventsCpiAuthority"
-> & { readonly feeBump: number };
 
 /** Derive subscription targets from caller-owned stream fields without constructing a swap request. */
 export async function otherProtocolSubscriptionAddresses(input: {
@@ -74,7 +48,6 @@ export async function otherProtocolSubscriptionAddresses(input: {
   readonly quoteMint: Address;
   readonly owner: Address;
   readonly creator: Address;
-  readonly feeRecipient: Address;
   readonly tenant: Address;
   readonly marketMeta: Address;
   readonly tenantSeed: Address;
@@ -90,8 +63,6 @@ export async function otherProtocolSubscriptionAddresses(input: {
     findMetaDaoDaoPda(input.creator, input.daoNonce),
     findVertigoPoolPda(input.owner, input.quoteMint, input.baseMint),
     findRiseRichMarketPda(input.tenant, input.marketMeta),
-    findLiquidAfBondingCurvePda(input.baseMint),
-    findLiquidAfAmmAuthorityPda(),
   ]);
   const boop: Addresses<
     "pool" | "config" | "tokenVault" | "solVault" | "feesVault" | "authority"
@@ -110,40 +81,6 @@ export async function otherProtocolSubscriptionAddresses(input: {
     input.marketMeta,
     input.quoteMint,
   );
-  const shared: SharedLiquidAddresses = await getLiquidAfSharedAddresses(
-    input.owner,
-    input.creator,
-    input.baseMint,
-    input.quoteMint,
-    "amm",
-  );
-  const liquidCurve: Addresses<
-    "pool" | "globalConfig" | "solVault" | "buybackVault" | "cpiAuthority" | "tokenVault"
-  > & {
-    readonly bump: number;
-    readonly configBump: number;
-    readonly shared: SharedLiquidAddresses;
-  } = await getLiquidAfCurveAddresses(input.baseMint, input.owner, input.creator);
-  const liquidAmm: Addresses<
-    | "pool"
-    | "baseVault"
-    | "quoteVault"
-    | "lpMint"
-    | "observation"
-    | "authority"
-    | "globalConfig"
-    | "cpiAuthority"
-    | "buybackVault"
-  > & {
-    readonly authorityBump: number;
-    readonly configBump: number;
-    readonly shared: SharedLiquidAddresses;
-  } = await getLiquidAfAmmPoolAddresses(
-    input.baseMint,
-    input.quoteMint,
-    input.owner,
-    input.creator,
-  );
   const heavenConfig: Address = await getHeavenProtocolConfigAddress(input.heavenVersion);
   const dao: Address = await getMetaDaoDaoAddress(input.creator, input.daoNonce);
   const addresses: readonly Address[] = await Promise.all([
@@ -161,17 +98,6 @@ export async function otherProtocolSubscriptionAddresses(input: {
     getRiseRichMayflowerLiquidityVaultAddress(input.marketMeta),
     getRiseRichMayflowerGroupRevenueEscrowAddress(input.marketMeta),
     getRiseRichMayflowerTenantRevenueEscrowAddress(input.marketMeta),
-    getLiquidAfFeeVaultTokenAddress(
-      shared.feeVault,
-      input.quoteMint,
-      TOKEN_2022_PROGRAM_ADDRESS,
-    ),
-    getAmmFeeVaultTokenAddress(
-      liquidAmm.shared.feeVault,
-      input.quoteMint,
-      TOKEN_PROGRAM_ADDRESS,
-    ),
-    getLiquidAfAmmProtocolFeeVaultAddress(input.feeRecipient, input.quoteMint),
   ]);
   const bumps: readonly number[] = [
     ...pdas.map(([, bump]) => bump),
@@ -179,11 +105,6 @@ export async function otherProtocolSubscriptionAddresses(input: {
     moonshot.configBump,
     vertigo.bump,
     rise.marketBump,
-    shared.feeBump,
-    liquidCurve.bump,
-    liquidCurve.configBump,
-    liquidAmm.authorityBump,
-    liquidAmm.configBump,
   ];
   void bumps;
   return [
@@ -194,15 +115,8 @@ export async function otherProtocolSubscriptionAddresses(input: {
     vertigo.vaultB,
     rise.creatorEscrow,
     rise.teamEscrow,
-    liquidCurve.tokenVault,
-    liquidCurve.shared.tokenVolume,
-    liquidAmm.baseVault,
-    liquidAmm.quoteVault,
-    liquidAmm.observation,
     ...addresses,
     HEAVEN_ORACLE_PROGRAM,
     HEAVEN_SOL_PRICE,
-    LIQUID_AF_STATE_PROGRAM,
-    LIQUID_AF_FEES_PROGRAM,
   ];
 }

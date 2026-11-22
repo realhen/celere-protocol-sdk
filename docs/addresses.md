@@ -86,8 +86,6 @@ The public surface covers the derivations already used by the supported adapters
 | `/protocols/heaven`            | Supported pool/configuration, token vaults                                                                                                           |
 | `/protocols/metadao`           | DAO, event authority, token vaults                                                                                                                   |
 | `/protocols/vertigo`           | Pool and token vaults                                                                                                                                |
-| `/protocols/liquid-af`         | Curve, configuration, SOL/buyback/fee vaults, user properties, volume accounts, cashback and CPI authorities                                         |
-| `/protocols/liquid-af-amm`     | AMM pool, vaults, configuration, CPI authority and protocol-fee/buyback accounts                                                                     |
 | `/protocols/rise-rich`         | Market, tenant, escrows, Mayflower market metadata/liquidity/revenue accounts, event authority                                                       |
 | `/protocols/sugar`             | Historical curve, SOL vault, global state and event authority; no swap adapter or current execution guarantee                                        |
 

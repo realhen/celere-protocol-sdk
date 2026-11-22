@@ -26,8 +26,6 @@ export type ProtocolId =
   | "vertigo"
   | "heaven"
   | "sugar"
-  | "liquid-af"
-  | "liquid-af-amm"
   | "rise-rich"
   | "metadao";
 

@@ -68,10 +68,6 @@ The Boop adapter and builders are independently authored from the published Anch
 
 The independently authored Rise adapter and builders reference public native interface facts in [riserich/rise-docs](https://github.com/riserich/rise-docs/tree/f619dbd4b925f3f1a654adf096f428ea3130f97e), revision `f619dbd4b925f3f1a654adf096f428ea3130f97e`, and the MIT-declared official `@riserich/sdk` version `0.3.0`. No implementation code or full IDL is copied or redistributed. The offline floor-region arithmetic is independently derived with native bigint quantities and qualified against Rise and its Mayflower CPI program. Neither upstream SDK is a runtime dependency.
 
-## LiquidAF
-
-The independently authored LiquidAF curve/AMM builders, decoders, and bigint math reference the official `@liquid-af/sdk` version `1.0.6` interfaces and documented equations, plus native execution. The reviewed tarball SHA256 is `53d6bbefc7fb3d04c6500e48cef717480450511a5c7c9cd60ac17d5486737e35`; package metadata declares ISC but supplies no standalone license file, author, or repository field. No upstream implementation code or full IDL is copied or redistributed, and the SDK is not a runtime dependency.
-
 ## Solana
 
 Solana Kit, `@solana/sysvars`, the official `@solana-program/system`, `token`, `token-2022`, `memo`, and `compute-budget` clients, and their transitive packages retain their published licenses. Celere uses their address, instruction, and transaction primitives for offline protocol construction and optional caller-requested signing, HTTP submission.
