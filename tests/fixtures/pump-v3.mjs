@@ -96,12 +96,12 @@ export async function pumpV3Fixture(
       executable: false,
       slot: 1n,
     });
-  add(
-    global,
-    PUMP,
-    structuredClone(captured.observations[0].request.snapshot.accounts[global].data),
-  );
-  const gd = snapshot.accounts[global].data;
+  const capturedGlobal = captured.observations[0].request.snapshot.accounts[global].data;
+  // The current mainnet Global appends a u64 to the 1088-byte capture.
+  const gd = new Uint8Array(1096);
+  gd.set(capturedGlobal);
+  u64(gd, 1088, 30n);
+  add(global, PUMP, gd);
   gd[1045] = customCreator ? 1 : 0;
   add(
     feeConfig,

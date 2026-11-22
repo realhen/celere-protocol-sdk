@@ -1,7 +1,7 @@
 import { InvalidAccountError, UnsupportedPoolFeatureError } from "../errors";
 import { SYSTEM_PROGRAM_ADDRESS as SYSTEM_PROGRAM } from "@solana-program/system";
 import { WRAPPED_SOL_MINT as NATIVE_SOL_MINT } from "../accounts/tokens";
-import type { Address } from "@solana/kit";
+import { address, type Address } from "@solana/kit";
 
 import { requireAccount } from "../accounts/snapshot";
 import type { AccountSnapshot, SnapshotAccount } from "../types";
@@ -135,29 +135,31 @@ export function readCurve(snapshot: AccountSnapshot, pool: Address): PumpCurve {
   return curve;
 }
 
-/** Recipients are selected deterministically from the caller's current global state. */
+// Pump accepts the rotated normal recipients before the November 25 cutoff as well.
+// https://github.com/pump-fun/pump-public-docs/blob/main/docs/FEE_RECIPIENT_ROTATION.md
+const normalFeeRecipient = address("2aSWZ3QXsNLVVBr1UB1HxSw7sqMRR2pv2qa5ohsTi5Gp");
+
+/** Use a published normal recipient and the buyback recipient from the caller's snapshot. */
 export function readRecipients(
   snapshot: AccountSnapshot,
   globalAddress: Address,
 ): { feeRecipient: Address; buybackRecipient: Address } {
   const account = requireAccount(snapshot, globalAddress, "Pump global", PUMP_PROGRAM);
   validateDiscriminator(account, [167, 232, 232, 177, 200, 108, 114, 127], 1005);
-  const normalOffsets = [41, 162, 194, 226, 258, 290, 322, 354];
   const buybackOffsets = Array.from({ length: 8 }, (_, index) => 741 + index * 32);
   const choose = (offsets: readonly number[]) =>
     offsets
       .map((offset) => readAddress(account.data, offset))
       .find((recipient) => recipient !== SYSTEM_PROGRAM);
-  const feeRecipient = choose(normalOffsets);
   const buybackRecipient = choose(buybackOffsets);
-  if (feeRecipient === undefined || buybackRecipient === undefined) {
+  if (buybackRecipient === undefined) {
     throw new InvalidAccountError({
       address: account.address,
       message: "Pump global has no valid fee recipients",
     });
   }
 
-  return { feeRecipient, buybackRecipient };
+  return { feeRecipient: normalFeeRecipient, buybackRecipient };
 }
 
 /** Global controls used by v3 pricing; absent extension fields retain their legacy defaults. */
